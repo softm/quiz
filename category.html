@@ -139,6 +139,7 @@
     <section class="list" id="list"></section>
   </main>
 
+  <script src="./data/exams.manifest.js"></script>
   <script>
     const params = new URLSearchParams(location.search);
     const categoryName = params.get("category") || "농산물품질관리사";
@@ -160,6 +161,13 @@
       return `./quiz.html?${q.toString()}`;
     }
 
+    async function loadManifest() {
+      if (window.__EXAMS_MANIFEST__) return window.__EXAMS_MANIFEST__;
+      const res = await fetch("./data/exams.json", { cache: "no-store" });
+      if (!res.ok) throw new Error("manifest fetch failed");
+      return res.json();
+    }
+
     async function load() {
       const title = document.getElementById("title");
       const list = document.getElementById("list");
@@ -168,9 +176,7 @@
       title.textContent = categoryName;
 
       try {
-        const res = await fetch("./data/exams.json", { cache: "no-store" });
-        if (!res.ok) throw new Error("manifest fetch failed");
-        const data = await res.json();
+        const data = await loadManifest();
 
         const category = (data.categories || []).find((c) => c.categoryName === categoryName);
         const exams = category ? (category.exams || []) : [];

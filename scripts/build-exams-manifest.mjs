@@ -3,6 +3,7 @@ import path from 'node:path';
 
 const rootDir = process.cwd();
 const outFile = path.join(rootDir, 'data', 'exams.json');
+const outJsFile = path.join(rootDir, 'data', 'exams.manifest.js');
 
 const categories = [
   '농산물품질관리사',
@@ -88,8 +89,13 @@ async function main() {
 
   await fs.mkdir(path.dirname(outFile), { recursive: true });
   await fs.writeFile(outFile, JSON.stringify(data, null, 2), 'utf8');
+  await fs.writeFile(
+    outJsFile,
+    `window.__EXAMS_MANIFEST__ = ${JSON.stringify(data, null, 2)};\n`,
+    'utf8'
+  );
 
-  console.log(`Manifest created: ${path.relative(rootDir, outFile)}`);
+  console.log(`Manifest created: ${path.relative(rootDir, outFile)}, ${path.relative(rootDir, outJsFile)}`);
 }
 
 main().catch((err) => {

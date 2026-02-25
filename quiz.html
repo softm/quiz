@@ -284,6 +284,8 @@
   const EXAM_NAME = params.get("exam") || "기본 회차";
   const QUESTION_PDF_URL = params.get("question") || DEFAULT_QUESTION_PDF_URL;
   const ANSWER_PDF_URL = params.get("answer") || DEFAULT_ANSWER_PDF_URL;
+  const encodedQuestionPdfUrl = encodeURI(QUESTION_PDF_URL);
+  const encodedAnswerPdfUrl = encodeURI(ANSWER_PDF_URL);
 
   // ====== 정답 키(1교시 A형 1~100) ======
   // 주의: 8번이 '5'인 것은 원본 정답표 기준 입력(선지 5가 실제로 존재하는 유형일 수 있음).
@@ -360,8 +362,8 @@
   document.getElementById("scrollTop").addEventListener("click", () => sheet.scrollTo({top:0, behavior:"smooth"}));
   document.getElementById("btnJumpFirst").addEventListener("click", jumpToFirst);
 
-  document.getElementById("openQ").addEventListener("click", () => window.open(QUESTION_PDF_URL, "_blank"));
-  document.getElementById("openA").addEventListener("click", () => window.open(ANSWER_PDF_URL, "_blank"));
+  document.getElementById("openQ").addEventListener("click", () => window.open(encodedQuestionPdfUrl, "_blank"));
+  document.getElementById("openA").addEventListener("click", () => window.open(encodedAnswerPdfUrl, "_blank"));
 
   document.getElementById("btnClearSaved").addEventListener("click", () => {
     localStorage.removeItem(STORAGE_KEY);
@@ -412,7 +414,7 @@
   document.title = `${examTitle} | 문제풀이 + 정답확인`;
   pageTitle.textContent = examTitle;
 
-  pdfFrame.src = QUESTION_PDF_URL;
+  pdfFrame.src = encodedQuestionPdfUrl;
   buildGrid();
   loadUi();
   loadSaved();

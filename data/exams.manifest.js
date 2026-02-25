@@ -1,4 +1,4 @@
-{
+window.__EXAMS_MANIFEST__ = {
   "generatedAt": "2026-02-25T13:43:04.621Z",
   "categories": [
     {
@@ -23,4 +23,4 @@
       "exams": []
     }
   ]
-}
+};

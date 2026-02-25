@@ -142,6 +142,7 @@
     <section class="grid" id="categoryGrid"></section>
   </main>
 
+  <script src="./data/exams.manifest.js"></script>
   <script>
     const categoryOrder = [
       "농산물품질관리사",
@@ -155,14 +156,19 @@
       "유기농업기사": "organic",
     };
 
+    async function loadManifest() {
+      if (window.__EXAMS_MANIFEST__) return window.__EXAMS_MANIFEST__;
+      const res = await fetch("./data/exams.json", { cache: "no-store" });
+      if (!res.ok) throw new Error("manifest fetch failed");
+      return res.json();
+    }
+
     async function load() {
       const grid = document.getElementById("categoryGrid");
       const generatedAt = document.getElementById("generatedAt");
 
       try {
-        const res = await fetch("./data/exams.json", { cache: "no-store" });
-        if (!res.ok) throw new Error("manifest fetch failed");
-        const data = await res.json();
+        const data = await loadManifest();
 
         const map = new Map((data.categories || []).map((c) => [c.categoryName, c]));
         const nowText = data.generatedAt ? new Date(data.generatedAt).toLocaleString("ko-KR") : "-";
