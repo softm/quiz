@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>문제풀이 + 정답확인 (오답노트/2회전/단축키)</title>
+  <title>문제풀이 + 정답확인 (오답노트/단축키)</title>
   <style>
     :root{
       --bg:#0b1020; --panel:#111a33; --card:#0f1730; --text:#e7ecff; --muted:#a9b4df;
@@ -141,25 +141,6 @@
       line-height:1.45;
     }
 
-    .round2Panel{
-      margin-top:10px;
-      background:rgba(15,23,48,.55);
-      border:1px solid var(--line);
-      border-radius:12px;
-      padding:10px;
-    }
-    .round2Panel .head{
-      display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;
-      margin-bottom:8px;
-    }
-    .round2Stats{
-      display:grid; grid-template-columns: repeat(3,1fr); gap:8px;
-      margin-top:8px;
-    }
-    .rstat{background:rgba(10,15,34,.45); border:1px solid var(--line); border-radius:12px; padding:10px;}
-    .rstat .k{font-size:12px; color:var(--muted)}
-    .rstat .v{font-size:16px; font-weight:800; margin-top:4px}
-
     @media (max-width: 1100px){
       .wrap{grid-template-columns:1fr}
       .viewer,.sheet{height:60vh}
@@ -174,12 +155,11 @@
 <header>
   <div class="left">
     <h1 id="pageTitle">문제풀이 + 정답확인</h1>
-    <span class="pill">오답노트·2회전·단축키(1~4/←→/G/R/J/Esc)</span>
+    <span class="pill">오답노트·단축키(1~4/←→/G/R/J)</span>
   </div>
   <div class="controls">
     <button id="btnReset" class="secondary">다시풀기 (R)</button>
     <button id="btnGrade">채점(전체) (G)</button>
-    <button id="btnRound2" class="warn">오답만 2회전 시작</button>
     <label class="toggle"><input id="autoGrade" type="checkbox" /> 자동채점</label>
     <label class="toggle"><input id="showCorrect" type="checkbox" /> 정답표시(강조)</label>
   </div>
@@ -238,22 +218,6 @@
 
       <div class="grid" id="grid"></div>
 
-      <!-- 2회전 패널 -->
-      <div class="round2Panel">
-        <div class="head">
-          <strong style="font-size:13px">오답만 2회전</strong>
-          <div class="controls">
-            <button id="btnRound2ClearWrong" class="ghost" title="2회전 모드에서만 활성">오답만 초기화</button>
-          </div>
-        </div>
-        <div class="tiny">• 2회전 모드: 오답 문항만 표시 + 그 외 문항 잠금</div>
-        <div class="round2Stats">
-          <div class="rstat"><div class="k">대상 문항</div><div class="v" id="r2Total">0</div></div>
-          <div class="rstat"><div class="k">2회전 정답</div><div class="v" id="r2Correct">0</div></div>
-          <div class="rstat"><div class="k">2회전 미응답</div><div class="v" id="r2Blank">0</div></div>
-        </div>
-      </div>
-
       <!-- 오답노트 -->
       <div class="notePanel">
         <div class="head">
@@ -268,8 +232,7 @@
       </div>
 
       <div class="footerNote">
-        <div>• 단축키: <b>1~4</b> 선택, <b>←/→</b> 이동, <b>G</b> 채점, <b>R</b> 리셋, <b>J</b> 첫항목 점프, <b>Esc</b> 2회전 종료</div>
-        <div>• 2회전 모드에서 <b>오답만 초기화</b> 버튼으로 오답 문항의 선택만 지우고 다시 풀 수 있습니다.</div>
+        <div>• 단축키: <b>1~4</b> 선택, <b>←/→</b> 이동, <b>G</b> 채점, <b>R</b> 리셋, <b>J</b> 첫항목 점프</div>
       </div>
     </div>
   </aside>
@@ -320,8 +283,7 @@
   const state = {
     answers: Array(101).fill(null),
     filter: "all",
-    focusQ: 1,
-    round2: { enabled:false, wrongSet: new Set() }
+    focusQ: 1
   };
 
   // ====== DOM ======
@@ -349,15 +311,9 @@
   const noteArea = document.getElementById("noteArea");
   const copyHint = document.getElementById("copyHint");
 
-  const r2TotalEl = document.getElementById("r2Total");
-  const r2CorrectEl = document.getElementById("r2Correct");
-  const r2BlankEl = document.getElementById("r2Blank");
-  const btnRound2ClearWrong = document.getElementById("btnRound2ClearWrong");
-
   // ====== 버튼 이벤트 ======
   document.getElementById("btnReset").addEventListener("click", resetAll);
   document.getElementById("btnGrade").addEventListener("click", () => { gradeAll(true); makeWrongNote(); });
-  document.getElementById("btnRound2").addEventListener("click", toggleRound2);
 
   document.getElementById("scrollTop").addEventListener("click", () => sheet.scrollTo({top:0, behavior:"smooth"}));
   document.getElementById("btnJumpFirst").addEventListener("click", jumpToFirst);
@@ -373,8 +329,6 @@
 
   document.getElementById("btnMakeNote").addEventListener("click", makeWrongNote);
   document.getElementById("btnCopyNote").addEventListener("click", copyWrongNote);
-
-  btnRound2ClearWrong.addEventListener("click", clearWrongOnly);
 
   autoGradeEl.addEventListener("change", () => {
     saveUi();
@@ -406,7 +360,6 @@
     if (k === "g" || k === "G") { gradeAll(true); makeWrongNote(); e.preventDefault(); return; }
     if (k === "r" || k === "R") { resetAll(); e.preventDefault(); return; }
     if (k === "j" || k === "J") { jumpToFirst(); e.preventDefault(); return; }
-    if (k === "Escape") { if (state.round2.enabled) toggleRound2(false); e.preventDefault(); return; }
   });
 
   // ====== 초기 로드 ======
@@ -421,8 +374,11 @@
   refreshAllCards();
   updateStats();
   applyFilter();
+  // 이전에 "오답만" 필터가 저장되어 있고 답안이 비어있으면 카드가 0개로 보일 수 있음.
+  if (firstVisibleQuestion() == null) {
+    setFilter("all");
+  }
   focusCard(state.focusQ, false);
-  updateRound2Stats();
 
   // ====== 저장/로드(UI) ======
   function saveUi(){
@@ -500,18 +456,11 @@
 
       let show = true;
 
-      if (state.round2.enabled){
-        show = state.round2.wrongSet.has(q);
-      } else {
-        if (state.filter === "blank") show = (chosen == null);
-        else if (state.filter === "wrong") show = (chosen != null && chosen !== correct);
-      }
+      if (state.filter === "blank") show = (chosen == null);
+      else if (state.filter === "wrong") show = (chosen != null && chosen !== correct);
 
       card.classList.toggle("hidden", !show);
     }
-
-    applyLocking();
-    updateRound2Stats();
   }
 
   function jumpToFirst(){
@@ -528,82 +477,8 @@
     return null;
   }
 
-  // ====== 2회전 모드 ======
-  function toggleRound2(forceOff){
-    const btn = document.getElementById("btnRound2");
-
-    if (forceOff === false || state.round2.enabled){
-      state.round2.enabled = false;
-      state.round2.wrongSet = new Set();
-      btn.textContent = "오답만 2회전 시작";
-      btn.classList.remove("danger");
-      btn.classList.add("warn");
-      modeHint.textContent = "모드: 일반";
-      applyFilter();
-      return;
-    }
-
-    // 시작: 오답셋 만들려면 채점 필요
-    gradeAll(true);
-
-    const wrongSet = new Set();
-    for(let q=1; q<=100; q++){
-      const a = state.answers[q];
-      if (a != null && a !== ANSWER_KEY[q]) wrongSet.add(q);
-    }
-    if (wrongSet.size === 0){
-      alert("오답이 없습니다. (오답만 2회전 모드 불필요)");
-      return;
-    }
-
-    state.round2.enabled = true;
-    state.round2.wrongSet = wrongSet;
-
-    btn.textContent = `2회전 종료 (Esc)`;
-    btn.classList.remove("warn");
-    btn.classList.add("danger");
-    modeHint.textContent = `모드: 오답 2회전 (${wrongSet.size}문항)`;
-
-    applyFilter();
-
-    const first = [...wrongSet].sort((a,b)=>a-b)[0];
-    focusCard(first, true);
-  }
-
-  function applyLocking(){
-    for(let q=1; q<=100; q++){
-      const card = getCard(q);
-      const locked = state.round2.enabled && !state.round2.wrongSet.has(q);
-      card.classList.toggle("locked", locked);
-      for (const el of card.querySelectorAll(".choice")){
-        el.classList.toggle("disabled", locked);
-      }
-    }
-    btnRound2ClearWrong.disabled = !state.round2.enabled;
-  }
-
   function isLocked(q){
-    return state.round2.enabled && !state.round2.wrongSet.has(q);
-  }
-
-  // 2회전 모드에서 오답 문항 선택만 초기화
-  function clearWrongOnly(){
-    if (!state.round2.enabled) return;
-
-    const set = state.round2.wrongSet;
-    for (const q of set){
-      state.answers[q] = null;
-      const card = getCard(q);
-      card.querySelectorAll("input[type=radio]").forEach(r => r.checked = false);
-      card.querySelectorAll(".choice").forEach(el => el.classList.remove("selected","wrong"));
-      refreshCard(q);
-    }
-    saveNow();
-    updateStats();
-    updateRound2Stats();
-    // 첫 문항으로 이동
-    const first = [...set].sort((a,b)=>a-b)[0];
-    focusCard(first, true);
+    return false;
   }
 
   // ====== UI 생성 ======
@@ -670,9 +545,9 @@
       card.addEventListener("click", () => focusCard(q, false));
 
       frag.appendChild(card);
-      refreshCard(q);
     }
     grid.appendChild(frag);
+    refreshAllCards();
   }
 
   // ====== 포커스/단축키 ======
@@ -731,6 +606,7 @@
   // ====== 채점 ======
   function gradeQuestion(q){
     const card = getCard(q);
+    if (!card) return;
     const chosen = state.answers[q];
     const correct = ANSWER_KEY[q];
     const mark = card.querySelector('[data-role="mark"]');
@@ -782,11 +658,6 @@
   // ====== 리셋 ======
   function resetAll(){
     state.answers = Array(101).fill(null);
-    state.round2.enabled = false;
-    state.round2.wrongSet = new Set();
-    document.getElementById("btnRound2").textContent = "오답만 2회전 시작";
-    document.getElementById("btnRound2").classList.remove("danger");
-    document.getElementById("btnRound2").classList.add("warn");
     modeHint.textContent = "모드: 일반";
 
     for(let q=1; q<=100; q++){
@@ -812,12 +683,12 @@
     updateStats();
     applyFilter();
     focusCard(1, true);
-    updateRound2Stats();
   }
 
   // ====== 카드 업데이트 ======
   function refreshCard(q){
     const card = getCard(q);
+    if (!card) return;
     const chosen = state.answers[q];
     const correct = ANSWER_KEY[q];
 
@@ -907,30 +778,6 @@
     sec2.textContent = `${s[1].ok} / ${s[1].total}`;
     sec3.textContent = `${s[2].ok} / ${s[2].total}`;
     sec4.textContent = `${s[3].ok} / ${s[3].total}`;
-  }
-
-  // ====== 2회전 통계 ======
-  function updateRound2Stats(){
-    if (!state.round2.enabled){
-      r2TotalEl.textContent = "0";
-      r2CorrectEl.textContent = "0";
-      r2BlankEl.textContent = "0";
-      return;
-    }
-    const set = state.round2.wrongSet;
-    let total = set.size;
-    let ok = 0;
-    let blank = 0;
-
-    for (const q of set){
-      const a = state.answers[q];
-      if (a == null) { blank++; continue; }
-      if (a === ANSWER_KEY[q]) ok++;
-    }
-
-    r2TotalEl.textContent = String(total);
-    r2CorrectEl.textContent = String(ok);
-    r2BlankEl.textContent = String(blank);
   }
 
   // ====== 오답노트 ======
