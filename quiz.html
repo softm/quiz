@@ -186,7 +186,7 @@
     <span class="pill">오답노트·단축키(1~4/←→/G/R/J)</span>
   </div>
   <div class="controls">
-    <button id="btnHome" class="ghost">메인</button>
+    <button id="btnHome" class="ghost">목록</button>
     <button id="btnTheme" class="secondary">다크 모드</button>
     <button id="btnReset" class="secondary">다시풀기 (R)</button>
     <button id="btnGrade">채점(전체) (G)</button>
@@ -207,7 +207,7 @@
         <button id="openA" class="secondary">정답 PDF 새창</button>
       </div>
     </div>
-    <div class="viewer">
+    <div class="viewer" id="pdfViewer">
       <canvas id="pdfCanvas" aria-label="문제 PDF 페이지"></canvas>
       <div id="pdfStatus" class="pdfStatus">PDF 로딩 중...</div>
     </div>
@@ -309,7 +309,13 @@
   // ====== 저장 키 ======
   const STORAGE_KEY = "quiz_answers_v3";
   const STORAGE_UI_KEY = "quiz_ui_v3";
-  const PDF_MAP_VERSION = 4;
+  const PDF_MAP_VERSION = 5;
+  const PRESET_PAGE_ANCHORS = {
+    "2022년 제19회 농산물품질관리사 1차": [1,6,10,14,18,22,26,33,39,47,51,57,64,70,76,81,87,94],
+    "2023년 제20회 농산물품질관리사 1차": [1,5,10,15,19,23,26,34,40,48,51,57,64,70,76,83,90,97],
+    "2024년 제21회 농산물품질관리사 1차": [1,5,9,14,18,23,26,33,40,45,51,58,64,71,76,82,90,97],
+    "2025년 제22회 농산물품질관리사 1차": [1,5,10,14,19,23,26,35,41,47,51,57,66,72,76,81,89,95],
+  };
 
   // ====== 상태 ======
   const state = {
@@ -319,6 +325,8 @@
     theme: "basic",
     currentPdfPage: 1,
     pdfNavNonce: 0,
+    questionPdfBaseUrl: null,
+    answerPdfBaseUrl: null,
     pdfDoc: null,
     pdfDocLoading: null,
     renderToken: 0,
@@ -328,6 +336,7 @@
       questionsPerPage: 1,
       mode: "basic",
       questionPageMap: null,
+      questionTopRatioMap: null,
       source: null,
       version: PDF_MAP_VERSION
     }
@@ -336,6 +345,7 @@
   // ====== DOM ======
   const pdfCanvas = document.getElementById("pdfCanvas");
   const pdfCtx = pdfCanvas.getContext("2d");
+  const pdfViewer = document.getElementById("pdfViewer");
   const pdfStatus = document.getElementById("pdfStatus");
   const pdfInfo = document.getElementById("pdfInfo");
   const pageTitle = document.getElementById("pageTitle");
@@ -365,7 +375,8 @@
 
   // ====== 버튼 이벤트 ======
   document.getElementById("btnHome").addEventListener("click", () => {
-    window.location.href = "./index.html";
+    const to = `./category.html?category=${encodeURIComponent(CATEGORY_NAME)}`;
+    window.location.href = to;
   });
   document.getElementById("btnReset").addEventListener("click", resetAll);
   document.getElementById("btnGrade").addEventListener("click", () => { gradeAll(true); makeWrongNote(); });
@@ -378,7 +389,9 @@
     const url = buildPdfUrl(state.currentPdfPage, true);
     window.open(url, "_blank");
   });
-  document.getElementById("openA").addEventListener("click", () => window.open(encodedAnswerPdfUrl, "_blank"));
+  document.getElementById("openA").addEventListener("click", () => {
+    window.open(state.answerPdfBaseUrl || encodedAnswerPdfUrl, "_blank");
+  });
 
   document.getElementById("btnClearSaved").addEventListener("click", () => {
     localStorage.removeItem(STORAGE_KEY);
@@ -435,8 +448,6 @@
   pageTitle.textContent = examTitle;
 
   loadUi();
-  navigatePdfToQuestion(1);
-  ensureAutoPdfMap();
   buildGrid();
   loadSaved();
   refreshAllCards();
@@ -447,6 +458,7 @@
     setFilter("all");
   }
   focusCard(state.focusQ, false);
+  initPdf();
 
   // ====== 저장/로드(UI) ======
   function saveUi(){
@@ -478,14 +490,16 @@
           state.pdfNav.mode = ui.pdfNav.mode === "auto" ? "auto" : "basic";
           state.pdfNav.source = typeof ui.pdfNav.source === "string" ? ui.pdfNav.source : null;
           state.pdfNav.questionPageMap = Array.isArray(ui.pdfNav.questionPageMap) ? ui.pdfNav.questionPageMap.slice(0, 101) : null;
+          state.pdfNav.questionTopRatioMap = Array.isArray(ui.pdfNav.questionTopRatioMap) ? ui.pdfNav.questionTopRatioMap.slice(0, 101) : null;
           state.pdfNav.version = Number(ui.pdfNav.version) || 1;
 
-          const currentSource = encodedQuestionPdfUrl.split("#")[0];
+          const currentSource = getCurrentPdfSourceKey();
           const isCurrentSource = state.pdfNav.source === currentSource;
           const isCurrentVersion = state.pdfNav.version === PDF_MAP_VERSION;
           if (!isCurrentSource || !isCurrentVersion) {
             state.pdfNav.mode = "basic";
             state.pdfNav.questionPageMap = null;
+            state.pdfNav.questionTopRatioMap = null;
             state.pdfNav.source = null;
             state.pdfNav.version = PDF_MAP_VERSION;
           }
@@ -518,6 +532,45 @@
     pdfInfo.textContent = `왼쪽 문제 / 오른쪽 답 체크 · 페이지이동 ${onOff} (기본 매핑)`;
   }
 
+  function getQuestionPdfBaseUrl(){
+    return state.questionPdfBaseUrl || encodedQuestionPdfUrl.split("#")[0];
+  }
+
+  function getCurrentPdfSourceKey(){
+    return getQuestionPdfBaseUrl();
+  }
+
+  async function resolveExistingPdfUrl(pathValue){
+    const baseRaw = String(pathValue || "").split("#")[0];
+    const candidates = [];
+    for (const raw of [baseRaw, baseRaw.normalize("NFC"), baseRaw.normalize("NFD")]){
+      const encoded = encodeURI(raw);
+      if (!candidates.includes(encoded)) candidates.push(encoded);
+    }
+
+    for (const c of candidates){
+      try{
+        const res = await fetch(c, { method: "HEAD", cache: "no-store" });
+        if (res.ok) return c;
+      }catch(_){}
+    }
+    for (const c of candidates){
+      try{
+        const res = await fetch(c, { cache: "no-store" });
+        if (res.ok) return c;
+      }catch(_){}
+    }
+    return candidates[0];
+  }
+
+  async function initPdf(){
+    pdfStatus.textContent = "PDF 경로 확인 중...";
+    state.questionPdfBaseUrl = await resolveExistingPdfUrl(QUESTION_PDF_URL);
+    state.answerPdfBaseUrl = await resolveExistingPdfUrl(ANSWER_PDF_URL);
+    navigatePdfToQuestion(state.focusQ || 1);
+    ensureAutoPdfMap();
+  }
+
   function getPdfPageByQuestion(q){
     const nav = state.pdfNav;
     if (nav.mode === "auto" && Array.isArray(nav.questionPageMap) && Number.isFinite(nav.questionPageMap[q])) {
@@ -532,8 +585,51 @@
     return 1;
   }
 
+  function buildMapFromAnchors(anchorList){
+    const pageMap = Array(101).fill(1);
+    const ratioMap = Array(101).fill(0.12);
+    if (!Array.isArray(anchorList) || anchorList.length === 0) {
+      return { pageMap, ratioMap };
+    }
+
+    for (let i = 0; i < anchorList.length; i++){
+      const pageNo = i + 1;
+      const startQ = anchorList[i];
+      const nextStart = anchorList[i + 1] || 101;
+      const endQ = Math.min(100, nextStart - 1);
+      const count = Math.max(1, endQ - startQ + 1);
+
+      for (let q = startQ; q <= endQ; q++){
+        pageMap[q] = pageNo;
+        const idx = q - startQ;
+        ratioMap[q] = Math.max(0.08, Math.min(0.9, 0.12 + (idx / count) * 0.74));
+      }
+    }
+
+    for (let q = 2; q <= 100; q++){
+      pageMap[q] = Math.max(pageMap[q], pageMap[q - 1]);
+    }
+    return { pageMap, ratioMap };
+  }
+
+  function applyPresetMapIfAvailable(){
+    const anchors = PRESET_PAGE_ANCHORS[EXAM_NAME];
+    if (!anchors) return false;
+
+    const mapped = buildMapFromAnchors(anchors);
+    state.pdfNav.enabled = true;
+    state.pdfNav.mode = "auto";
+    state.pdfNav.questionPageMap = mapped.pageMap;
+    state.pdfNav.questionTopRatioMap = mapped.ratioMap;
+    state.pdfNav.source = getCurrentPdfSourceKey();
+    state.pdfNav.version = PDF_MAP_VERSION;
+    updatePdfInfo();
+    saveUi();
+    return true;
+  }
+
   function buildPdfUrl(page, forceReload){
-    const base = encodedQuestionPdfUrl.split("#")[0];
+    const base = getQuestionPdfBaseUrl();
     const nonce = forceReload ? Date.now() : state.pdfNavNonce;
     const sep = base.includes("?") ? "&" : "?";
     return `${base}${sep}nav=${nonce}#page=${page}&zoom=page-fit`;
@@ -548,7 +644,7 @@
       if (pdfjsLib.GlobalWorkerOptions) {
         pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
       }
-      const loadingTask = pdfjsLib.getDocument(encodedQuestionPdfUrl);
+      const loadingTask = pdfjsLib.getDocument(getQuestionPdfBaseUrl());
       const pdf = await loadingTask.promise;
       state.pdfDoc = pdf;
       return pdf;
@@ -586,10 +682,30 @@
     pdfStatus.textContent = `페이지 ${safePage} 표시 중`;
   }
 
-  function setPdfFramePage(page){
+  function scrollToQuestionAnchor(q, page){
+    if (!Number.isFinite(q)) return;
+    let ratio = null;
+    const pageMap = state.pdfNav.questionPageMap;
+    const ratioMap = state.pdfNav.questionTopRatioMap;
+    if (Array.isArray(pageMap) && Array.isArray(ratioMap) && pageMap[q] === page && Number.isFinite(ratioMap[q])) {
+      ratio = Math.max(0, Math.min(1, ratioMap[q]));
+    }
+    if (ratio == null) ratio = 0.12;
+    const maxScrollable = Math.max(0, pdfViewer.scrollHeight - pdfViewer.clientHeight);
+    const targetTop = Math.max(0, Math.min(maxScrollable, Math.round(maxScrollable * ratio)));
+    pdfViewer.scrollTo({ top: targetTop, behavior: "auto" });
+    pdfStatus.textContent = `페이지 ${page} · ${q}번 위치로 이동`;
+  }
+
+  function setPdfFramePage(page, q){
     state.currentPdfPage = Math.max(1, Math.floor(page));
     state.pdfNavNonce += 1;
-    renderPdfPage(state.currentPdfPage).catch((err) => {
+    renderPdfPage(state.currentPdfPage).then(() => {
+      // 렌더 직후 레이아웃 반영 타이밍을 한 프레임 보장한 뒤 스크롤
+      requestAnimationFrame(() => {
+        scrollToQuestionAnchor(q, state.currentPdfPage);
+      });
+    }).catch((err) => {
       const msg = (err && err.message) ? err.message : "알 수 없는 오류";
       pdfStatus.innerHTML = `PDF 표시 실패: ${msg} <button id="btnPdfRetry" type="button">재시도</button>`;
     });
@@ -597,7 +713,7 @@
 
   function navigatePdfToQuestion(q){
     const targetPage = getPdfPageByQuestion(q);
-    setPdfFramePage(targetPage);
+    setPdfFramePage(targetPage, q);
   }
 
   function loadPdfJsLib(){
@@ -683,6 +799,7 @@
     }
 
     const found = new Set();
+    const ratioByQuestion = new Map();
     const startXs = [];
     for (const row of rows){
       row.parts.sort((a, b) => a.x - b.x);
@@ -690,6 +807,14 @@
     }
     const minStartX = startXs.length ? Math.min(...startXs) : 0;
     const leftThreshold = minStartX + 90;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const row of rows){
+      if (!Number.isFinite(row.y)) continue;
+      if (row.y < minY) minY = row.y;
+      if (row.y > maxY) maxY = row.y;
+    }
+    const ySpan = Math.max(1, maxY - minY);
 
     for (const row of rows){
       row.parts.sort((a, b) => a.x - b.x);
@@ -697,9 +822,15 @@
       if (row.parts[0].x > leftThreshold) continue;
       const lineText = row.parts.map(p => p.s).join(" ").replace(/\s+/g, " ").trim();
       const q = parseQuestionNumberFromLineStart(lineText);
-      if (q != null) found.add(q);
+      if (q != null){
+        found.add(q);
+        const ratio = Math.max(0, Math.min(1, (maxY - row.y) / ySpan));
+        if (!ratioByQuestion.has(q) || ratio < ratioByQuestion.get(q)) {
+          ratioByQuestion.set(q, ratio);
+        }
+      }
     }
-    return found;
+    return { starts: found, ratioByQuestion };
   }
 
   function buildQuestionPageMapFromPageStarts(startsByPage, totalPages){
@@ -760,7 +891,8 @@
   }
 
   function ensureAutoPdfMap(){
-    const currentSource = encodedQuestionPdfUrl.split("#")[0];
+    if (applyPresetMapIfAvailable()) return;
+    const currentSource = getCurrentPdfSourceKey();
     if (state.pdfNav.mode === "auto" && state.pdfNav.source === currentSource && Array.isArray(state.pdfNav.questionPageMap)) {
       return;
     }
@@ -775,20 +907,39 @@
       }
       const pdf = await ensurePdfDocument();
       const startsByPage = {};
+      const ratiosByPage = {};
 
       for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++){
         const page = await pdf.getPage(pageNo);
         const textContent = await page.getTextContent();
-        const starts = extractQuestionStartsFromItems(textContent.items || []);
-        startsByPage[pageNo] = starts;
+        const detected = extractQuestionStartsFromItems(textContent.items || []);
+        startsByPage[pageNo] = detected.starts;
+        ratiosByPage[pageNo] = detected.ratioByQuestion;
       }
 
       const normalized = buildQuestionPageMapFromPageStarts(startsByPage, pdf.numPages);
+      const ratioMap = Array(101).fill(0.12);
+      for (let q = 1; q <= 100; q++){
+        const p = normalized[q];
+        const byQ = ratiosByPage[p];
+        if (byQ && byQ.has(q)) {
+          ratioMap[q] = byQ.get(q);
+          continue;
+        }
+        if (byQ && byQ.size > 0){
+          let nearestQ = null;
+          for (const k of byQ.keys()){
+            if (nearestQ == null || Math.abs(k - q) < Math.abs(nearestQ - q)) nearestQ = k;
+          }
+          if (nearestQ != null) ratioMap[q] = byQ.get(nearestQ);
+        }
+      }
 
       state.pdfNav.enabled = true;
       state.pdfNav.mode = "auto";
       state.pdfNav.questionPageMap = normalized;
-      state.pdfNav.source = encodedQuestionPdfUrl.split("#")[0];
+      state.pdfNav.questionTopRatioMap = ratioMap;
+      state.pdfNav.source = getCurrentPdfSourceKey();
       state.pdfNav.version = PDF_MAP_VERSION;
       updatePdfInfo();
       navigatePdfToQuestion(state.focusQ || 1);
@@ -797,6 +948,7 @@
     }catch (e){
       state.pdfNav.mode = "basic";
       state.pdfNav.questionPageMap = null;
+      state.pdfNav.questionTopRatioMap = null;
       if (!silent) alert("PDF 자동 매핑에 실패했습니다.");
       updatePdfInfo();
     }
