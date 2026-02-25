@@ -57,6 +57,16 @@
       border-radius:8px;
       background:#fff;
     }
+    .pdfStatus{
+      margin-top:8px;
+      font-size:12px;
+      color:var(--muted);
+    }
+    .pdfStatus button{
+      margin-left:8px;
+      padding:4px 8px;
+      font-size:11px;
+    }
     .controls{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
     button{
       background:var(--btn); color:var(--text); border:1px solid var(--line);
@@ -199,6 +209,7 @@
     </div>
     <div class="viewer">
       <canvas id="pdfCanvas" aria-label="문제 PDF 페이지"></canvas>
+      <div id="pdfStatus" class="pdfStatus">PDF 로딩 중...</div>
     </div>
   </section>
 
@@ -298,7 +309,7 @@
   // ====== 저장 키 ======
   const STORAGE_KEY = "quiz_answers_v3";
   const STORAGE_UI_KEY = "quiz_ui_v3";
-  const PDF_MAP_VERSION = 2;
+  const PDF_MAP_VERSION = 4;
 
   // ====== 상태 ======
   const state = {
@@ -325,6 +336,7 @@
   // ====== DOM ======
   const pdfCanvas = document.getElementById("pdfCanvas");
   const pdfCtx = pdfCanvas.getContext("2d");
+  const pdfStatus = document.getElementById("pdfStatus");
   const pdfInfo = document.getElementById("pdfInfo");
   const pageTitle = document.getElementById("pageTitle");
   const grid = document.getElementById("grid");
@@ -349,6 +361,7 @@
 
   const noteArea = document.getElementById("noteArea");
   const copyHint = document.getElementById("copyHint");
+  let pdfJsLoaderPromise = null;
 
   // ====== 버튼 이벤트 ======
   document.getElementById("btnHome").addEventListener("click", () => {
@@ -375,6 +388,14 @@
 
   document.getElementById("btnMakeNote").addEventListener("click", makeWrongNote);
   document.getElementById("btnCopyNote").addEventListener("click", copyWrongNote);
+  pdfStatus.addEventListener("click", (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLButtonElement)) return;
+    if (t.id === "btnPdfRetry") {
+      navigatePdfToQuestion(state.focusQ || 1);
+      ensureAutoPdfMap();
+    }
+  });
 
   autoGradeEl.addEventListener("change", () => {
     saveUi();
@@ -491,10 +512,10 @@
     const nav = state.pdfNav;
     const onOff = "ON";
     if (nav.mode === "auto" && Array.isArray(nav.questionPageMap)) {
-      pdfInfo.textContent = `왼쪽 문제 / 오른쪽 답 체크 · 페이지이동 ${onOff} (자동 매핑)`;  
+      pdfInfo.textContent = `왼쪽 문제 / 오른쪽 답 체크 · 페이지이동 ${onOff} (자동 매핑)`;
       return;
     }
-    pdfInfo.textContent = `왼쪽 문제 / 오른쪽 답 체크 · 페이지이동 ${onOff} (기본 매핑, 자동 분석 중일 수 있음)`;
+    pdfInfo.textContent = `왼쪽 문제 / 오른쪽 답 체크 · 페이지이동 ${onOff} (기본 매핑)`;
   }
 
   function getPdfPageByQuestion(q){
@@ -502,8 +523,13 @@
     if (nav.mode === "auto" && Array.isArray(nav.questionPageMap) && Number.isFinite(nav.questionPageMap[q])) {
       return Math.max(1, Math.floor(nav.questionPageMap[q]));
     }
-    const page = nav.startPage + Math.floor((q - 1) / nav.questionsPerPage);
-    return Math.max(1, page);
+    // 자동 매핑 전 임시 기본값: PDF 총 페이지 수를 기준으로 균등 분배
+    if (state.pdfDoc && Number.isFinite(state.pdfDoc.numPages) && state.pdfDoc.numPages > 0) {
+      const qPerPage = 100 / state.pdfDoc.numPages;
+      const page = 1 + Math.floor((q - 1) / Math.max(1, qPerPage));
+      return Math.min(state.pdfDoc.numPages, Math.max(1, page));
+    }
+    return 1;
   }
 
   function buildPdfUrl(page, forceReload){
@@ -536,6 +562,7 @@
   }
 
   async function renderPdfPage(page){
+    pdfStatus.textContent = "PDF 로딩 중...";
     const pdf = await ensurePdfDocument();
     const safePage = Math.min(Math.max(1, Math.floor(page)), pdf.numPages);
     state.currentPdfPage = safePage;
@@ -556,12 +583,16 @@
     });
     await renderTask.promise;
     if (token !== state.renderToken) return;
+    pdfStatus.textContent = `페이지 ${safePage} 표시 중`;
   }
 
   function setPdfFramePage(page){
     state.currentPdfPage = Math.max(1, Math.floor(page));
     state.pdfNavNonce += 1;
-    renderPdfPage(state.currentPdfPage).catch(() => {});
+    renderPdfPage(state.currentPdfPage).catch((err) => {
+      const msg = (err && err.message) ? err.message : "알 수 없는 오류";
+      pdfStatus.innerHTML = `PDF 표시 실패: ${msg} <button id="btnPdfRetry" type="button">재시도</button>`;
+    });
   }
 
   function navigatePdfToQuestion(q){
@@ -569,7 +600,6 @@
     setPdfFramePage(targetPage);
   }
 
-  let pdfJsLoaderPromise = null;
   function loadPdfJsLib(){
     if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
     if (pdfJsLoaderPromise) return pdfJsLoaderPromise;
@@ -610,7 +640,7 @@
     const t = lineText.trim();
     if (!t) return null;
 
-    let m = t.match(/^(\d{1,3})\s*(?:번|[.)])\s+/);
+    let m = t.match(/^\(?\s*(\d{1,3})\s*(?:번|[.)])(?:\s+|$)/);
     if (m) {
       const q = Number(m[1]);
       return q >= 1 && q <= 100 ? q : null;
@@ -653,8 +683,18 @@
     }
 
     const found = new Set();
+    const startXs = [];
     for (const row of rows){
       row.parts.sort((a, b) => a.x - b.x);
+      if (row.parts.length) startXs.push(row.parts[0].x);
+    }
+    const minStartX = startXs.length ? Math.min(...startXs) : 0;
+    const leftThreshold = minStartX + 90;
+
+    for (const row of rows){
+      row.parts.sort((a, b) => a.x - b.x);
+      if (!row.parts.length) continue;
+      if (row.parts[0].x > leftThreshold) continue;
       const lineText = row.parts.map(p => p.s).join(" ").replace(/\s+/g, " ").trim();
       const q = parseQuestionNumberFromLineStart(lineText);
       if (q != null) found.add(q);
@@ -662,42 +702,60 @@
     return found;
   }
 
-  function fillMissingQuestionPages(found){
-    const result = found.slice(0, 101);
+  function buildQuestionPageMapFromPageStarts(startsByPage, totalPages){
+    const anchors = [];
+    let prevQ = 0;
 
-    const known = [];
-    for (let q = 1; q <= 100; q++){
-      if (Number.isFinite(result[q])) known.push({ q, p: result[q] });
+    for (let pageNo = 1; pageNo <= totalPages; pageNo++){
+      const starts = Array.from(startsByPage[pageNo] || []).sort((a, b) => a - b);
+      if (starts.length === 0) continue;
+
+      let picked = starts.find((q) => q > prevQ && q <= prevQ + 15);
+      if (picked == null && prevQ === 0){
+        picked = starts.find((q) => q >= 1 && q <= 10);
+      }
+      if (picked == null) continue;
+
+      anchors.push({ page: pageNo, q: picked });
+      prevQ = picked;
+      if (prevQ >= 100) break;
     }
-    if (known.length === 0){
-      for (let q = 1; q <= 100; q++) result[q] = 1;
+
+    // 최소 앵커가 부족하면 기본 균등 분배로 fallback
+    if (anchors.length < 2){
+      const result = Array(101).fill(1);
+      const qpp = Math.max(1, Math.round(100 / Math.max(1, totalPages)));
+      for (let q = 1; q <= 100; q++){
+        result[q] = Math.min(totalPages, 1 + Math.floor((q - 1) / qpp));
+      }
       return result;
     }
 
-    for (let q = 1; q <= 100; q++){
-      if (Number.isFinite(result[q])) continue;
-
-      let prev = null;
-      let next = null;
-      for (let i = known.length - 1; i >= 0; i--){
-        if (known[i].q < q) { prev = known[i]; break; }
-      }
-      for (let i = 0; i < known.length; i++){
-        if (known[i].q > q) { next = known[i]; break; }
-      }
-
-      if (prev && next){
-        const ratio = (q - prev.q) / (next.q - prev.q);
-        result[q] = Math.max(1, Math.round(prev.p + ratio * (next.p - prev.p)));
-      } else if (prev){
-        result[q] = prev.p;
-      } else if (next){
-        result[q] = next.p;
-      } else {
-        result[q] = 1;
+    const normalizedAnchors = [];
+    let lastQ = 0;
+    for (const a of anchors){
+      if (a.q > lastQ){
+        normalizedAnchors.push(a);
+        lastQ = a.q;
       }
     }
 
+    // 첫 앵커가 늦게 잡혀도 초반 문항(1~)은 1페이지부터 시작하도록 기본값을 1로 둔다.
+    const result = Array(101).fill(1);
+    for (let i = 0; i < normalizedAnchors.length; i++){
+      const cur = normalizedAnchors[i];
+      const next = normalizedAnchors[i + 1];
+      const endQ = next ? Math.max(cur.q, next.q - 1) : 100;
+      for (let q = cur.q; q <= endQ; q++){
+        result[q] = cur.page;
+      }
+    }
+
+    for (let q = 2; q <= 100; q++){
+      result[q] = Math.max(result[q], result[q - 1]);
+      result[q] = Math.min(totalPages, result[q]);
+    }
+    result[1] = Math.min(totalPages, Math.max(1, result[1]));
     return result;
   }
 
@@ -716,18 +774,16 @@
         pdfInfo.textContent = "왼쪽 문제 / 오른쪽 답 체크 · 페이지이동 ON (자동 매핑 분석 중...)";
       }
       const pdf = await ensurePdfDocument();
-      const found = Array(101).fill(null);
+      const startsByPage = {};
 
       for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++){
         const page = await pdf.getPage(pageNo);
         const textContent = await page.getTextContent();
         const starts = extractQuestionStartsFromItems(textContent.items || []);
-        for (const q of starts){
-          if (found[q] == null) found[q] = pageNo;
-        }
+        startsByPage[pageNo] = starts;
       }
 
-      const normalized = fillMissingQuestionPages(found);
+      const normalized = buildQuestionPageMapFromPageStarts(startsByPage, pdf.numPages);
 
       state.pdfNav.enabled = true;
       state.pdfNav.mode = "auto";
@@ -739,6 +795,8 @@
       saveUi();
       if (!silent) alert("PDF 자동 매핑이 완료되었습니다.");
     }catch (e){
+      state.pdfNav.mode = "basic";
+      state.pdfNav.questionPageMap = null;
       if (!silent) alert("PDF 자동 매핑에 실패했습니다.");
       updatePdfInfo();
     }
