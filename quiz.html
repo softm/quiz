@@ -6,26 +6,35 @@
   <title>문제풀이 + 정답확인 (오답노트/단축키)</title>
   <style>
     :root{
-      --bg:#0b1020; --panel:#111a33; --card:#0f1730; --text:#e7ecff; --muted:#a9b4df;
-      --ok:#27d17f; --bad:#ff4d6d; --line:rgba(255,255,255,.12); --btn:#22305a;
-      --btn2:#1a2446; --warn:#ffbf3c;
+      --bg-start:#f2f5fb; --bg:#e9eef7; --panel:#ffffff; --card:#f8faff; --text:#1e2633; --muted:#5c667a;
+      --ok:#1f9f62; --bad:#d9365a; --line:rgba(24,38,61,.14); --btn:#dfe8ff; --btn2:#e9eef9; --warn:#f2b63b;
+      --header-bg:rgba(233,238,247,.86); --viewer-bg:#eef3fb; --chip-bg:rgba(255,255,255,.75); --ghost-bg:rgba(255,255,255,.65);
+      --stat-bg:rgba(248,250,255,.9); --sub-bg:rgba(245,248,255,.85); --choice-bg:rgba(255,255,255,.9); --note-bg:rgba(245,248,255,.88);
+      --textarea-bg:#ffffff;
+    }
+    body.theme-dark{
+      --bg-start:#070b16; --bg:#0b1020; --panel:#111a33; --card:#0f1730; --text:#e7ecff; --muted:#a9b4df;
+      --ok:#27d17f; --bad:#ff4d6d; --line:rgba(255,255,255,.12); --btn:#22305a; --btn2:#1a2446; --warn:#ffbf3c;
+      --header-bg:rgba(11,16,32,.9); --viewer-bg:#0a0f22; --chip-bg:rgba(15,23,48,.6); --ghost-bg:rgba(10,15,34,.35);
+      --stat-bg:rgba(15,23,48,.7); --sub-bg:rgba(15,23,48,.55); --choice-bg:rgba(10,15,34,.55); --note-bg:rgba(15,23,48,.55);
+      --textarea-bg:rgba(10,15,34,.55);
     }
     *{box-sizing:border-box}
     body{
       margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans KR",sans-serif;
-      background:linear-gradient(180deg,#070b16, var(--bg)); color:var(--text);
+      background:linear-gradient(180deg,var(--bg-start), var(--bg)); color:var(--text);
     }
     header{
       padding:14px 16px; border-bottom:1px solid var(--line);
       display:flex; gap:12px; align-items:center; justify-content:space-between;
-      position:sticky; top:0; background:rgba(11,16,32,.9); backdrop-filter:blur(10px); z-index:10;
+      position:sticky; top:0; background:var(--header-bg); backdrop-filter:blur(10px); z-index:10;
     }
     header .left{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
     header h1{font-size:16px; margin:0; font-weight:700}
     .pill{font-size:12px; padding:6px 10px; border:1px solid var(--line); border-radius:999px; color:var(--muted)}
     .wrap{display:grid; grid-template-columns: 1.25fr .75fr; gap:12px; padding:12px; min-height:calc(100vh - 58px)}
     .panel{
-      background:rgba(17,26,51,.65); border:1px solid var(--line); border-radius:14px; overflow:hidden;
+      background:var(--panel); border:1px solid var(--line); border-radius:14px; overflow:hidden;
       box-shadow:0 10px 30px rgba(0,0,0,.25);
     }
     .panel .title{
@@ -36,16 +45,25 @@
     .panel .title .mini{font-size:12px; color:var(--muted)}
     .viewer{
       height: calc(100vh - 58px - 12px - 12px - 48px);
-      background:#0a0f22;
+      background:var(--viewer-bg);
+      overflow:auto;
+      padding:10px;
     }
-    iframe{width:100%; height:100%; border:0}
+    #pdfCanvas{
+      display:block;
+      width:100%;
+      height:auto;
+      border:1px solid var(--line);
+      border-radius:8px;
+      background:#fff;
+    }
     .controls{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
     button{
       background:var(--btn); color:var(--text); border:1px solid var(--line);
       padding:8px 10px; border-radius:10px; cursor:pointer; font-weight:600; font-size:12px;
     }
     button.secondary{background:var(--btn2)}
-    button.ghost{background:rgba(10,15,34,.35)}
+    button.ghost{background:var(--ghost-bg)}
     button.danger{background:rgba(255,77,109,.12); border-color:rgba(255,77,109,.35)}
     button.warn{background:rgba(255,191,60,.12); border-color:rgba(255,191,60,.35)}
     button:hover{filter:brightness(1.08)}
@@ -53,7 +71,7 @@
     label.toggle{
       display:flex; gap:8px; align-items:center; font-size:12px; color:var(--muted);
       padding:6px 10px; border:1px solid var(--line); border-radius:999px;
-      background:rgba(15,23,48,.6);
+      background:var(--chip-bg);
     }
     input[type="checkbox"]{transform:scale(1.05)}
     .sheet{
@@ -63,12 +81,12 @@
     }
 
     .stats{display:grid; grid-template-columns: repeat(3,1fr); gap:8px; margin-bottom:10px;}
-    .stat{background:rgba(15,23,48,.7); border:1px solid var(--line); border-radius:12px; padding:10px;}
+    .stat{background:var(--stat-bg); border:1px solid var(--line); border-radius:12px; padding:10px;}
     .stat .k{font-size:12px; color:var(--muted)}
     .stat .v{font-size:18px; font-weight:800; margin-top:4px}
 
     .subStats{display:grid; grid-template-columns: repeat(4,1fr); gap:8px; margin:10px 0 10px;}
-    .sub{background:rgba(15,23,48,.55); border:1px solid var(--line); border-radius:12px; padding:10px;}
+    .sub{background:var(--sub-bg); border:1px solid var(--line); border-radius:12px; padding:10px;}
     .sub .k{font-size:12px; color:var(--muted)}
     .sub .v{font-size:14px; font-weight:800; margin-top:4px}
 
@@ -76,7 +94,7 @@
 
     .grid{display:grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap:8px;}
     .qcard{
-      background:rgba(15,23,48,.75);
+      background:var(--card);
       border:1px solid var(--line);
       border-radius:12px;
       padding:8px 8px 6px;
@@ -100,7 +118,7 @@
       display:flex; align-items:center; justify-content:center;
       border:1px solid var(--line); border-radius:10px;
       padding:6px 0; font-size:12px; color:var(--text);
-      background:rgba(10,15,34,.55);
+      background:var(--choice-bg);
       cursor:pointer;
       user-select:none;
     }
@@ -118,7 +136,7 @@
 
     .notePanel{
       margin-top:10px;
-      background:rgba(15,23,48,.55);
+      background:var(--note-bg);
       border:1px solid var(--line);
       border-radius:12px;
       padding:10px;
@@ -131,7 +149,7 @@
       width:100%;
       min-height:140px;
       resize:vertical;
-      background:rgba(10,15,34,.55);
+      background:var(--textarea-bg);
       border:1px solid var(--line);
       border-radius:10px;
       padding:10px;
@@ -158,9 +176,11 @@
     <span class="pill">오답노트·단축키(1~4/←→/G/R/J)</span>
   </div>
   <div class="controls">
+    <button id="btnHome" class="ghost">메인</button>
+    <button id="btnTheme" class="secondary">다크 모드</button>
     <button id="btnReset" class="secondary">다시풀기 (R)</button>
     <button id="btnGrade">채점(전체) (G)</button>
-    <label class="toggle"><input id="autoGrade" type="checkbox" /> 자동채점</label>
+    <label class="toggle"><input id="autoGrade" type="checkbox" checked /> 자동채점</label>
     <label class="toggle"><input id="showCorrect" type="checkbox" /> 정답표시(강조)</label>
   </div>
 </header>
@@ -170,7 +190,7 @@
     <div class="title">
       <div>
         <strong>문제 PDF</strong>
-        <span class="mini">왼쪽 문제 / 오른쪽 답 체크</span>
+        <span class="mini" id="pdfInfo">왼쪽 문제 / 오른쪽 답 체크</span>
       </div>
       <div class="controls">
         <button id="openQ">문제 PDF 새창</button>
@@ -178,7 +198,7 @@
       </div>
     </div>
     <div class="viewer">
-      <iframe id="pdfFrame" title="문제 PDF"></iframe>
+      <canvas id="pdfCanvas" aria-label="문제 PDF 페이지"></canvas>
     </div>
   </section>
 
@@ -278,16 +298,34 @@
   // ====== 저장 키 ======
   const STORAGE_KEY = "quiz_answers_v3";
   const STORAGE_UI_KEY = "quiz_ui_v3";
+  const PDF_MAP_VERSION = 2;
 
   // ====== 상태 ======
   const state = {
     answers: Array(101).fill(null),
     filter: "all",
-    focusQ: 1
+    focusQ: 1,
+    theme: "basic",
+    currentPdfPage: 1,
+    pdfNavNonce: 0,
+    pdfDoc: null,
+    pdfDocLoading: null,
+    renderToken: 0,
+    pdfNav: {
+      enabled: true,
+      startPage: 1,
+      questionsPerPage: 1,
+      mode: "basic",
+      questionPageMap: null,
+      source: null,
+      version: PDF_MAP_VERSION
+    }
   };
 
   // ====== DOM ======
-  const pdfFrame = document.getElementById("pdfFrame");
+  const pdfCanvas = document.getElementById("pdfCanvas");
+  const pdfCtx = pdfCanvas.getContext("2d");
+  const pdfInfo = document.getElementById("pdfInfo");
   const pageTitle = document.getElementById("pageTitle");
   const grid = document.getElementById("grid");
   const scoreEl = document.getElementById("score");
@@ -298,6 +336,7 @@
   const sheet = document.getElementById("sheet");
   const saveHint = document.getElementById("saveHint");
   const modeHint = document.getElementById("modeHint");
+  const btnTheme = document.getElementById("btnTheme");
 
   const sec1 = document.getElementById("sec1");
   const sec2 = document.getElementById("sec2");
@@ -312,13 +351,20 @@
   const copyHint = document.getElementById("copyHint");
 
   // ====== 버튼 이벤트 ======
+  document.getElementById("btnHome").addEventListener("click", () => {
+    window.location.href = "./index.html";
+  });
   document.getElementById("btnReset").addEventListener("click", resetAll);
   document.getElementById("btnGrade").addEventListener("click", () => { gradeAll(true); makeWrongNote(); });
+  btnTheme.addEventListener("click", () => setTheme(state.theme === "dark" ? "basic" : "dark"));
 
   document.getElementById("scrollTop").addEventListener("click", () => sheet.scrollTo({top:0, behavior:"smooth"}));
   document.getElementById("btnJumpFirst").addEventListener("click", jumpToFirst);
 
-  document.getElementById("openQ").addEventListener("click", () => window.open(encodedQuestionPdfUrl, "_blank"));
+  document.getElementById("openQ").addEventListener("click", () => {
+    const url = buildPdfUrl(state.currentPdfPage, true);
+    window.open(url, "_blank");
+  });
   document.getElementById("openA").addEventListener("click", () => window.open(encodedAnswerPdfUrl, "_blank"));
 
   document.getElementById("btnClearSaved").addEventListener("click", () => {
@@ -367,9 +413,10 @@
   document.title = `${examTitle} | 문제풀이 + 정답확인`;
   pageTitle.textContent = examTitle;
 
-  pdfFrame.src = encodedQuestionPdfUrl;
-  buildGrid();
   loadUi();
+  navigatePdfToQuestion(1);
+  ensureAutoPdfMap();
+  buildGrid();
   loadSaved();
   refreshAllCards();
   updateStats();
@@ -386,22 +433,315 @@
       localStorage.setItem(STORAGE_UI_KEY, JSON.stringify({
         autoGrade: autoGradeEl.checked,
         showCorrect: showCorrectEl.checked,
-        filter: state.filter
+        filter: state.filter,
+        theme: state.theme,
+        pdfNav: state.pdfNav
       }));
     }catch(_){}
   }
   function loadUi(){
     try{
       const raw = localStorage.getItem(STORAGE_UI_KEY);
-      if(!raw) return;
-      const ui = JSON.parse(raw);
-      if (typeof ui.autoGrade === "boolean") autoGradeEl.checked = ui.autoGrade;
-      if (typeof ui.showCorrect === "boolean") showCorrectEl.checked = ui.showCorrect;
-      if (ui.filter === "all" || ui.filter === "wrong" || ui.filter === "blank") state.filter = ui.filter;
+      if(raw){
+        const ui = JSON.parse(raw);
+        if (typeof ui.autoGrade === "boolean") autoGradeEl.checked = ui.autoGrade;
+        if (typeof ui.showCorrect === "boolean") showCorrectEl.checked = ui.showCorrect;
+        if (ui.filter === "all" || ui.filter === "wrong" || ui.filter === "blank") state.filter = ui.filter;
+        if (ui.theme === "basic" || ui.theme === "dark") state.theme = ui.theme;
+        if (ui.pdfNav && typeof ui.pdfNav === "object") {
+          const start = Number(ui.pdfNav.startPage);
+          const qpp = Number(ui.pdfNav.questionsPerPage);
+          state.pdfNav.enabled = ui.pdfNav.enabled !== false;
+          state.pdfNav.startPage = Number.isFinite(start) && start >= 1 ? Math.floor(start) : 1;
+          state.pdfNav.questionsPerPage = Number.isFinite(qpp) && qpp >= 1 ? Math.floor(qpp) : 1;
+          state.pdfNav.mode = ui.pdfNav.mode === "auto" ? "auto" : "basic";
+          state.pdfNav.source = typeof ui.pdfNav.source === "string" ? ui.pdfNav.source : null;
+          state.pdfNav.questionPageMap = Array.isArray(ui.pdfNav.questionPageMap) ? ui.pdfNav.questionPageMap.slice(0, 101) : null;
+          state.pdfNav.version = Number(ui.pdfNav.version) || 1;
+
+          const currentSource = encodedQuestionPdfUrl.split("#")[0];
+          const isCurrentSource = state.pdfNav.source === currentSource;
+          const isCurrentVersion = state.pdfNav.version === PDF_MAP_VERSION;
+          if (!isCurrentSource || !isCurrentVersion) {
+            state.pdfNav.mode = "basic";
+            state.pdfNav.questionPageMap = null;
+            state.pdfNav.source = null;
+            state.pdfNav.version = PDF_MAP_VERSION;
+          }
+        }
+      }
       fAll.classList.toggle("active", state.filter==="all");
       fWrong.classList.toggle("active", state.filter==="wrong");
       fBlank.classList.toggle("active", state.filter==="blank");
     }catch(_){}
+    applyTheme();
+    updatePdfInfo();
+  }
+  function applyTheme(){
+    document.body.classList.toggle("theme-dark", state.theme === "dark");
+    btnTheme.textContent = state.theme === "dark" ? "기본 모드" : "다크 모드";
+  }
+  function setTheme(nextTheme){
+    state.theme = nextTheme;
+    applyTheme();
+    saveUi();
+  }
+
+  function updatePdfInfo(){
+    const nav = state.pdfNav;
+    const onOff = "ON";
+    if (nav.mode === "auto" && Array.isArray(nav.questionPageMap)) {
+      pdfInfo.textContent = `왼쪽 문제 / 오른쪽 답 체크 · 페이지이동 ${onOff} (자동 매핑)`;  
+      return;
+    }
+    pdfInfo.textContent = `왼쪽 문제 / 오른쪽 답 체크 · 페이지이동 ${onOff} (기본 매핑, 자동 분석 중일 수 있음)`;
+  }
+
+  function getPdfPageByQuestion(q){
+    const nav = state.pdfNav;
+    if (nav.mode === "auto" && Array.isArray(nav.questionPageMap) && Number.isFinite(nav.questionPageMap[q])) {
+      return Math.max(1, Math.floor(nav.questionPageMap[q]));
+    }
+    const page = nav.startPage + Math.floor((q - 1) / nav.questionsPerPage);
+    return Math.max(1, page);
+  }
+
+  function buildPdfUrl(page, forceReload){
+    const base = encodedQuestionPdfUrl.split("#")[0];
+    const nonce = forceReload ? Date.now() : state.pdfNavNonce;
+    const sep = base.includes("?") ? "&" : "?";
+    return `${base}${sep}nav=${nonce}#page=${page}&zoom=page-fit`;
+  }
+
+  async function ensurePdfDocument(){
+    if (state.pdfDoc) return state.pdfDoc;
+    if (state.pdfDocLoading) return state.pdfDocLoading;
+
+    state.pdfDocLoading = (async () => {
+      const pdfjsLib = await loadPdfJsLib();
+      if (pdfjsLib.GlobalWorkerOptions) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      }
+      const loadingTask = pdfjsLib.getDocument(encodedQuestionPdfUrl);
+      const pdf = await loadingTask.promise;
+      state.pdfDoc = pdf;
+      return pdf;
+    })();
+
+    try{
+      return await state.pdfDocLoading;
+    } finally {
+      state.pdfDocLoading = null;
+    }
+  }
+
+  async function renderPdfPage(page){
+    const pdf = await ensurePdfDocument();
+    const safePage = Math.min(Math.max(1, Math.floor(page)), pdf.numPages);
+    state.currentPdfPage = safePage;
+
+    const pageObj = await pdf.getPage(safePage);
+    const baseViewport = pageObj.getViewport({ scale: 1 });
+    const viewWidth = Math.max(320, (pdfCanvas.parentElement?.clientWidth || 900) - 20);
+    const scale = Math.max(0.5, viewWidth / baseViewport.width);
+    const viewport = pageObj.getViewport({ scale });
+
+    const token = ++state.renderToken;
+    pdfCanvas.width = Math.ceil(viewport.width);
+    pdfCanvas.height = Math.ceil(viewport.height);
+
+    const renderTask = pageObj.render({
+      canvasContext: pdfCtx,
+      viewport
+    });
+    await renderTask.promise;
+    if (token !== state.renderToken) return;
+  }
+
+  function setPdfFramePage(page){
+    state.currentPdfPage = Math.max(1, Math.floor(page));
+    state.pdfNavNonce += 1;
+    renderPdfPage(state.currentPdfPage).catch(() => {});
+  }
+
+  function navigatePdfToQuestion(q){
+    const targetPage = getPdfPageByQuestion(q);
+    setPdfFramePage(targetPage);
+  }
+
+  let pdfJsLoaderPromise = null;
+  function loadPdfJsLib(){
+    if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+    if (pdfJsLoaderPromise) return pdfJsLoaderPromise;
+    pdfJsLoaderPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      script.onload = () => {
+        if (window.pdfjsLib) resolve(window.pdfjsLib);
+        else reject(new Error("pdf.js load failed"));
+      };
+      script.onerror = () => reject(new Error("pdf.js script error"));
+      document.head.appendChild(script);
+    });
+    return pdfJsLoaderPromise;
+  }
+
+  function buildLineText(items){
+    const lines = [];
+    let currentY = null;
+    let line = [];
+    for (const it of items){
+      const y = Number(it.transform && it.transform[5]);
+      if (currentY == null) {
+        currentY = y;
+      }
+      if (Math.abs(y - currentY) > 2){
+        lines.push(line.join(" ").trim());
+        line = [];
+        currentY = y;
+      }
+      line.push((it.str || "").trim());
+    }
+    if (line.length) lines.push(line.join(" ").trim());
+    return lines.join("\n");
+  }
+
+  function parseQuestionNumberFromLineStart(lineText){
+    const t = lineText.trim();
+    if (!t) return null;
+
+    let m = t.match(/^(\d{1,3})\s*(?:번|[.)])\s+/);
+    if (m) {
+      const q = Number(m[1]);
+      return q >= 1 && q <= 100 ? q : null;
+    }
+
+    m = t.match(/^제\s*(\d{1,3})\s*문\s*/);
+    if (m) {
+      const q = Number(m[1]);
+      return q >= 1 && q <= 100 ? q : null;
+    }
+
+    m = t.match(/^문(?:항|제)?\s*(\d{1,3})\s*/);
+    if (m) {
+      const q = Number(m[1]);
+      return q >= 1 && q <= 100 ? q : null;
+    }
+
+    return null;
+  }
+
+  function extractQuestionStartsFromItems(items){
+    // PDF 텍스트 아이템을 y축 기준으로 라인화한 뒤, 라인 시작 토큰에서 문항 번호를 잡는다.
+    const rows = [];
+    for (const it of items){
+      const s = String(it.str || "").trim();
+      if (!s) continue;
+      const y = Number(it.transform && it.transform[5]);
+      const x = Number(it.transform && it.transform[4]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+
+      let row = null;
+      for (const r of rows){
+        if (Math.abs(r.y - y) <= 2) { row = r; break; }
+      }
+      if (!row){
+        row = { y, parts: [] };
+        rows.push(row);
+      }
+      row.parts.push({ x, s });
+    }
+
+    const found = new Set();
+    for (const row of rows){
+      row.parts.sort((a, b) => a.x - b.x);
+      const lineText = row.parts.map(p => p.s).join(" ").replace(/\s+/g, " ").trim();
+      const q = parseQuestionNumberFromLineStart(lineText);
+      if (q != null) found.add(q);
+    }
+    return found;
+  }
+
+  function fillMissingQuestionPages(found){
+    const result = found.slice(0, 101);
+
+    const known = [];
+    for (let q = 1; q <= 100; q++){
+      if (Number.isFinite(result[q])) known.push({ q, p: result[q] });
+    }
+    if (known.length === 0){
+      for (let q = 1; q <= 100; q++) result[q] = 1;
+      return result;
+    }
+
+    for (let q = 1; q <= 100; q++){
+      if (Number.isFinite(result[q])) continue;
+
+      let prev = null;
+      let next = null;
+      for (let i = known.length - 1; i >= 0; i--){
+        if (known[i].q < q) { prev = known[i]; break; }
+      }
+      for (let i = 0; i < known.length; i++){
+        if (known[i].q > q) { next = known[i]; break; }
+      }
+
+      if (prev && next){
+        const ratio = (q - prev.q) / (next.q - prev.q);
+        result[q] = Math.max(1, Math.round(prev.p + ratio * (next.p - prev.p)));
+      } else if (prev){
+        result[q] = prev.p;
+      } else if (next){
+        result[q] = next.p;
+      } else {
+        result[q] = 1;
+      }
+    }
+
+    return result;
+  }
+
+  function ensureAutoPdfMap(){
+    const currentSource = encodedQuestionPdfUrl.split("#")[0];
+    if (state.pdfNav.mode === "auto" && state.pdfNav.source === currentSource && Array.isArray(state.pdfNav.questionPageMap)) {
+      return;
+    }
+    buildAutoPdfMap({ silent: true });
+  }
+
+  async function buildAutoPdfMap(options = {}){
+    const silent = options.silent === true;
+    try{
+      if (silent) {
+        pdfInfo.textContent = "왼쪽 문제 / 오른쪽 답 체크 · 페이지이동 ON (자동 매핑 분석 중...)";
+      }
+      const pdf = await ensurePdfDocument();
+      const found = Array(101).fill(null);
+
+      for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++){
+        const page = await pdf.getPage(pageNo);
+        const textContent = await page.getTextContent();
+        const starts = extractQuestionStartsFromItems(textContent.items || []);
+        for (const q of starts){
+          if (found[q] == null) found[q] = pageNo;
+        }
+      }
+
+      const normalized = fillMissingQuestionPages(found);
+
+      state.pdfNav.enabled = true;
+      state.pdfNav.mode = "auto";
+      state.pdfNav.questionPageMap = normalized;
+      state.pdfNav.source = encodedQuestionPdfUrl.split("#")[0];
+      state.pdfNav.version = PDF_MAP_VERSION;
+      updatePdfInfo();
+      navigatePdfToQuestion(state.focusQ || 1);
+      saveUi();
+      if (!silent) alert("PDF 자동 매핑이 완료되었습니다.");
+    }catch (e){
+      if (!silent) alert("PDF 자동 매핑에 실패했습니다.");
+      updatePdfInfo();
+    }
   }
 
   // ====== 저장/로드(답안) ======
@@ -553,6 +893,7 @@
   // ====== 포커스/단축키 ======
   function focusCard(q, scroll){
     state.focusQ = q;
+    navigatePdfToQuestion(q);
     for(let i=1;i<=100;i++){
       getCard(i).classList.toggle("focus", i===q);
     }
