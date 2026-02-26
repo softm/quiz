@@ -10,11 +10,6 @@ const categories = [
   '시설원예기사',
   '유기농업기사',
 ];
-const categorySlugMap = {
-  '농산물품질관리사': 'qcm',
-  '시설원예기사': 'gh',
-  '유기농업기사': 'org',
-};
 
 function toPosixPath(inputPath) {
   return inputPath.split(path.sep).join('/');
@@ -31,40 +26,6 @@ function parsePdfName(fileName) {
 
   if (!examName) return null;
   return { examName, kind };
-}
-
-function parseExamMeta(examName) {
-  const normalized = examName.normalize('NFC');
-  const m = normalized.match(/(\d{4})년\s*제\s*(\d+)회.*?(\d+)차/);
-  if (!m) return null;
-  return {
-    year: m[1],
-    round: String(Number(m[2])),
-    stage: String(Number(m[3])),
-  };
-}
-
-async function ensureAliasPdf(categoryName, sourceName, parsed) {
-  const categoryDir = path.join(rootDir, categoryName);
-  const sourcePath = path.join(categoryDir, sourceName);
-  const meta = parseExamMeta(parsed.examName);
-  const slug = categorySlugMap[categoryName] || 'quiz';
-
-  let aliasName;
-  if (meta) {
-    aliasName = `${slug}_${meta.year}_${meta.round}_${meta.stage}_${parsed.kind}.pdf`;
-  } else {
-    const safeExam = parsed.examName
-      .replace(/\s+/g, '_')
-      .replace(/[^A-Za-z0-9_]/g, '');
-    aliasName = `${slug}_${safeExam || 'exam'}_${parsed.kind}.pdf`;
-  }
-
-  const aliasPath = path.join(categoryDir, aliasName);
-  if (path.basename(sourcePath) !== aliasName) {
-    await fs.copyFile(sourcePath, aliasPath);
-  }
-  return toPosixPath(path.join(categoryName, aliasName));
 }
 
 async function readCategory(categoryName) {
@@ -90,7 +51,7 @@ async function readCategory(categoryName) {
     const parsed = parsePdfName(entry.name);
     if (!parsed) continue;
 
-    const relPath = await ensureAliasPdf(categoryName, entry.name, parsed);
+    const relPath = toPosixPath(path.join(categoryName, entry.name));
     const key = parsed.examName;
 
     if (!examMap.has(key)) {

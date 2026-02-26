@@ -61,6 +61,19 @@
       margin: 10px 0 0;
       font-size: 14px;
     }
+    .adWrap {
+      margin-top: 16px;
+      min-height: 100px;
+      border: 1px dashed var(--line);
+      border-radius: 12px;
+      background: rgba(255,255,255,.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 8px;
+    }
 
     .list {
       margin-top: 24px;
@@ -135,6 +148,7 @@
     </div>
     <h1 id="title">카테고리</h1>
     <p class="desc">파일명에서 suffix(`시험문제지`, `최종정답`)를 제거한 값이 회차명으로 표시됩니다.</p>
+    <section class="adWrap" id="adfitCategoryTop">광고 영역</section>
 
     <section class="list" id="list"></section>
   </main>
@@ -143,6 +157,29 @@
   <script>
     const params = new URLSearchParams(location.search);
     const categoryName = params.get("category") || "농산물품질관리사";
+    const ADFIT_UNITS = {
+      categoryTop: "DAN_REPLACE_CATEGORY_TOP",
+    };
+
+    function loadAdFitScript() {
+      if (window.__adfitLoaded) return;
+      const script = document.createElement("script");
+      script.async = true;
+      script.src = "https://t1.daumcdn.net/kas/static/ba.min.js";
+      script.onload = () => { window.__adfitLoaded = true; };
+      document.head.appendChild(script);
+    }
+
+    function initAdFit(slotId, unit, width, height) {
+      const slot = document.getElementById(slotId);
+      if (!slot) return;
+      if (!unit || !unit.startsWith("DAN-")) {
+        slot.textContent = "광고 단위 ID를 설정하면 이 위치에 배너가 노출됩니다.";
+        return;
+      }
+      slot.innerHTML = `<ins class="kakao_ad_area" style="display:none;" data-ad-unit="${unit}" data-ad-width="${width}" data-ad-height="${height}"></ins>`;
+      loadAdFitScript();
+    }
 
     function examStatus(exam) {
       if (exam.questionPdf && exam.answerPdf) return "문제/정답 세트 준비 완료";
@@ -218,6 +255,7 @@
       }
     }
 
+    initAdFit("adfitCategoryTop", ADFIT_UNITS.categoryTop, "728", "90");
     load();
   </script>
 </body>

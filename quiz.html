@@ -151,6 +151,19 @@
       border-radius:12px;
       padding:10px;
     }
+    .adWrap{
+      margin-top:10px;
+      min-height:100px;
+      border:1px dashed var(--line);
+      border-radius:12px;
+      background:var(--note-bg);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:var(--muted);
+      font-size:12px;
+      padding:8px;
+    }
     .notePanel .head{
       display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;
       margin-bottom:8px;
@@ -174,8 +187,55 @@
       .viewer,.sheet{height:60vh}
       .grid{grid-template-columns: repeat(4, minmax(0,1fr));}
     }
+    @media (max-width: 768px){
+      header{
+        position:static;
+        padding:10px;
+        align-items:flex-start;
+        flex-direction:column;
+      }
+      header .left{width:100%; justify-content:space-between}
+      header h1{font-size:14px}
+      .pill{font-size:11px; padding:4px 8px}
+      .controls{
+        width:100%;
+        gap:6px;
+      }
+      header .controls{
+        display:grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      button{
+        padding:7px 8px;
+        font-size:11px;
+      }
+      .toggle{
+        justify-content:center;
+        padding:5px 8px;
+      }
+      .wrap{
+        padding:8px;
+        gap:8px;
+      }
+      .panel{border-radius:10px}
+      .panel .title{padding:8px 10px}
+      .viewer{height:44vh; padding:6px}
+      .sheet{height:auto; max-height:none; padding:8px}
+      .stats{grid-template-columns:repeat(2,1fr)}
+      .subStats{grid-template-columns:repeat(2,1fr)}
+      .grid{grid-template-columns: repeat(4, minmax(0,1fr)); gap:6px}
+      .qcard{padding:6px 6px 5px}
+      .choices{gap:4px}
+      .choice{padding:5px 0; font-size:11px}
+      .notePanel textarea{min-height:110px}
+    }
     @media (max-width: 520px){
+      header .controls{grid-template-columns: repeat(2, minmax(0, 1fr));}
+      .pill{display:none}
+      .viewer{height:40vh}
       .grid{grid-template-columns: repeat(3, minmax(0,1fr));}
+      .qnum{font-size:11px}
+      .mark{font-size:10px}
     }
   </style>
 </head>
@@ -261,6 +321,7 @@
         <textarea id="noteArea" placeholder="채점 후 '오답노트 생성'을 누르면 자동으로 만들어집니다."></textarea>
         <div class="tiny" id="copyHint"></div>
       </div>
+      <div class="adWrap" id="adfitQuizSide">광고 영역</div>
 
       <div class="footerNote">
         <div>• 단축키: <b>1~4</b> 선택, <b>←/→</b> 이동, <b>G</b> 채점, <b>R</b> 리셋, <b>J</b> 첫항목 점프</div>
@@ -280,6 +341,9 @@
   const ANSWER_PDF_URL = params.get("answer") || DEFAULT_ANSWER_PDF_URL;
   const encodedQuestionPdfUrl = encodeURI(QUESTION_PDF_URL);
   const encodedAnswerPdfUrl = encodeURI(ANSWER_PDF_URL);
+  const ADFIT_UNITS = {
+    quizSide: "DAN_REPLACE_QUIZ_SIDE",
+  };
 
   // ====== 정답 키(1교시 A형 1~100) ======
   // 주의: 8번이 '5'인 것은 원본 정답표 기준 입력(선지 5가 실제로 존재하는 유형일 수 있음).
@@ -373,6 +437,26 @@
   const copyHint = document.getElementById("copyHint");
   let pdfJsLoaderPromise = null;
 
+  function loadAdFitScript() {
+    if (window.__adfitLoaded) return;
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = "https://t1.daumcdn.net/kas/static/ba.min.js";
+    script.onload = () => { window.__adfitLoaded = true; };
+    document.head.appendChild(script);
+  }
+
+  function initAdFit(slotId, unit, width, height) {
+    const slot = document.getElementById(slotId);
+    if (!slot) return;
+    if (!unit || !unit.startsWith("DAN-")) {
+      slot.textContent = "광고 단위 ID를 설정하면 이 위치에 배너가 노출됩니다.";
+      return;
+    }
+    slot.innerHTML = `<ins class="kakao_ad_area" style="display:none;" data-ad-unit="${unit}" data-ad-width="${width}" data-ad-height="${height}"></ins>`;
+    loadAdFitScript();
+  }
+
   // ====== 버튼 이벤트 ======
   document.getElementById("btnHome").addEventListener("click", () => {
     const to = `./category.html?category=${encodeURIComponent(CATEGORY_NAME)}`;
@@ -446,6 +530,7 @@
   const examTitle = `${CATEGORY_NAME} · ${EXAM_NAME}`;
   document.title = `${examTitle} | 문제풀이 + 정답확인`;
   pageTitle.textContent = examTitle;
+  initAdFit("adfitQuizSide", ADFIT_UNITS.quizSide, "300", "250");
 
   loadUi();
   buildGrid();
