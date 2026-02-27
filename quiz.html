@@ -6,6 +6,7 @@
   <title>문제풀이 + 정답확인 (오답노트/단축키)</title>
   <style>
     :root{
+      --header-h:58px;
       --bg-start:#f2f5fb; --bg:#e9eef7; --panel:#ffffff; --card:#f8faff; --text:#1e2633; --muted:#5c667a;
       --ok:#1f9f62; --bad:#d9365a; --line:rgba(24,38,61,.14); --btn:#dfe8ff; --btn2:#e9eef9; --warn:#f2b63b;
       --header-bg:rgba(233,238,247,.86); --viewer-bg:#eef3fb; --chip-bg:rgba(255,255,255,.75); --ghost-bg:rgba(255,255,255,.65);
@@ -32,10 +33,12 @@
     header .left{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
     header h1{font-size:16px; margin:0; font-weight:700}
     .pill{font-size:12px; padding:6px 10px; border:1px solid var(--line); border-radius:999px; color:var(--muted)}
-    .wrap{display:grid; grid-template-columns: 1.25fr .75fr; gap:12px; padding:12px; min-height:calc(100vh - 58px)}
+    .wrap{display:grid; grid-template-columns: 1.25fr .75fr; gap:12px; padding:12px; min-height:calc(100dvh - var(--header-h))}
     .panel{
       background:var(--panel); border:1px solid var(--line); border-radius:14px; overflow:hidden;
       box-shadow:0 10px 30px rgba(0,0,0,.25);
+      display:flex;
+      flex-direction:column;
     }
     .panel .title{
       padding:10px 12px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between;
@@ -44,10 +47,13 @@
     .panel .title strong{font-size:13px}
     .panel .title .mini{font-size:12px; color:var(--muted)}
     .viewer{
-      height: calc(100vh - 58px - 12px - 12px - 48px);
+      height:auto;
+      flex:1;
+      min-height:0;
       background:var(--viewer-bg);
       overflow:auto;
       padding:10px;
+      position:relative;
     }
     #pdfCanvas{
       display:block;
@@ -57,16 +63,132 @@
       border-radius:8px;
       background:#fff;
     }
+    #pdfAllPages{
+      display:none;
+    }
+    #pdfAllPages .pdfPageCanvas{
+      display:block;
+      width:100%;
+      height:auto;
+      border:1px solid var(--line);
+      border-radius:8px;
+      background:#fff;
+      margin-bottom:10px;
+    }
+    .viewer:not(.single) #pdfAllPages{
+      display:block;
+    }
+    .viewer:not(.single) #pdfCanvas{
+      display:none;
+    }
+    .viewer.single #pdfCanvas{cursor:pointer}
     .pdfStatus{
       margin-top:8px;
       font-size:12px;
       color:var(--muted);
+    }
+    .pdfLoadingOverlay{
+      position:absolute;
+      inset:0;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:5;
+      background:rgba(255,255,255,.45);
+      backdrop-filter:blur(2px);
+      -webkit-backdrop-filter:blur(2px);
+    }
+    body.theme-dark .pdfLoadingOverlay{
+      background:rgba(10,15,34,.45);
+    }
+    .pdfLoadingOverlay.show{display:flex}
+    .pdfLoadingCard{
+      min-width:180px;
+      padding:12px 14px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:var(--panel);
+      box-shadow:0 10px 24px rgba(0,0,0,.18);
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .pdfSpinner{
+      width:20px;
+      height:20px;
+      border-radius:50%;
+      border:3px solid rgba(120,140,180,.25);
+      border-top-color:#0a66d6;
+      animation:spin .85s linear infinite;
+      flex:0 0 auto;
+    }
+    .pdfLoadingText{
+      font-size:12px;
+      font-weight:700;
+      color:var(--text);
+      white-space:nowrap;
+    }
+    @keyframes spin{
+      from{transform:rotate(0deg)}
+      to{transform:rotate(360deg)}
     }
     .pdfStatus button{
       margin-left:8px;
       padding:4px 8px;
       font-size:11px;
     }
+    .viewerNav{
+      position:absolute;
+      top:50%;
+      transform:translateY(-50%);
+      width:52px;
+      height:120px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:rgba(255,255,255,.7);
+      color:var(--text);
+      font-size:20px;
+      font-weight:800;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      z-index:3;
+    }
+    .viewerNav.left{left:6px}
+    .viewerNav.right{right:6px}
+    .viewer.single .viewerNav{display:flex}
+    .viewer.single{overflow:hidden}
+    .bookmarkBtn{
+      width:42px;
+      height:42px;
+      border:1px solid rgba(241,166,32,.5);
+      border-radius:10px;
+      background:rgba(255,255,255,.78);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      z-index:4;
+      padding:0;
+    }
+    .viewer.single .bookmarkBtn{
+      position:absolute;
+      right:10px;
+      top:10px;
+    }
+    .viewer:not(.single) .bookmarkBtn{
+      position:sticky;
+      top:10px;
+      left:calc(100% - 52px);
+    }
+    .bookmarkBtn svg{
+      width:22px;
+      height:22px;
+      stroke:#f1a620;
+      stroke-width:2.1;
+      fill:none;
+    }
+    .bookmarkBtn.active svg{fill:#f1a620}
     .controls{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
     button{
       background:var(--btn); color:var(--text); border:1px solid var(--line);
@@ -86,8 +208,19 @@
     input[type="checkbox"]{transform:scale(1.05)}
     .sheet{
       padding:10px 10px 14px;
-      height: calc(100vh - 58px - 12px - 12px - 48px);
+      height:auto;
+      flex:1;
+      min-height:0;
       overflow:auto;
+    }
+
+    @media (min-width: 769px){
+      body{height:100dvh; overflow:hidden}
+      .wrap{
+        height:calc(100dvh - var(--header-h));
+        min-height:0;
+      }
+      .panel{min-height:0}
     }
 
     .stats{display:grid; grid-template-columns: repeat(3,1fr); gap:8px; margin-bottom:10px;}
@@ -114,6 +247,20 @@
     .qcard.locked{opacity:.72}
     .qhead{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;}
     .qnum{font-weight:800; font-size:12px}
+    .qmeta{display:flex; align-items:center; gap:4px}
+    .qbm{
+      display:none;
+      width:16px;
+      height:16px;
+      border-radius:6px;
+      font-size:11px;
+      line-height:1;
+      align-items:center;
+      justify-content:center;
+      color:#fff;
+      background:#f1a620;
+    }
+    .qcard.bookmarked .qbm{display:flex}
     .mark{
       font-size:11px; font-weight:800;
       padding:2px 6px; border-radius:999px;
@@ -123,6 +270,21 @@
     .mark.ok{color:var(--ok); border-color:rgba(39,209,127,.5); background:rgba(39,209,127,.08)}
     .mark.bad{color:var(--bad); border-color:rgba(255,77,109,.5); background:rgba(255,77,109,.08)}
     .mark.lock{color:var(--warn); border-color:rgba(255,191,60,.45); background:rgba(255,191,60,.08)}
+    .mark.blank{
+      font-size:11px;
+      line-height:1;
+      min-width:26px;
+      text-align:center;
+      padding:2px 0;
+      border-color:rgba(120,140,180,.35);
+      background:rgba(120,140,180,.08);
+    }
+    .mark.blank::before{
+      content:"◍";
+      font-size:12px;
+      color:#6c7a99;
+      font-weight:800;
+    }
     .choices{display:grid; grid-template-columns: repeat(4, 1fr); gap:6px;}
     .choice{
       display:flex; align-items:center; justify-content:center;
@@ -164,6 +326,12 @@
       font-size:12px;
       padding:8px;
     }
+    .mobileDock{
+      display:none;
+    }
+    .sheetOverlay{
+      display:none;
+    }
     .notePanel .head{
       display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;
       margin-bottom:8px;
@@ -184,7 +352,7 @@
 
     @media (max-width: 1100px){
       .wrap{grid-template-columns:1fr}
-      .viewer,.sheet{height:60vh}
+      .viewer,.sheet{min-height:58vh}
       .grid{grid-template-columns: repeat(4, minmax(0,1fr));}
     }
     @media (max-width: 768px){
@@ -219,7 +387,7 @@
       }
       .panel{border-radius:10px}
       .panel .title{padding:8px 10px}
-      .viewer{height:44vh; padding:6px}
+      .viewer{min-height:calc(100dvh - 250px); padding:6px}
       .sheet{height:auto; max-height:none; padding:8px}
       .stats{grid-template-columns:repeat(2,1fr)}
       .subStats{grid-template-columns:repeat(2,1fr)}
@@ -228,11 +396,74 @@
       .choices{gap:4px}
       .choice{padding:5px 0; font-size:11px}
       .notePanel textarea{min-height:110px}
+
+      .wrap{display:block}
+      .wrap > section.panel{margin-bottom:8px}
+      .wrap > aside.panel{display:none}
+
+      .mobileDock{
+        position:fixed;
+        left:0; right:0; bottom:0;
+        z-index:30;
+        display:grid;
+        grid-template-columns: 1.3fr 1fr 1fr 1fr 1fr 1fr;
+        gap:6px;
+        padding:8px;
+        border-top:1px solid var(--line);
+        background:var(--panel);
+        backdrop-filter:blur(8px);
+      }
+      .mobileDock .qnow{
+        display:flex; align-items:center; justify-content:center;
+        border:1px solid var(--line);
+        border-radius:8px;
+        font-size:12px; font-weight:700;
+        color:var(--muted);
+      }
+      .mobileDock button{
+        padding:9px 6px;
+        font-size:12px;
+      }
+      body{padding-bottom:76px}
+
+      .sheetOverlay{
+        position:fixed;
+        inset:0;
+        z-index:40;
+        display:none;
+        background:rgba(0,0,0,.32);
+      }
+      .sheetOverlay.open{display:block}
+      .sheetOverlay .sheetPanel{
+        position:absolute;
+        left:0; right:0; bottom:0;
+        max-height:82vh;
+        background:var(--panel);
+        border-top-left-radius:14px;
+        border-top-right-radius:14px;
+        border:1px solid var(--line);
+        border-bottom:none;
+        overflow:auto;
+        box-shadow:0 -12px 30px rgba(0,0,0,.25);
+      }
+      .sheetOverlay .sheetTop{
+        position:sticky; top:0;
+        display:flex; align-items:center; justify-content:space-between;
+        padding:10px;
+        border-bottom:1px solid var(--line);
+        background:var(--panel);
+      }
+      .sheetOverlay .sheetBody{
+        padding:8px;
+      }
+      .sheetOverlay .desktopOnly{
+        display:none !important;
+      }
     }
     @media (max-width: 520px){
       header .controls{grid-template-columns: repeat(2, minmax(0, 1fr));}
       .pill{display:none}
-      .viewer{height:40vh}
+      .viewer{min-height:calc(100dvh - 230px)}
       .grid{grid-template-columns: repeat(3, minmax(0,1fr));}
       .qnum{font-size:11px}
       .mark{font-size:10px}
@@ -263,12 +494,29 @@
         <span class="mini" id="pdfInfo">왼쪽 문제 / 오른쪽 답 체크</span>
       </div>
       <div class="controls">
+        <button id="btnFontUp" class="secondary">글자크게 ⊕</button>
+        <button id="btnFontDown" class="secondary">글자작게 ⊖</button>
         <button id="openQ">문제 PDF 새창</button>
         <button id="openA" class="secondary">정답 PDF 새창</button>
+        <button id="btnViewMode" class="ghost">↕</button>
       </div>
     </div>
     <div class="viewer" id="pdfViewer">
+      <button class="bookmarkBtn" id="btnBookmark" aria-label="현재 문제 북마크" title="북마크">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 3.5h10a1 1 0 0 1 1 1V21l-6-3.8L6 21V4.5a1 1 0 0 1 1-1z"></path>
+        </svg>
+      </button>
+      <button class="viewerNav left" id="btnPrevQ" aria-label="이전 문제">‹</button>
+      <button class="viewerNav right" id="btnNextQ" aria-label="다음 문제">›</button>
+      <div id="pdfAllPages" aria-label="문제 PDF 전체 페이지"></div>
       <canvas id="pdfCanvas" aria-label="문제 PDF 페이지"></canvas>
+      <div class="pdfLoadingOverlay" id="pdfLoadingOverlay" aria-hidden="true">
+        <div class="pdfLoadingCard">
+          <div class="pdfSpinner" aria-hidden="true"></div>
+          <div class="pdfLoadingText" id="pdfLoadingText">PDF 로딩 중...</div>
+        </div>
+      </div>
       <div id="pdfStatus" class="pdfStatus">PDF 로딩 중...</div>
     </div>
   </section>
@@ -324,10 +572,33 @@
       <div class="adWrap" id="adfitQuizSide">광고 영역</div>
 
       <div class="footerNote">
-        <div>• 단축키: <b>1~4</b> 선택, <b>←/→</b> 이동, <b>G</b> 채점, <b>R</b> 리셋, <b>J</b> 첫항목 점프</div>
+        <div>• 단축키: <b>1~4</b> 선택, <b>←/→</b> 이동, <b>B</b> 북마크, <b>G</b> 채점, <b>R</b> 리셋, <b>J</b> 첫항목 점프</div>
       </div>
     </div>
   </aside>
+</div>
+
+<div class="mobileDock" id="mobileDock">
+  <div class="qnow" id="mobileQNow">1번</div>
+  <button id="mobilePrev" class="secondary">이전</button>
+  <button id="mobileNext" class="secondary">다음</button>
+  <button id="mobileChoice1">1</button>
+  <button id="mobileChoice2">2</button>
+  <button id="mobileSheetOpen" class="ghost">답안</button>
+</div>
+
+<div class="sheetOverlay" id="sheetOverlay">
+  <div class="sheetPanel">
+    <div class="sheetTop">
+      <strong style="font-size:13px;">답안지(모바일)</strong>
+      <div class="controls">
+        <button id="mobileChoice3">3</button>
+        <button id="mobileChoice4">4</button>
+        <button id="mobileSheetClose" class="secondary">닫기</button>
+      </div>
+    </div>
+    <div class="sheetBody" id="mobileSheetMount"></div>
+  </div>
 </div>
 
 <script>
@@ -372,6 +643,7 @@
 
   // ====== 저장 키 ======
   const STORAGE_KEY = "quiz_answers_v3";
+  const STORAGE_BOOKMARK_KEY = "quiz_bookmarks_v1";
   const STORAGE_UI_KEY = "quiz_ui_v3";
   const PDF_MAP_VERSION = 5;
   const PRESET_PAGE_ANCHORS = {
@@ -380,13 +652,26 @@
     "2024년 제21회 농산물품질관리사 1차": [1,5,9,14,18,23,26,33,40,45,51,58,64,71,76,82,90,97],
     "2025년 제22회 농산물품질관리사 1차": [1,5,10,14,19,23,26,35,41,47,51,57,66,72,76,81,89,95],
   };
+  const SINGLE_CROP_OVERRIDES = {};
+  const SINGLE_CROP_OVERRIDES_BY_PDF = [
+    {
+      // NFD/NFC 차이가 있어도 숫자/회차 토큰으로 매칭
+      match: /(2023).*(20).*(1).*(시험문제지|시험문제지)/,
+      ranges: {
+        1: { end: 0.64 }
+      }
+    }
+  ];
 
   // ====== 상태 ======
   const state = {
     answers: Array(101).fill(null),
+    bookmarks: Array(101).fill(false),
     filter: "all",
     focusQ: 1,
     theme: "basic",
+    viewMode: "all",
+    pdfZoom: 1,
     currentPdfPage: 1,
     pdfNavNonce: 0,
     questionPdfBaseUrl: null,
@@ -394,6 +679,14 @@
     pdfDoc: null,
     pdfDocLoading: null,
     renderToken: 0,
+    lastRenderMeta: null,
+    allPagesRenderKey: null,
+    allPageCanvases: [],
+    pageQuestionRatioCache: {},
+    pageQuestionDirectRatioCache: {},
+    pageQuestionRowStartCache: {},
+    questionChoiceAnchorCache: {},
+    pageOcrQuestionStartCache: {},
     pdfNav: {
       enabled: true,
       startPage: 1,
@@ -409,7 +702,10 @@
   // ====== DOM ======
   const pdfCanvas = document.getElementById("pdfCanvas");
   const pdfCtx = pdfCanvas.getContext("2d");
+  const pdfAllPages = document.getElementById("pdfAllPages");
   const pdfViewer = document.getElementById("pdfViewer");
+  const pdfLoadingOverlay = document.getElementById("pdfLoadingOverlay");
+  const pdfLoadingText = document.getElementById("pdfLoadingText");
   const pdfStatus = document.getElementById("pdfStatus");
   const pdfInfo = document.getElementById("pdfInfo");
   const pageTitle = document.getElementById("pageTitle");
@@ -423,6 +719,8 @@
   const saveHint = document.getElementById("saveHint");
   const modeHint = document.getElementById("modeHint");
   const btnTheme = document.getElementById("btnTheme");
+  const btnFontUp = document.getElementById("btnFontUp");
+  const btnFontDown = document.getElementById("btnFontDown");
 
   const sec1 = document.getElementById("sec1");
   const sec2 = document.getElementById("sec2");
@@ -435,7 +733,13 @@
 
   const noteArea = document.getElementById("noteArea");
   const copyHint = document.getElementById("copyHint");
+  const btnBookmark = document.getElementById("btnBookmark");
   let pdfJsLoaderPromise = null;
+  let tesseractLoaderPromise = null;
+  const mobileDock = document.getElementById("mobileDock");
+  const mobileQNow = document.getElementById("mobileQNow");
+  const sheetOverlay = document.getElementById("sheetOverlay");
+  const mobileSheetMount = document.getElementById("mobileSheetMount");
 
   function loadAdFitScript() {
     if (window.__adfitLoaded) return;
@@ -444,6 +748,18 @@
     script.src = "https://t1.daumcdn.net/kas/static/ba.min.js";
     script.onload = () => { window.__adfitLoaded = true; };
     document.head.appendChild(script);
+  }
+
+  function setPdfLoading(show, text){
+    if (!pdfLoadingOverlay || !pdfLoadingText) return;
+    if (show) {
+      pdfLoadingText.textContent = text || "PDF 로딩 중...";
+      pdfLoadingOverlay.classList.add("show");
+      pdfLoadingOverlay.setAttribute("aria-hidden", "false");
+    } else {
+      pdfLoadingOverlay.classList.remove("show");
+      pdfLoadingOverlay.setAttribute("aria-hidden", "true");
+    }
   }
 
   function initAdFit(slotId, unit, width, height) {
@@ -465,6 +781,12 @@
   document.getElementById("btnReset").addEventListener("click", resetAll);
   document.getElementById("btnGrade").addEventListener("click", () => { gradeAll(true); makeWrongNote(); });
   btnTheme.addEventListener("click", () => setTheme(state.theme === "dark" ? "basic" : "dark"));
+  btnFontUp.addEventListener("click", () => changePdfZoom(0.1));
+  btnFontDown.addEventListener("click", () => changePdfZoom(-0.1));
+  document.getElementById("btnViewMode").addEventListener("click", toggleViewMode);
+  document.getElementById("btnPrevQ").addEventListener("click", () => moveFocus(-1));
+  document.getElementById("btnNextQ").addEventListener("click", () => moveFocus(1));
+  btnBookmark.addEventListener("click", () => toggleBookmark(state.focusQ));
 
   document.getElementById("scrollTop").addEventListener("click", () => sheet.scrollTo({top:0, behavior:"smooth"}));
   document.getElementById("btnJumpFirst").addEventListener("click", jumpToFirst);
@@ -482,6 +804,7 @@
     localStorage.removeItem(STORAGE_UI_KEY);
     saveHint.textContent = "저장 상태: 초기화됨";
   });
+  pdfCanvas.addEventListener("click", onPdfCanvasClick);
 
   document.getElementById("btnMakeNote").addEventListener("click", makeWrongNote);
   document.getElementById("btnCopyNote").addEventListener("click", copyWrongNote);
@@ -511,6 +834,18 @@
   fWrong.addEventListener("click", () => setFilter("wrong"));
   fBlank.addEventListener("click", () => setFilter("blank"));
 
+  document.getElementById("mobilePrev").addEventListener("click", () => moveFocus(-1));
+  document.getElementById("mobileNext").addEventListener("click", () => moveFocus(1));
+  document.getElementById("mobileChoice1").addEventListener("click", () => chooseByKeyboard(1));
+  document.getElementById("mobileChoice2").addEventListener("click", () => chooseByKeyboard(2));
+  document.getElementById("mobileChoice3").addEventListener("click", () => chooseByKeyboard(3));
+  document.getElementById("mobileChoice4").addEventListener("click", () => chooseByKeyboard(4));
+  document.getElementById("mobileSheetOpen").addEventListener("click", openMobileSheet);
+  document.getElementById("mobileSheetClose").addEventListener("click", closeMobileSheet);
+  sheetOverlay.addEventListener("click", (e) => {
+    if (e.target === sheetOverlay) closeMobileSheet();
+  });
+
   // ====== 단축키 ======
   document.addEventListener("keydown", (e) => {
     const tag = (document.activeElement && document.activeElement.tagName || "").toLowerCase();
@@ -521,6 +856,7 @@
     if (k >= "1" && k <= "4") { chooseByKeyboard(Number(k)); e.preventDefault(); return; }
     if (k === "ArrowRight") { moveFocus(1); e.preventDefault(); return; }
     if (k === "ArrowLeft")  { moveFocus(-1); e.preventDefault(); return; }
+    if (k === "b" || k === "B") { toggleBookmark(state.focusQ); e.preventDefault(); return; }
     if (k === "g" || k === "G") { gradeAll(true); makeWrongNote(); e.preventDefault(); return; }
     if (k === "r" || k === "R") { resetAll(); e.preventDefault(); return; }
     if (k === "j" || k === "J") { jumpToFirst(); e.preventDefault(); return; }
@@ -535,6 +871,7 @@
   loadUi();
   buildGrid();
   loadSaved();
+  loadBookmarks();
   refreshAllCards();
   updateStats();
   applyFilter();
@@ -543,6 +880,7 @@
     setFilter("all");
   }
   focusCard(state.focusQ, false);
+  syncMobileSheet();
   initPdf();
 
   // ====== 저장/로드(UI) ======
@@ -553,6 +891,8 @@
         showCorrect: showCorrectEl.checked,
         filter: state.filter,
         theme: state.theme,
+        viewMode: state.viewMode,
+        pdfZoom: state.pdfZoom,
         pdfNav: state.pdfNav
       }));
     }catch(_){}
@@ -566,6 +906,10 @@
         if (typeof ui.showCorrect === "boolean") showCorrectEl.checked = ui.showCorrect;
         if (ui.filter === "all" || ui.filter === "wrong" || ui.filter === "blank") state.filter = ui.filter;
         if (ui.theme === "basic" || ui.theme === "dark") state.theme = ui.theme;
+        if (ui.viewMode === "all" || ui.viewMode === "single") state.viewMode = ui.viewMode;
+        if (Number.isFinite(Number(ui.pdfZoom))) {
+          state.pdfZoom = Math.max(0.7, Math.min(1.8, Number(ui.pdfZoom)));
+        }
         if (ui.pdfNav && typeof ui.pdfNav === "object") {
           const start = Number(ui.pdfNav.startPage);
           const qpp = Number(ui.pdfNav.questionsPerPage);
@@ -595,6 +939,8 @@
       fBlank.classList.toggle("active", state.filter==="blank");
     }catch(_){}
     applyTheme();
+    updateViewModeUi();
+    updateZoomButtons();
     updatePdfInfo();
   }
   function applyTheme(){
@@ -605,6 +951,40 @@
     state.theme = nextTheme;
     applyTheme();
     saveUi();
+  }
+
+  function updateZoomButtons(){
+    if (!btnFontUp || !btnFontDown) return;
+    btnFontUp.disabled = state.pdfZoom >= 1.8;
+    btnFontDown.disabled = state.pdfZoom <= 0.7;
+  }
+
+  function changePdfZoom(delta){
+    const next = Math.max(0.7, Math.min(1.8, Number((state.pdfZoom + delta).toFixed(2))));
+    if (next === state.pdfZoom) return;
+    state.pdfZoom = next;
+    state.allPagesRenderKey = null;
+    state.allPageCanvases = [];
+    updateZoomButtons();
+    saveUi();
+    navigatePdfToQuestion(state.focusQ || 1);
+  }
+
+  function updateViewModeUi(){
+    const btn = document.getElementById("btnViewMode");
+    const isSingle = state.viewMode === "single";
+    pdfViewer.classList.toggle("single", isSingle);
+    pdfViewer.classList.toggle("all", !isSingle);
+    btn.textContent = isSingle ? "↔" : "↕";
+    btn.title = isSingle ? "한 문제 보기" : "전체문제 보기";
+    btn.classList.toggle("active", isSingle);
+  }
+
+  function toggleViewMode(){
+    state.viewMode = state.viewMode === "single" ? "all" : "single";
+    updateViewModeUi();
+    saveUi();
+    navigatePdfToQuestion(state.focusQ || 1);
   }
 
   function updatePdfInfo(){
@@ -623,6 +1003,34 @@
 
   function getCurrentPdfSourceKey(){
     return getQuestionPdfBaseUrl();
+  }
+
+  function normalizeExamKey(v){
+    return String(v || "")
+      .normalize("NFC")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function getSingleCropOverrideForExam(examName){
+    const exact = SINGLE_CROP_OVERRIDES[examName];
+    if (exact) return exact;
+
+    const normalizedExam = normalizeExamKey(examName);
+    for (const key of Object.keys(SINGLE_CROP_OVERRIDES)){
+      if (normalizeExamKey(key) === normalizedExam) return SINGLE_CROP_OVERRIDES[key];
+    }
+    return null;
+  }
+
+  function getSingleCropOverrideByPdfUrl(){
+    const raw = String(QUESTION_PDF_URL || "");
+    const normalized = raw.normalize("NFC");
+    for (const item of SINGLE_CROP_OVERRIDES_BY_PDF){
+      if (!item || !item.match || !item.ranges) continue;
+      if (item.match.test(raw) || item.match.test(normalized)) return item.ranges;
+    }
+    return null;
   }
 
   async function resolveExistingPdfUrl(pathValue){
@@ -650,8 +1058,16 @@
 
   async function initPdf(){
     pdfStatus.textContent = "PDF 경로 확인 중...";
+    setPdfLoading(true, "PDF 경로 확인 중...");
     state.questionPdfBaseUrl = await resolveExistingPdfUrl(QUESTION_PDF_URL);
     state.answerPdfBaseUrl = await resolveExistingPdfUrl(ANSWER_PDF_URL);
+    state.allPagesRenderKey = null;
+    state.allPageCanvases = [];
+    state.pageQuestionRatioCache = {};
+    state.pageQuestionDirectRatioCache = {};
+    state.pageQuestionRowStartCache = {};
+    state.questionChoiceAnchorCache = {};
+    state.pageOcrQuestionStartCache = {};
     navigatePdfToQuestion(state.focusQ || 1);
     ensureAutoPdfMap();
   }
@@ -742,8 +1158,304 @@
     }
   }
 
-  async function renderPdfPage(page){
+  async function getQuestionRatiosForPage(pageNo){
+    const key = String(pageNo);
+    if (state.pageQuestionRatioCache[key]) return state.pageQuestionRatioCache[key];
+    const pdf = await ensurePdfDocument();
+    const page = await pdf.getPage(pageNo);
+    const textContent = await page.getTextContent();
+    const detected = extractQuestionStartsFromItems(textContent.items || []);
+    const merged = new Map(detected.ratioByQuestion || []);
+    const direct = await getDirectQuestionRatiosForPage(pageNo);
+    for (const [q, ratio] of direct.entries()){
+      if (!merged.has(q)) {
+        merged.set(q, ratio);
+      } else {
+        merged.set(q, Math.min(merged.get(q), ratio));
+      }
+    }
+    state.pageQuestionRatioCache[key] = merged;
+    return state.pageQuestionRatioCache[key];
+  }
+
+  async function locateQuestionInPdf(q){
+    const pdf = await ensurePdfDocument();
+    const total = pdf.numPages || 1;
+    const predicted = Math.max(1, Math.min(total, getPdfPageByQuestion(q)));
+    const order = [];
+    const seen = new Set();
+    const push = (p) => {
+      if (p < 1 || p > total) return;
+      if (seen.has(p)) return;
+      seen.add(p);
+      order.push(p);
+    };
+    push(predicted);
+    for (let d = 1; d <= 4; d++){
+      push(predicted - d);
+      push(predicted + d);
+    }
+    for (let p = 1; p <= total; p++) push(p);
+
+    for (const p of order){
+      const ratios = await getQuestionRatiosForPage(p);
+      if (ratios && Number.isFinite(ratios.get(q))) {
+        return { page: p, ratio: Math.max(0, Math.min(1, ratios.get(q))), exact: true };
+      }
+    }
+
+    const pageMap = state.pdfNav.questionPageMap;
+    const ratioMap = state.pdfNav.questionTopRatioMap;
+    if (Array.isArray(pageMap) && Array.isArray(ratioMap) && Number.isFinite(pageMap[q])) {
+      const p = Math.max(1, Math.min(total, Math.floor(pageMap[q])));
+      const r = Number.isFinite(ratioMap[q]) ? Math.max(0, Math.min(1, ratioMap[q])) : 0.12;
+      return { page: p, ratio: r, exact: false };
+    }
+    return { page: predicted, ratio: 0.12, exact: false };
+  }
+
+  async function getDirectQuestionRatiosForPage(pageNo){
+    const key = String(pageNo);
+    if (state.pageQuestionDirectRatioCache[key]) return state.pageQuestionDirectRatioCache[key];
+    const pdf = await ensurePdfDocument();
+    const page = await pdf.getPage(pageNo);
+    const viewport = page.getViewport({ scale: 1 });
+    const pageW = Math.max(1, viewport.width);
+    const pageH = Math.max(1, viewport.height);
+    const textContent = await page.getTextContent();
+    const map = new Map();
+
+    for (const item of (textContent.items || [])){
+      const s = String(item.str || "").trim();
+      if (!s) continue;
+      const m = s.match(/^\(?\s*(\d{1,3})\s*(?:[.)]|번)(?:\s|$)/);
+      if (!m) continue;
+      const q = Number(m[1]);
+      if (!Number.isFinite(q) || q < 1 || q > 100) continue;
+
+      const x = Number(item.transform && item.transform[4]);
+      const y = Number(item.transform && item.transform[5]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      const xRatio = x / pageW;
+      if (xRatio > 0.35) continue;
+
+      const ih = Math.max(8, Math.abs(Number(item.height) || 0));
+      const top = Math.max(0, Math.min(pageH - ih, pageH - y - ih));
+      const ratio = Math.max(0, Math.min(1, top / pageH));
+      if (!map.has(q) || ratio < map.get(q)) map.set(q, ratio);
+    }
+
+    state.pageQuestionDirectRatioCache[key] = map;
+    return map;
+  }
+
+  async function getRowQuestionStartRatiosForPage(pageNo){
+    const key = String(pageNo);
+    if (state.pageQuestionRowStartCache[key]) return state.pageQuestionRowStartCache[key];
+
+    const pdf = await ensurePdfDocument();
+    const page = await pdf.getPage(pageNo);
+    const viewport = page.getViewport({ scale: 1 });
+    const pageW = Math.max(1, viewport.width);
+    const pageH = Math.max(1, viewport.height);
+    const textContent = await page.getTextContent();
+
+    const rows = [];
+    for (const it of (textContent.items || [])){
+      const s = String(it.str || "").trim();
+      if (!s) continue;
+      const x = Number(it.transform && it.transform[4]);
+      const y = Number(it.transform && it.transform[5]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      let row = null;
+      for (const r of rows){
+        if (Math.abs(r.y - y) <= 2.2) { row = r; break; }
+      }
+      if (!row){
+        row = { y, parts: [] };
+        rows.push(row);
+      }
+      row.parts.push({ x, s });
+    }
+
+    const byQ = new Map();
+    for (const row of rows){
+      row.parts.sort((a, b) => a.x - b.x);
+      if (!row.parts.length) continue;
+      const rowStartX = row.parts[0].x;
+      if ((rowStartX / pageW) > 0.38) continue;
+      const lineText = row.parts.map(p => p.s).join(" ").replace(/\s+/g, " ").trim();
+      const q = parseQuestionNumberFromLineStart(lineText);
+      if (!q) continue;
+      const ih = 12;
+      const top = Math.max(0, Math.min(pageH - ih, pageH - row.y - ih));
+      const ratio = Math.max(0, Math.min(1, top / pageH));
+      if (!byQ.has(q) || ratio < byQ.get(q)) byQ.set(q, ratio);
+    }
+
+    state.pageQuestionRowStartCache[key] = byQ;
+    return byQ;
+  }
+
+  async function getQuestionCropRange(q, page){
+    const pageMap = state.pdfNav.questionPageMap;
+    const ratioMap = state.pdfNav.questionTopRatioMap;
+    if (!Array.isArray(pageMap) || !Array.isArray(ratioMap)) return { start: 0, end: 1, focusStart: 0, focusEnd: 1, lowConfidence: true };
+    if (pageMap[q] !== page || !Number.isFinite(ratioMap[q])) return { start: 0, end: 1, focusStart: 0, focusEnd: 1, lowConfidence: true };
+
+    const pageRatios = await getQuestionRatiosForPage(page);
+    const rowStarts = await getRowQuestionStartRatiosForPage(page);
+    const directStarts = await getDirectQuestionRatiosForPage(page);
+    let ocrStarts = null;
+    const pickStart = (qq) => {
+      const candidates = [];
+      if (rowStarts && Number.isFinite(rowStarts.get(qq))) candidates.push(rowStarts.get(qq));
+      if (directStarts && Number.isFinite(directStarts.get(qq))) candidates.push(directStarts.get(qq));
+      if (pageRatios && Number.isFinite(pageRatios.get(qq))) candidates.push(pageRatios.get(qq));
+      if (ocrStarts && Number.isFinite(ocrStarts.get(qq))) candidates.push(ocrStarts.get(qq));
+      if (Array.isArray(pageMap) && pageMap[qq] === page && Number.isFinite(ratioMap[qq])) candidates.push(ratioMap[qq]);
+      if (candidates.length === 0) return null;
+      candidates.sort((a, b) => a - b);
+      return candidates[Math.floor(candidates.length / 2)];
+    };
+
+    const startCandidate = pickStart(q);
+    const startRaw = Math.max(0, Math.min(1, Number.isFinite(startCandidate) ? startCandidate : ratioMap[q]));
+
+    const choiceAnchors = await getChoiceAnchorsForQuestion(page, q);
+    let maxChoiceBottom = null;
+    let choice4Bottom = null;
+    const choiceCount = Array.isArray(choiceAnchors) ? choiceAnchors.length : 0;
+    const choiceConfidenceLow = choiceCount < 3;
+    if (choiceAnchors && choiceAnchors.length){
+      maxChoiceBottom = Math.max(...choiceAnchors.map(a => a.yRatio + a.hRatio));
+      if (!Number.isFinite(maxChoiceBottom)) maxChoiceBottom = null;
+      const c4 = choiceAnchors.find((a) => a.choice === 4);
+      if (c4) {
+        const b4 = c4.yRatio + c4.hRatio;
+        if (Number.isFinite(b4)) choice4Bottom = b4;
+      }
+    }
+
+    let nextStartRaw = null;
+    const isValidNextStart = (cand) => {
+      if (!Number.isFinite(cand)) return false;
+      // 현재 문항 본문/선지 내부 오검출을 막기 위해 최소 간격을 크게 둔다.
+      if (cand <= startRaw + 0.12) return false;
+      // 선택지 영역 위에서 잡힌 후보는 오검출(예: ② 라인) 가능성이 높아 배제
+      if (Number.isFinite(maxChoiceBottom) && cand <= maxChoiceBottom + 0.03) return false;
+      return true;
+    };
+    // 1순위: q+1 시작점
+    const directNext = pickStart(q + 1);
+    if (isValidNextStart(directNext)) {
+      nextStartRaw = directNext;
+    } else {
+      // 2순위: 이후 인접 문항 중 가장 가까운 시작점
+      for (let k = q + 1; k <= Math.min(100, q + 8); k++){
+        const cand = pickStart(k);
+        if (isValidNextStart(cand)) {
+          nextStartRaw = cand;
+          break;
+        }
+      }
+    }
+    // q+1 직접값이 있고 유효하면 항상 우선 적용(공통 일관성)
+    if (isValidNextStart(directNext)) {
+      nextStartRaw = directNext;
+    }
+
+    // 텍스트 레이어 검출이 실패한 페이지는 OCR로 q+1 시작점을 보강
+    if (!Number.isFinite(nextStartRaw)) {
+      ocrStarts = await getOcrQuestionStartRatiosForPage(page);
+      const ocrNext = pickStart(q + 1);
+      if (isValidNextStart(ocrNext)) {
+        nextStartRaw = ocrNext;
+      } else {
+        for (let k = q + 1; k <= Math.min(100, q + 8); k++){
+          const cand = pickStart(k);
+          if (isValidNextStart(cand)) {
+            nextStartRaw = cand;
+            break;
+          }
+        }
+      }
+    }
+
+    // 선택지 검출 신뢰도가 낮고 nextStart가 너무 이르면 오검출로 보고 무시
+    if (choiceConfidenceLow && Number.isFinite(nextStartRaw) && nextStartRaw < (startRaw + 0.45)) {
+      nextStartRaw = null;
+    }
+
+    let focusStart = Math.max(0, startRaw - 0.018);
+    let focusEnd = null;
+    // 한문제 보기 핵심: 선택지 하단을 우선으로 현재 문제만 포함
+    if (Number.isFinite(maxChoiceBottom)) {
+      // 선택지 하단 기준 여유는 작게 유지해야 다음 문제가 섞이지 않는다.
+      const byChoices = Math.min(0.995, maxChoiceBottom + 0.035);
+      if (Number.isFinite(nextStartRaw)) {
+        // 다음 문제 시작이 있으면 그 직전까지로 제한
+        focusEnd = Math.min(byChoices, Math.max(focusStart + 0.14, nextStartRaw - 0.02));
+      } else {
+        focusEnd = Math.max(focusStart + 0.14, byChoices);
+      }
+    } else if (Number.isFinite(nextStartRaw)) {
+      focusEnd = Math.max(focusStart + 0.14, Math.min(1, nextStartRaw - 0.02));
+    } else {
+      // 선택지/다음 시작 모두 미검출 시에만 페이지 하단 fallback
+      focusEnd = 0.995;
+    }
+
+    // 너무 짧게 잘리면 최소 높이 보장
+    if (focusEnd - focusStart < 0.2) {
+      focusEnd = Math.min(0.995, focusStart + 0.2);
+    }
+
+    // ④가 검출되면, 컷 끝이 ④ 하단보다 위로 가지 않도록 강제
+    if (Number.isFinite(choice4Bottom)) {
+      focusEnd = Math.max(focusEnd, Math.min(0.995, choice4Bottom + 0.05));
+    }
+
+    // 선택지 검출이 약하면 보수적으로 더 길게 보여서 오절단을 방지
+    if (choiceConfidenceLow && focusEnd - focusStart < 0.5) {
+      focusEnd = Math.min(0.995, focusStart + 0.5);
+    }
+
+    if (focusEnd - focusStart < 0.14) focusEnd = Math.min(1, focusStart + 0.14);
+
+    // 저신뢰 PDF는 "정확 컷"보다 "근접 위치 표시"가 더 안정적이다.
+    const lowConfidence = choiceConfidenceLow && !Number.isFinite(nextStartRaw);
+    if (lowConfidence) {
+      const nearStart = Math.max(0, startRaw - 0.03);
+      const nearEnd = Math.min(1, nearStart + 0.34);
+      return { start: nearStart, end: nearEnd, focusStart: startRaw, focusEnd: Math.min(1, nearStart + 0.3), lowConfidence: true };
+    }
+
+    // 고정 컷맵 우선 적용(회차명 불일치 방지를 위해 PDF 파일명 기반 지원)
+    const examOverride = getSingleCropOverrideForExam(EXAM_NAME);
+    const pdfOverride = getSingleCropOverrideByPdfUrl();
+    const qOverride = (pdfOverride && pdfOverride[q]) || (examOverride && examOverride[q]);
+    if (qOverride) {
+      if (Number.isFinite(qOverride.start)) {
+        focusStart = Math.max(0, Math.min(1, qOverride.start));
+      }
+      if (Number.isFinite(qOverride.end)) {
+        focusEnd = Math.max(focusStart + 0.1, Math.min(1, qOverride.end));
+      }
+    }
+
+    // 단일 모드에서는 start/end를 focus와 동일하게 맞춰 해당 문제만 표시
+    const start = focusStart;
+    const end = focusEnd;
+    return { start, end, focusStart, focusEnd, lowConfidence: false };
+  }
+
+  async function renderPdfPage(page, q){
+    if (state.viewMode !== "single") {
+      return renderAllPdfPages(q);
+    }
     pdfStatus.textContent = "PDF 로딩 중...";
+    setPdfLoading(true, "PDF 로딩 중...");
     const pdf = await ensurePdfDocument();
     const safePage = Math.min(Math.max(1, Math.floor(page)), pdf.numPages);
     state.currentPdfPage = safePage;
@@ -751,25 +1463,151 @@
     const pageObj = await pdf.getPage(safePage);
     const baseViewport = pageObj.getViewport({ scale: 1 });
     const viewWidth = Math.max(320, (pdfCanvas.parentElement?.clientWidth || 900) - 20);
-    const cssScale = Math.max(0.5, viewWidth / baseViewport.width);
+    const cssScale = Math.max(0.5, (viewWidth / baseViewport.width) * state.pdfZoom);
     const cssViewport = pageObj.getViewport({ scale: cssScale });
     const dpr = Math.max(1, Number(window.devicePixelRatio) || 1);
     const outputScale = Math.min(2.5, dpr * 1.25);
 
-    const token = ++state.renderToken;
-    pdfCanvas.width = Math.ceil(cssViewport.width * outputScale);
-    pdfCanvas.height = Math.ceil(cssViewport.height * outputScale);
-    pdfCanvas.style.width = `${Math.ceil(cssViewport.width)}px`;
-    pdfCanvas.style.height = `${Math.ceil(cssViewport.height)}px`;
+    const fullCanvas = document.createElement("canvas");
+    fullCanvas.width = Math.ceil(cssViewport.width * outputScale);
+    fullCanvas.height = Math.ceil(cssViewport.height * outputScale);
+    const fullCtx = fullCanvas.getContext("2d");
 
+    const token = ++state.renderToken;
     const renderTask = pageObj.render({
-      canvasContext: pdfCtx,
+      canvasContext: fullCtx,
       viewport: cssViewport,
       transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null
     });
     await renderTask.promise;
     if (token !== state.renderToken) return;
-    pdfStatus.textContent = `페이지 ${safePage} 표시 중`;
+
+    let srcTop = 0;
+    let srcHeight = fullCanvas.height;
+    let srcLeft = 0;
+    let srcWidth = fullCanvas.width;
+    let activeRange = { start: 0, end: 1, focusStart: 0, focusEnd: 1 };
+    if (state.viewMode === "single" && Number.isFinite(q)) {
+      const range = await getQuestionCropRange(q, safePage);
+      activeRange = range;
+      srcTop = Math.max(0, Math.floor(fullCanvas.height * range.start));
+      const srcBottom = Math.max(srcTop + 1, Math.ceil(fullCanvas.height * range.end));
+      srcHeight = Math.max(1, srcBottom - srcTop);
+      // 가로 텍스트 잘림 방지를 위해 좌우는 자르지 않는다.
+      srcLeft = 0;
+      srcWidth = fullCanvas.width;
+    }
+
+    const destWidth = fullCanvas.width;
+    const destHeight = state.viewMode === "single"
+      ? Math.max(1, Math.round(srcHeight * (destWidth / srcWidth)))
+      : srcHeight;
+    pdfCanvas.width = destWidth;
+    pdfCanvas.height = destHeight;
+    pdfCanvas.style.width = `${Math.ceil(cssViewport.width)}px`;
+    const canvasCssHeight = Math.ceil(destHeight / outputScale);
+    pdfCanvas.style.height = `${canvasCssHeight}px`;
+    pdfCtx.clearRect(0, 0, pdfCanvas.width, pdfCanvas.height);
+    pdfCtx.drawImage(
+      fullCanvas,
+      srcLeft, srcTop, srcWidth, srcHeight,
+      0, 0, pdfCanvas.width, pdfCanvas.height
+    );
+    if (state.viewMode === "single" && Number.isFinite(q) && Number.isFinite(state.answers[q])) {
+      const anchors = await getChoiceAnchorsForQuestion(safePage, q);
+      const sel = anchors.find(a => a.choice === state.answers[q]);
+      if (sel) {
+        const sx = srcWidth / pdfCanvas.width;
+        const sy = srcHeight / pdfCanvas.height;
+        const ax = sel.xRatio * fullCanvas.width;
+        const ay = sel.yRatio * fullCanvas.height;
+        const aw = sel.wRatio * fullCanvas.width;
+        const ah = sel.hRatio * fullCanvas.height;
+        const dx = (ax - srcLeft) / sx;
+        const dy = (ay - srcTop) / sy;
+        const dw = Math.max(16, aw / sx);
+        const dh = Math.max(18, ah / sy);
+        const cx = dx + (dw * 0.5);
+        const cy = dy + (dh * 0.5);
+        const r = Math.max(13, Math.min(24, Math.max(dw, dh) * 0.65));
+        pdfCtx.save();
+        pdfCtx.lineWidth = 3;
+        pdfCtx.strokeStyle = "#0a66d6";
+        pdfCtx.fillStyle = "rgba(10,102,214,0.22)";
+        pdfCtx.beginPath();
+        pdfCtx.arc(cx, cy, r, 0, Math.PI * 2);
+        pdfCtx.fill();
+        pdfCtx.stroke();
+        pdfCtx.restore();
+      }
+    }
+    state.lastRenderMeta = {
+      page: safePage,
+      q: Number.isFinite(q) ? q : null,
+      viewMode: state.viewMode,
+      cropLeftPx: srcLeft,
+      cropStartPx: srcTop,
+      cropWidthPx: srcWidth,
+      cropHeightPx: srcHeight,
+      fullWidthPx: fullCanvas.width,
+      fullHeightPx: fullCanvas.height
+    };
+    const nearTag = activeRange && activeRange.lowConfidence ? " · 근접모드" : "";
+    pdfStatus.textContent = `페이지 ${safePage}${Number.isFinite(q) ? ` · ${q}번` : ""} 표시 중${nearTag}`;
+    setPdfLoading(false);
+  }
+
+  async function renderAllPdfPages(q){
+    pdfStatus.textContent = "전체 PDF 로딩 중...";
+    setPdfLoading(true, "전체 PDF 로딩 중...");
+    const pdf = await ensurePdfDocument();
+    const viewWidth = Math.max(320, (pdfViewer.clientWidth || 900) - 20);
+    const key = `${getQuestionPdfBaseUrl()}|${state.pdfZoom}|${Math.round(viewWidth)}`;
+    const dpr = Math.max(1, Number(window.devicePixelRatio) || 1);
+    const outputScale = Math.min(2.5, dpr * 1.25);
+
+    if (state.allPagesRenderKey !== key) {
+      pdfAllPages.innerHTML = "";
+      state.allPageCanvases = [];
+      for (let p = 1; p <= pdf.numPages; p++){
+        const pageObj = await pdf.getPage(p);
+        const baseViewport = pageObj.getViewport({ scale: 1 });
+        const cssScale = Math.max(0.5, (viewWidth / baseViewport.width) * state.pdfZoom);
+        const cssViewport = pageObj.getViewport({ scale: cssScale });
+
+        const canvas = document.createElement("canvas");
+        canvas.className = "pdfPageCanvas";
+        canvas.dataset.page = String(p);
+        canvas.width = Math.ceil(cssViewport.width * outputScale);
+        canvas.height = Math.ceil(cssViewport.height * outputScale);
+        canvas.style.width = `${Math.ceil(cssViewport.width)}px`;
+        canvas.style.height = `${Math.ceil(cssViewport.height)}px`;
+        const ctx = canvas.getContext("2d");
+        await pageObj.render({
+          canvasContext: ctx,
+          viewport: cssViewport,
+          transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null
+        }).promise;
+
+        pdfAllPages.appendChild(canvas);
+        state.allPageCanvases[p] = canvas;
+      }
+      state.allPagesRenderKey = key;
+    }
+
+    const targetQ = Number.isFinite(q) ? q : (state.focusQ || 1);
+    const located = await locateQuestionInPdf(targetQ);
+    const targetPage = located.page;
+    const targetCanvas = state.allPageCanvases[targetPage];
+    const ratio = Number.isFinite(located.ratio) ? located.ratio : 0.12;
+    if (targetCanvas) {
+      const top = targetCanvas.offsetTop + (targetCanvas.clientHeight * ratio) - 20;
+      pdfViewer.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+    }
+    state.currentPdfPage = targetPage;
+    const precision = located.exact ? "정확" : "근사";
+    pdfStatus.textContent = `전체 페이지 표시 중 · ${targetPage}페이지${Number.isFinite(targetQ) ? ` · ${targetQ}번` : ""} (${precision})`;
+    setPdfLoading(false);
   }
 
   function scrollToQuestionAnchor(q, page){
@@ -790,12 +1628,14 @@
   function setPdfFramePage(page, q){
     state.currentPdfPage = Math.max(1, Math.floor(page));
     state.pdfNavNonce += 1;
-    renderPdfPage(state.currentPdfPage).then(() => {
+    renderPdfPage(state.currentPdfPage, q).then(() => {
+      if (state.viewMode === "single") return;
       // 렌더 직후 레이아웃 반영 타이밍을 한 프레임 보장한 뒤 스크롤
       requestAnimationFrame(() => {
         scrollToQuestionAnchor(q, state.currentPdfPage);
       });
     }).catch((err) => {
+      setPdfLoading(false);
       const msg = (err && err.message) ? err.message : "알 수 없는 오류";
       pdfStatus.innerHTML = `PDF 표시 실패: ${msg} <button id="btnPdfRetry" type="button">재시도</button>`;
     });
@@ -820,6 +1660,95 @@
       document.head.appendChild(script);
     });
     return pdfJsLoaderPromise;
+  }
+
+  function loadTesseractLib(){
+    if (window.Tesseract) return Promise.resolve(window.Tesseract);
+    if (tesseractLoaderPromise) return tesseractLoaderPromise;
+    tesseractLoaderPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+      script.onload = () => {
+        if (window.Tesseract) resolve(window.Tesseract);
+        else reject(new Error("tesseract load failed"));
+      };
+      script.onerror = () => reject(new Error("tesseract script error"));
+      document.head.appendChild(script);
+    });
+    return tesseractLoaderPromise;
+  }
+
+  function normalizeOcrToken(s){
+    return String(s || "")
+      .replace(/[Il|]/g, "1")
+      .replace(/[Oo]/g, "0")
+      .replace(/\s+/g, "")
+      .trim();
+  }
+
+  function parseQuestionNumberFromOcrLine(text){
+    const t = normalizeOcrToken(text);
+    if (!t) return null;
+    let m = t.match(/^(\d{1,3})(?:[.)]|번)/);
+    if (m) return Number(m[1]);
+    m = t.match(/^제(\d{1,3})문/);
+    if (m) return Number(m[1]);
+    return null;
+  }
+
+  async function getOcrQuestionStartRatiosForPage(pageNo){
+    const key = String(pageNo);
+    if (state.pageOcrQuestionStartCache[key]) return state.pageOcrQuestionStartCache[key];
+
+    const resultMap = new Map();
+    try{
+      const Tesseract = await loadTesseractLib();
+      const pdf = await ensurePdfDocument();
+      const page = await pdf.getPage(pageNo);
+      const viewport = page.getViewport({ scale: 1.35 });
+      const ocrCanvas = document.createElement("canvas");
+      ocrCanvas.width = Math.max(1, Math.floor(viewport.width));
+      ocrCanvas.height = Math.max(1, Math.floor(viewport.height));
+      const ocrCtx = ocrCanvas.getContext("2d");
+      await page.render({ canvasContext: ocrCtx, viewport }).promise;
+
+      const recognized = await Tesseract.recognize(ocrCanvas, "kor+eng", { logger: () => {} });
+      const words = (((recognized || {}).data || {}).words) || [];
+      const rows = [];
+      for (const w of words){
+        const text = String(w.text || "").trim();
+        if (!text) continue;
+        const bbox = w.bbox || {};
+        const x0 = Number(bbox.x0), x1 = Number(bbox.x1), y0 = Number(bbox.y0), y1 = Number(bbox.y1);
+        if (![x0, x1, y0, y1].every(Number.isFinite)) continue;
+        const yMid = (y0 + y1) / 2;
+        let row = null;
+        for (const r of rows){
+          if (Math.abs(r.y - yMid) <= 8) { row = r; break; }
+        }
+        if (!row){
+          row = { y: yMid, parts: [] };
+          rows.push(row);
+        }
+        row.parts.push({ x: x0, t: text, top: y0 });
+      }
+      for (const row of rows){
+        row.parts.sort((a, b) => a.x - b.x);
+        if (!row.parts.length) continue;
+        const xRatio = row.parts[0].x / ocrCanvas.width;
+        if (xRatio > 0.45) continue;
+        const lineText = row.parts.map(p => p.t).join(" ");
+        const qn = parseQuestionNumberFromOcrLine(lineText);
+        if (!Number.isFinite(qn) || qn < 1 || qn > 100) continue;
+        const top = Math.max(0, Math.min(ocrCanvas.height - 1, row.parts[0].top));
+        const ratio = top / ocrCanvas.height;
+        if (!resultMap.has(qn) || ratio < resultMap.get(qn)) resultMap.set(qn, ratio);
+      }
+    }catch(_){
+      // OCR 실패 시 빈 맵 유지
+    }
+    state.pageOcrQuestionStartCache[key] = resultMap;
+    return resultMap;
   }
 
   function buildLineText(items){
@@ -867,6 +1796,102 @@
     return null;
   }
 
+  function parseChoiceNumberToken(token){
+    const t = String(token || "").trim();
+    if (!t) return null;
+    const circled = { "①": 1, "②": 2, "③": 3, "④": 4 };
+    if (circled[t]) return circled[t];
+    let m = t.match(/^([①②③④])/);
+    if (m && circled[m[1]]) return circled[m[1]];
+    m = t.match(/^([1-4])\s*[.)]/);
+    if (m) return Number(m[1]);
+    return null;
+  }
+
+  function pathRoundedRect(ctx, x, y, w, h, r){
+    const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+    if (typeof ctx.roundRect === "function") {
+      ctx.roundRect(x, y, w, h, rr);
+      return;
+    }
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+  }
+
+  async function getChoiceAnchorsForQuestion(pageNo, q){
+    const cacheKey = `${pageNo}:${q}`;
+    if (state.questionChoiceAnchorCache[cacheKey]) return state.questionChoiceAnchorCache[cacheKey];
+
+    const pageRatios = await getQuestionRatiosForPage(pageNo);
+    if (!pageRatios || !pageRatios.has(q)) {
+      state.questionChoiceAnchorCache[cacheKey] = [];
+      return [];
+    }
+    const startRatio = pageRatios.get(q);
+    let endRatio = 1;
+    if (pageRatios.size > 0){
+      const sorted = Array.from(pageRatios.entries()).sort((a, b) => a[0] - b[0]);
+      for (const [k, v] of sorted){
+        if (k > q && Number.isFinite(v) && v > startRatio + 0.01) {
+          endRatio = Math.max(startRatio + 0.02, v - 0.005);
+          break;
+        }
+      }
+    }
+
+    const pdf = await ensurePdfDocument();
+    const page = await pdf.getPage(pageNo);
+    const viewport = page.getViewport({ scale: 1 });
+    const pageW = Math.max(1, viewport.width);
+    const pageH = Math.max(1, viewport.height);
+    const textContent = await page.getTextContent();
+    const anchors = [];
+
+    for (const item of (textContent.items || [])){
+      const choice = parseChoiceNumberToken(item.str);
+      if (!choice) continue;
+      const tx = (window.pdfjsLib && window.pdfjsLib.Util && item.transform)
+        ? window.pdfjsLib.Util.transform(viewport.transform, item.transform)
+        : null;
+      const x = Number(tx ? tx[4] : (item.transform && item.transform[4]));
+      const y = Number(tx ? tx[5] : (item.transform && item.transform[5]));
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      const iw = Math.max(8, Math.abs(Number(item.width) || 0));
+      const ih = Math.max(8, Math.abs(Number(item.height) || 0));
+      const top = Math.max(0, Math.min(pageH - ih, y - ih));
+      const topRatio = top / pageH;
+      if (topRatio < startRatio - 0.01 || topRatio > endRatio + 0.01) continue;
+
+      anchors.push({
+        choice,
+        xRatio: Math.max(0, Math.min(1, x / pageW)),
+        yRatio: Math.max(0, Math.min(1, top / pageH)),
+        wRatio: Math.max(0.004, Math.min(0.2, iw / pageW)),
+        hRatio: Math.max(0.006, Math.min(0.15, ih / pageH))
+      });
+    }
+
+    // 보기는 대체로 좌측 세로 라인에 있으므로, 가장 좌측 그룹 중심으로 정제한다.
+    let refined = anchors;
+    if (anchors.length){
+      const minX = Math.min(...anchors.map(a => a.xRatio));
+      const xCut = Math.min(0.38, minX + 0.22);
+      refined = anchors.filter(a => a.xRatio <= xCut);
+    }
+
+    const result = [];
+    for (let c = 1; c <= 4; c++){
+      const rows = refined.filter(a => a.choice === c).sort((a, b) => a.yRatio - b.yRatio || a.xRatio - b.xRatio);
+      if (rows.length) result.push(rows[0]);
+    }
+    state.questionChoiceAnchorCache[cacheKey] = result;
+    return result;
+  }
+
   function extractQuestionStartsFromItems(items){
     // PDF 텍스트 아이템을 y축 기준으로 라인화한 뒤, 라인 시작 토큰에서 문항 번호를 잡는다.
     const rows = [];
@@ -896,7 +1921,7 @@
       if (row.parts.length) startXs.push(row.parts[0].x);
     }
     const minStartX = startXs.length ? Math.min(...startXs) : 0;
-    const leftThreshold = minStartX + 90;
+    const leftThreshold = minStartX + 240;
     let minY = Infinity;
     let maxY = -Infinity;
     for (const row of rows){
@@ -1074,6 +2099,53 @@
       saveHint.textContent = "저장 상태: 불러오기 실패";
     }
   }
+  function getBookmarkScopeId(){
+    return `${CATEGORY_NAME}::${EXAM_NAME}::${QUESTION_PDF_URL}`;
+  }
+  function saveBookmarks(){
+    try{
+      const raw = localStorage.getItem(STORAGE_BOOKMARK_KEY);
+      const bag = raw ? JSON.parse(raw) : {};
+      const list = [];
+      for (let q = 1; q <= 100; q++){
+        if (state.bookmarks[q]) list.push(q);
+      }
+      bag[getBookmarkScopeId()] = list;
+      localStorage.setItem(STORAGE_BOOKMARK_KEY, JSON.stringify(bag));
+    }catch(_){}
+  }
+  function loadBookmarks(){
+    try{
+      state.bookmarks = Array(101).fill(false);
+      const raw = localStorage.getItem(STORAGE_BOOKMARK_KEY);
+      if (!raw) return;
+      const bag = JSON.parse(raw);
+      const list = bag && bag[getBookmarkScopeId()];
+      if (!Array.isArray(list)) return;
+      for (const q of list){
+        const n = Number(q);
+        if (Number.isFinite(n) && n >= 1 && n <= 100) state.bookmarks[n] = true;
+      }
+    }catch(_){
+      state.bookmarks = Array(101).fill(false);
+    }
+  }
+  function updateBookmarkUi(q){
+    const target = Number.isFinite(q) ? q : state.focusQ;
+    const on = !!state.bookmarks[target];
+    btnBookmark.classList.toggle("active", on);
+    btnBookmark.setAttribute("aria-pressed", on ? "true" : "false");
+    btnBookmark.title = on ? `${target}번 북마크 해제` : `${target}번 북마크`;
+  }
+  function toggleBookmark(q){
+    const target = Number(q);
+    if (!Number.isFinite(target) || target < 1 || target > 100) return;
+    state.bookmarks[target] = !state.bookmarks[target];
+    const card = getCard(target);
+    if (card) card.classList.toggle("bookmarked", !!state.bookmarks[target]);
+    saveBookmarks();
+    updateBookmarkUi(target);
+  }
   function pad2(n){ return String(n).padStart(2,'0'); }
 
   // ====== 필터 ======
@@ -1132,16 +2204,25 @@
       const head = document.createElement("div");
       head.className = "qhead";
 
+      const qmeta = document.createElement("div");
+      qmeta.className = "qmeta";
+
       const qnum = document.createElement("div");
       qnum.className = "qnum";
       qnum.textContent = `${q}번`;
+
+      const qbm = document.createElement("div");
+      qbm.className = "qbm";
+      qbm.textContent = "🔖";
 
       const mark = document.createElement("div");
       mark.className = "mark";
       mark.textContent = "미채점";
       mark.dataset.role = "mark";
 
-      head.appendChild(qnum);
+      qmeta.appendChild(qnum);
+      qmeta.appendChild(qbm);
+      head.appendChild(qmeta);
       head.appendChild(mark);
 
       const choices = document.createElement("div");
@@ -1194,6 +2275,8 @@
   function focusCard(q, scroll){
     state.focusQ = q;
     navigatePdfToQuestion(q);
+    mobileQNow.textContent = `${q}번`;
+    updateBookmarkUi(q);
     for(let i=1;i<=100;i++){
       getCard(i).classList.toggle("focus", i===q);
     }
@@ -1201,6 +2284,37 @@
       getCard(q).scrollIntoView({behavior:"smooth", block:"center"});
     }
   }
+
+  function openMobileSheet(){
+    syncMobileSheet();
+    sheetOverlay.classList.add("open");
+  }
+  function closeMobileSheet(){
+    sheetOverlay.classList.remove("open");
+  }
+  function syncMobileSheet(){
+    if (!mobileSheetMount) return;
+    const desktopAside = document.querySelector(".wrap > aside.panel");
+    const mobile = window.matchMedia("(max-width: 768px)").matches;
+    if (mobile){
+      if (mobileSheetMount.firstElementChild !== sheet){
+        mobileSheetMount.appendChild(sheet);
+      }
+    } else if (desktopAside && desktopAside.contains(sheet) === false){
+      desktopAside.appendChild(sheet);
+    }
+  }
+
+  window.addEventListener("resize", () => {
+    syncMobileSheet();
+    if (!window.matchMedia("(max-width: 768px)").matches) {
+      closeMobileSheet();
+    }
+    if (state.viewMode !== "single") {
+      state.allPagesRenderKey = null;
+      navigatePdfToQuestion(state.focusQ || 1);
+    }
+  });
 
   function visibleQuestions(){
     const arr = [];
@@ -1241,6 +2355,64 @@
       if (autoGradeEl.checked) gradeQuestion(q);
       updateStats();
       applyFilter();
+      if (state.viewMode === "single") navigatePdfToQuestion(q);
+    }
+  }
+
+  async function onPdfCanvasClick(e){
+    if (state.viewMode !== "single") return;
+    const q = state.focusQ;
+    if (!q) return;
+    const meta = state.lastRenderMeta;
+    if (!meta || meta.viewMode !== "single" || meta.q !== q) return;
+
+    const rect = pdfCanvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const xOnCanvas = ((e.clientX - rect.left) / rect.width) * pdfCanvas.width;
+    const yOnCanvas = ((e.clientY - rect.top) / rect.height) * pdfCanvas.height;
+    const sx = meta.cropWidthPx / pdfCanvas.width;
+    const sy = meta.cropHeightPx / pdfCanvas.height;
+    const xFull = meta.cropLeftPx + (xOnCanvas * sx);
+    const yFull = meta.cropStartPx + (yOnCanvas * sy);
+
+    const anchors = await getChoiceAnchorsForQuestion(meta.page, q);
+    if (anchors.length){
+      let best = null;
+      let bestScore = Infinity;
+      for (const a of anchors){
+        const ax = a.xRatio * meta.fullWidthPx;
+        const ay = a.yRatio * meta.fullHeightPx;
+        const aw = Math.max(10, a.wRatio * meta.fullWidthPx);
+        const ah = Math.max(12, a.hRatio * meta.fullHeightPx);
+        const cx = ax + (aw * 0.5);
+        const cy = ay + (ah * 0.5);
+        const dx = Math.abs(xFull - cx);
+        const dy = Math.abs(yFull - cy);
+        const score = dy + (dx * 0.35); // 세로 근접도를 우선
+        if (score < bestScore) {
+          bestScore = score;
+          best = { choice: a.choice, dx, dy, aw, ah };
+        }
+      }
+      if (best) {
+        const yLimit = Math.max(22, best.ah * 2.6);
+        const xLimit = Math.max(90, best.aw * 10.0);
+        if (best.dy <= yLimit && best.dx <= xLimit) {
+          chooseByKeyboard(best.choice);
+          pdfStatus.textContent = `${q}번 ${best.choice} 선택`;
+          return;
+        }
+      }
+    }
+
+    // 앵커 검출이 약한 회차를 위한 보조 fallback
+    const nx = (e.clientX - rect.left) / rect.width;
+    const ny = (e.clientY - rect.top) / rect.height;
+    if (nx >= 0.03 && nx <= 0.72 && ny >= 0.34 && ny <= 0.98) {
+      const picked = Math.floor(((ny - 0.34) / (0.98 - 0.34)) * 4) + 1;
+      const choice = Math.max(1, Math.min(4, picked));
+      chooseByKeyboard(choice);
+      pdfStatus.textContent = `${q}번 ${choice} 선택`;
     }
   }
 
@@ -1252,7 +2424,7 @@
     const correct = ANSWER_KEY[q];
     const mark = card.querySelector('[data-role="mark"]');
 
-    mark.classList.remove("ok","bad","lock");
+    mark.classList.remove("ok","bad","lock","blank");
 
     if (isLocked(q)){
       mark.textContent = "잠금";
@@ -1262,6 +2434,7 @@
 
     if (chosen == null){
       mark.textContent = "미응답";
+      mark.classList.add("blank");
       return;
     }
     if (chosen === correct){
@@ -1307,7 +2480,7 @@
 
       const mark = card.querySelector('[data-role="mark"]');
       mark.textContent = "미채점";
-      mark.classList.remove("ok","bad","lock");
+      mark.classList.remove("ok","bad","lock","blank");
 
       card.querySelectorAll(".choice").forEach(el => {
         el.classList.remove("selected","correct","wrong","disabled");
@@ -1332,6 +2505,7 @@
     if (!card) return;
     const chosen = state.answers[q];
     const correct = ANSWER_KEY[q];
+    card.classList.toggle("bookmarked", !!state.bookmarks[q]);
 
     card.querySelectorAll(".choice").forEach(el => {
       const c = Number(el.dataset.c);
@@ -1348,12 +2522,13 @@
 
     if (!autoGradeEl.checked){
       const mark = card.querySelector('[data-role="mark"]');
-      mark.classList.remove("ok","bad","lock");
+      mark.classList.remove("ok","bad","lock","blank");
       if (isLocked(q)){
         mark.textContent = "잠금";
         mark.classList.add("lock");
       } else {
         mark.textContent = chosen == null ? "미응답" : "미채점";
+        if (chosen == null) mark.classList.add("blank");
       }
     } else {
       gradeQuestion(q);
@@ -1362,19 +2537,21 @@
 
   function refreshAllCards(){
     for(let q=1; q<=100; q++) refreshCard(q);
+    updateBookmarkUi(state.focusQ || 1);
   }
 
   function clearMarksOnly(){
     for(let q=1; q<=100; q++){
       const card = getCard(q);
       const mark = card.querySelector('[data-role="mark"]');
-      mark.classList.remove("ok","bad","lock");
+      mark.classList.remove("ok","bad","lock","blank");
 
       if (isLocked(q)){
         mark.textContent = "잠금";
         mark.classList.add("lock");
       } else {
         mark.textContent = state.answers[q] == null ? "미응답" : "미채점";
+        if (state.answers[q] == null) mark.classList.add("blank");
       }
 
       card.querySelectorAll(".choice").forEach(el => {
