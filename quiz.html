@@ -46,6 +46,24 @@
     }
     .panel .title strong{font-size:13px}
     .panel .title .mini{font-size:12px; color:var(--muted)}
+    .currentQInfo{
+      display:inline-flex;
+      align-items:center;
+      margin-left:8px;
+      padding:4px 10px;
+      border:1px solid rgba(10,102,214,.45);
+      border-radius:999px;
+      font-size:12px;
+      font-weight:800;
+      color:#0a66d6;
+      background:rgba(10,102,214,.12);
+      box-shadow:0 0 0 1px rgba(10,102,214,.08) inset;
+    }
+    body.theme-dark .currentQInfo{
+      color:#79b6ff;
+      border-color:rgba(121,182,255,.55);
+      background:rgba(121,182,255,.16);
+    }
     .viewer{
       height:auto;
       flex:1;
@@ -190,6 +208,20 @@
     }
     .bookmarkBtn.active svg{fill:#f1a620}
     .controls{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+    .iconBtn{
+      width:34px;
+      height:34px;
+      padding:0;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      font-size:14px;
+      font-weight:800;
+    }
+    .themeIcon{
+      font-size:16px;
+      line-height:1;
+    }
     button{
       background:var(--btn); color:var(--text); border:1px solid var(--line);
       padding:8px 10px; border-radius:10px; cursor:pointer; font-weight:600; font-size:12px;
@@ -234,6 +266,10 @@
     .sub .v{font-size:14px; font-weight:800; margin-top:4px}
 
     .filterBar{display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 10px;}
+    body.info-collapsed .sheet .stats,
+    body.info-collapsed .sheet .subStats{
+      display:none;
+    }
 
     .grid{display:grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap:8px;}
     .qcard{
@@ -271,17 +307,17 @@
     .mark.bad{color:var(--bad); border-color:rgba(255,77,109,.5); background:rgba(255,77,109,.08)}
     .mark.lock{color:var(--warn); border-color:rgba(255,191,60,.45); background:rgba(255,191,60,.08)}
     .mark.blank{
-      font-size:11px;
+      font-size:0;
       line-height:1;
-      min-width:26px;
+      min-width:24px;
       text-align:center;
-      padding:2px 0;
+      padding:2px 4px;
       border-color:rgba(120,140,180,.35);
       background:rgba(120,140,180,.08);
     }
     .mark.blank::before{
-      content:"◍";
-      font-size:12px;
+      content:"●";
+      font-size:10px;
       color:#6c7a99;
       font-weight:800;
     }
@@ -474,11 +510,11 @@
 <header>
   <div class="left">
     <h1 id="pageTitle">문제풀이 + 정답확인</h1>
-    <span class="pill">오답노트·단축키(1~4/←→/G/R/J)</span>
+    <span class="pill">오답노트·단축키(1~4/←→/G/R)</span>
   </div>
   <div class="controls">
+    <button id="btnTheme" class="secondary iconBtn" title="다크/기본 모드" aria-label="다크/기본 모드"><span class="themeIcon">☾</span></button>
     <button id="btnHome" class="ghost">목록</button>
-    <button id="btnTheme" class="secondary">다크 모드</button>
     <button id="btnReset" class="secondary">다시풀기 (R)</button>
     <button id="btnGrade">채점(전체) (G)</button>
     <label class="toggle"><input id="autoGrade" type="checkbox" checked /> 자동채점</label>
@@ -492,6 +528,7 @@
       <div>
         <strong>문제 PDF</strong>
         <span class="mini" id="pdfInfo">왼쪽 문제 / 오른쪽 답 체크</span>
+        <span class="currentQInfo" id="currentQInfo">현재 1번</span>
       </div>
       <div class="controls">
         <button id="btnFontUp" class="secondary">글자크게 ⊕</button>
@@ -529,8 +566,8 @@
         <div class="tiny" id="modeHint">모드: 일반</div>
       </div>
       <div class="controls">
+        <button id="btnInfoToggle" class="ghost iconBtn" title="정보 더보기/숨기기" aria-label="정보 더보기/숨기기">ⓘ</button>
         <button id="scrollTop" class="secondary">맨위로</button>
-        <button id="btnJumpFirst" class="secondary">첫 항목 점프 (J)</button>
         <button id="btnClearSaved" class="ghost">저장 초기화</button>
       </div>
     </div>
@@ -572,7 +609,7 @@
       <div class="adWrap" id="adfitQuizSide">광고 영역</div>
 
       <div class="footerNote">
-        <div>• 단축키: <b>1~4</b> 선택, <b>←/→</b> 이동, <b>B</b> 북마크, <b>G</b> 채점, <b>R</b> 리셋, <b>J</b> 첫항목 점프</div>
+        <div>• 단축키: <b>1~4</b> 선택, <b>←/→</b> 이동, <b>B</b> 북마크, <b>G</b> 채점, <b>R</b> 리셋</div>
       </div>
     </div>
   </aside>
@@ -646,6 +683,7 @@
   const STORAGE_BOOKMARK_KEY = "quiz_bookmarks_v1";
   const STORAGE_UI_KEY = "quiz_ui_v3";
   const PDF_MAP_VERSION = 5;
+  const CROP_CACHE_VERSION = 11;
   const PRESET_PAGE_ANCHORS = {
     "2022년 제19회 농산물품질관리사 1차": [1,6,10,14,18,22,26,33,39,47,51,57,64,70,76,81,87,94],
     "2023년 제20회 농산물품질관리사 1차": [1,5,10,15,19,23,26,34,40,48,51,57,64,70,76,83,90,97],
@@ -672,6 +710,7 @@
     theme: "basic",
     viewMode: "all",
     pdfZoom: 1,
+    infoExpanded: false,
     currentPdfPage: 1,
     pdfNavNonce: 0,
     questionPdfBaseUrl: null,
@@ -682,10 +721,14 @@
     lastRenderMeta: null,
     allPagesRenderKey: null,
     allPageCanvases: [],
+    allNavToken: 0,
+    singlePageRenderCache: new Map(),
     pageQuestionRatioCache: {},
     pageQuestionDirectRatioCache: {},
     pageQuestionRowStartCache: {},
+    pageReliableQuestionStartCache: {},
     questionChoiceAnchorCache: {},
+    questionCropRangeCache: {},
     pageOcrQuestionStartCache: {},
     pdfNav: {
       enabled: true,
@@ -708,6 +751,7 @@
   const pdfLoadingText = document.getElementById("pdfLoadingText");
   const pdfStatus = document.getElementById("pdfStatus");
   const pdfInfo = document.getElementById("pdfInfo");
+  const currentQInfo = document.getElementById("currentQInfo");
   const pageTitle = document.getElementById("pageTitle");
   const grid = document.getElementById("grid");
   const scoreEl = document.getElementById("score");
@@ -719,6 +763,7 @@
   const saveHint = document.getElementById("saveHint");
   const modeHint = document.getElementById("modeHint");
   const btnTheme = document.getElementById("btnTheme");
+  const btnInfoToggle = document.getElementById("btnInfoToggle");
   const btnFontUp = document.getElementById("btnFontUp");
   const btnFontDown = document.getElementById("btnFontDown");
 
@@ -781,6 +826,7 @@
   document.getElementById("btnReset").addEventListener("click", resetAll);
   document.getElementById("btnGrade").addEventListener("click", () => { gradeAll(true); makeWrongNote(); });
   btnTheme.addEventListener("click", () => setTheme(state.theme === "dark" ? "basic" : "dark"));
+  btnInfoToggle.addEventListener("click", toggleInfoPanel);
   btnFontUp.addEventListener("click", () => changePdfZoom(0.1));
   btnFontDown.addEventListener("click", () => changePdfZoom(-0.1));
   document.getElementById("btnViewMode").addEventListener("click", toggleViewMode);
@@ -789,7 +835,6 @@
   btnBookmark.addEventListener("click", () => toggleBookmark(state.focusQ));
 
   document.getElementById("scrollTop").addEventListener("click", () => sheet.scrollTo({top:0, behavior:"smooth"}));
-  document.getElementById("btnJumpFirst").addEventListener("click", jumpToFirst);
 
   document.getElementById("openQ").addEventListener("click", () => {
     const url = buildPdfUrl(state.currentPdfPage, true);
@@ -859,7 +904,6 @@
     if (k === "b" || k === "B") { toggleBookmark(state.focusQ); e.preventDefault(); return; }
     if (k === "g" || k === "G") { gradeAll(true); makeWrongNote(); e.preventDefault(); return; }
     if (k === "r" || k === "R") { resetAll(); e.preventDefault(); return; }
-    if (k === "j" || k === "J") { jumpToFirst(); e.preventDefault(); return; }
   });
 
   // ====== 초기 로드 ======
@@ -893,6 +937,7 @@
         theme: state.theme,
         viewMode: state.viewMode,
         pdfZoom: state.pdfZoom,
+        infoExpanded: state.infoExpanded,
         pdfNav: state.pdfNav
       }));
     }catch(_){}
@@ -906,10 +951,12 @@
         if (typeof ui.showCorrect === "boolean") showCorrectEl.checked = ui.showCorrect;
         if (ui.filter === "all" || ui.filter === "wrong" || ui.filter === "blank") state.filter = ui.filter;
         if (ui.theme === "basic" || ui.theme === "dark") state.theme = ui.theme;
-        if (ui.viewMode === "all" || ui.viewMode === "single") state.viewMode = ui.viewMode;
+        // 진입 기본 모드는 항상 전체문제 보기로 유지한다.
+        state.viewMode = "all";
         if (Number.isFinite(Number(ui.pdfZoom))) {
           state.pdfZoom = Math.max(0.7, Math.min(1.8, Number(ui.pdfZoom)));
         }
+        if (typeof ui.infoExpanded === "boolean") state.infoExpanded = ui.infoExpanded;
         if (ui.pdfNav && typeof ui.pdfNav === "object") {
           const start = Number(ui.pdfNav.startPage);
           const qpp = Number(ui.pdfNav.questionsPerPage);
@@ -941,11 +988,15 @@
     applyTheme();
     updateViewModeUi();
     updateZoomButtons();
+    applyInfoPanelState();
     updatePdfInfo();
   }
   function applyTheme(){
     document.body.classList.toggle("theme-dark", state.theme === "dark");
-    btnTheme.textContent = state.theme === "dark" ? "기본 모드" : "다크 모드";
+    const icon = btnTheme.querySelector(".themeIcon");
+    if (icon) icon.textContent = state.theme === "dark" ? "☀" : "☾";
+    btnTheme.title = state.theme === "dark" ? "기본 모드로 변경" : "다크 모드로 변경";
+    btnTheme.setAttribute("aria-label", btnTheme.title);
   }
   function setTheme(nextTheme){
     state.theme = nextTheme;
@@ -965,6 +1016,7 @@
     state.pdfZoom = next;
     state.allPagesRenderKey = null;
     state.allPageCanvases = [];
+    state.singlePageRenderCache = new Map();
     updateZoomButtons();
     saveUi();
     navigatePdfToQuestion(state.focusQ || 1);
@@ -985,6 +1037,20 @@
     updateViewModeUi();
     saveUi();
     navigatePdfToQuestion(state.focusQ || 1);
+  }
+
+  function applyInfoPanelState(){
+    document.body.classList.toggle("info-collapsed", !state.infoExpanded);
+    if (btnInfoToggle) {
+      btnInfoToggle.textContent = state.infoExpanded ? "▦" : "ⓘ";
+      btnInfoToggle.title = state.infoExpanded ? "정보 숨기기" : "정보 더보기";
+    }
+  }
+
+  function toggleInfoPanel(){
+    state.infoExpanded = !state.infoExpanded;
+    applyInfoPanelState();
+    saveUi();
   }
 
   function updatePdfInfo(){
@@ -1063,10 +1129,13 @@
     state.answerPdfBaseUrl = await resolveExistingPdfUrl(ANSWER_PDF_URL);
     state.allPagesRenderKey = null;
     state.allPageCanvases = [];
+    state.singlePageRenderCache = new Map();
     state.pageQuestionRatioCache = {};
     state.pageQuestionDirectRatioCache = {};
     state.pageQuestionRowStartCache = {};
+    state.pageReliableQuestionStartCache = {};
     state.questionChoiceAnchorCache = {};
+    state.questionCropRangeCache = {};
     state.pageOcrQuestionStartCache = {};
     navigatePdfToQuestion(state.focusQ || 1);
     ensureAutoPdfMap();
@@ -1114,7 +1183,16 @@
   }
 
   function applyPresetMapIfAvailable(){
-    const anchors = PRESET_PAGE_ANCHORS[EXAM_NAME];
+    let anchors = PRESET_PAGE_ANCHORS[EXAM_NAME];
+    if (!anchors) {
+      const norm = normalizeExamKey(EXAM_NAME);
+      for (const k of Object.keys(PRESET_PAGE_ANCHORS)){
+        if (normalizeExamKey(k) === norm) {
+          anchors = PRESET_PAGE_ANCHORS[k];
+          break;
+        }
+      }
+    }
     if (!anchors) return false;
 
     const mapped = buildMapFromAnchors(anchors);
@@ -1122,11 +1200,40 @@
     state.pdfNav.mode = "auto";
     state.pdfNav.questionPageMap = mapped.pageMap;
     state.pdfNav.questionTopRatioMap = mapped.ratioMap;
+    state.questionCropRangeCache = {};
     state.pdfNav.source = getCurrentPdfSourceKey();
     state.pdfNav.version = PDF_MAP_VERSION;
     updatePdfInfo();
     saveUi();
     return true;
+  }
+
+  function getPresetAnchorsForCurrentExam(){
+    let anchors = PRESET_PAGE_ANCHORS[EXAM_NAME];
+    if (!anchors) {
+      const norm = normalizeExamKey(EXAM_NAME);
+      for (const k of Object.keys(PRESET_PAGE_ANCHORS)){
+        if (normalizeExamKey(k) === norm) {
+          anchors = PRESET_PAGE_ANCHORS[k];
+          break;
+        }
+      }
+    }
+    if (!anchors) {
+      const pdfName = decodeURIComponent(String(QUESTION_PDF_URL || ""));
+      const m = pdfName.match(/(20\d{2}).*제\s*([0-9]{1,2})회/);
+      if (m) {
+        const year = m[1];
+        const seq = m[2];
+        for (const k of Object.keys(PRESET_PAGE_ANCHORS)){
+          if (k.includes(`${year}년`) && k.includes(`제${seq}회`)) {
+            anchors = PRESET_PAGE_ANCHORS[k];
+            break;
+          }
+        }
+      }
+    }
+    return Array.isArray(anchors) ? anchors : null;
   }
 
   function buildPdfUrl(page, forceReload){
@@ -1181,36 +1288,63 @@
   async function locateQuestionInPdf(q){
     const pdf = await ensurePdfDocument();
     const total = pdf.numPages || 1;
-    const predicted = Math.max(1, Math.min(total, getPdfPageByQuestion(q)));
-    const order = [];
-    const seen = new Set();
-    const push = (p) => {
-      if (p < 1 || p > total) return;
-      if (seen.has(p)) return;
-      seen.add(p);
-      order.push(p);
+    const hasQuestionOnPage = async (pageNo, targetQ) => {
+      if (!Number.isFinite(pageNo) || pageNo < 1 || pageNo > total) return false;
+      try{
+        const rowStarts = await getRowQuestionStartRatiosForPage(pageNo);
+        if (rowStarts && Number.isFinite(rowStarts.get(targetQ))) return true;
+        const directStarts = await getDirectQuestionRatiosForPage(pageNo);
+        if (directStarts && Number.isFinite(directStarts.get(targetQ))) return true;
+        const pageRatios = await getQuestionRatiosForPage(pageNo);
+        if (pageRatios && Number.isFinite(pageRatios.get(targetQ))) return true;
+      }catch(_){}
+      return false;
     };
-    push(predicted);
-    for (let d = 1; d <= 4; d++){
-      push(predicted - d);
-      push(predicted + d);
-    }
-    for (let p = 1; p <= total; p++) push(p);
-
-    for (const p of order){
-      const ratios = await getQuestionRatiosForPage(p);
-      if (ratios && Number.isFinite(ratios.get(q))) {
-        return { page: p, ratio: Math.max(0, Math.min(1, ratios.get(q))), exact: true };
+    const resolveBetterPage = async (mappedPage, targetQ) => {
+      const p = Math.max(1, Math.min(total, Math.floor(mappedPage)));
+      const candidates = [p, p - 1, p + 1];
+      for (const cand of candidates){
+        if (await hasQuestionOnPage(cand, targetQ)) return cand;
       }
-    }
+      return p;
+    };
+    const refineRatioOnPage = async (pageNo, fallbackRatio) => {
+      const safeRatio = Number.isFinite(fallbackRatio) ? Math.max(0, Math.min(1, fallbackRatio)) : 0.12;
+      const p = Math.max(1, Math.min(total, Math.floor(pageNo)));
+      try{
+        const candidates = [];
+        const rowStarts = await getRowQuestionStartRatiosForPage(p);
+        if (rowStarts && Number.isFinite(rowStarts.get(q))) candidates.push(rowStarts.get(q));
+        const directStarts = await getDirectQuestionRatiosForPage(p);
+        if (directStarts && Number.isFinite(directStarts.get(q))) candidates.push(directStarts.get(q));
+        const pageRatios = await getQuestionRatiosForPage(p);
+        if (pageRatios && Number.isFinite(pageRatios.get(q))) candidates.push(pageRatios.get(q));
+        if (candidates.length){
+          candidates.sort((a, b) => a - b);
+          return Math.max(0, Math.min(1, candidates[Math.floor(candidates.length / 2)]));
+        }
+      }catch(_){}
+      return safeRatio;
+    };
 
+    const presetAnchors = getPresetAnchorsForCurrentExam();
+    if (presetAnchors) {
+      const mapped = buildMapFromAnchors(presetAnchors);
+      const mappedPage = Math.max(1, Math.min(total, Number(mapped.pageMap[q]) || getPdfPageByQuestion(q)));
+      const p = await resolveBetterPage(mappedPage, q);
+      const r = await refineRatioOnPage(p, mapped.ratioMap[q]);
+      return { page: p, ratio: r, exact: true };
+    }
+    // 기본 페이지맵을 사용하되, 페이지 내부 비율은 실제 텍스트 검출로 보정한다.
     const pageMap = state.pdfNav.questionPageMap;
     const ratioMap = state.pdfNav.questionTopRatioMap;
     if (Array.isArray(pageMap) && Array.isArray(ratioMap) && Number.isFinite(pageMap[q])) {
-      const p = Math.max(1, Math.min(total, Math.floor(pageMap[q])));
-      const r = Number.isFinite(ratioMap[q]) ? Math.max(0, Math.min(1, ratioMap[q])) : 0.12;
-      return { page: p, ratio: r, exact: false };
+      const mappedPage = Math.max(1, Math.min(total, Math.floor(pageMap[q])));
+      const p = await resolveBetterPage(mappedPage, q);
+      const r = await refineRatioOnPage(p, ratioMap[q]);
+      return { page: p, ratio: r, exact: true };
     }
+    const predicted = Math.max(1, Math.min(total, getPdfPageByQuestion(q)));
     return { page: predicted, ratio: 0.12, exact: false };
   }
 
@@ -1228,7 +1362,7 @@
     for (const item of (textContent.items || [])){
       const s = String(item.str || "").trim();
       if (!s) continue;
-      const m = s.match(/^\(?\s*(\d{1,3})\s*(?:[.)]|번)(?:\s|$)/);
+      const m = s.match(/^\(?\s*(\d{1,3})\s*(?:[.]|번)(?:\s|$)/);
       if (!m) continue;
       const q = Number(m[1]);
       if (!Number.isFinite(q) || q < 1 || q > 100) continue;
@@ -1285,8 +1419,10 @@
       const rowStartX = row.parts[0].x;
       if ((rowStartX / pageW) > 0.38) continue;
       const lineText = row.parts.map(p => p.s).join(" ").replace(/\s+/g, " ").trim();
-      const q = parseQuestionNumberFromLineStart(lineText);
-      if (!q) continue;
+      const m = lineText.match(/^\(?\s*(\d{1,3})\s*(?:[.]|번)(?:\s|$)/);
+      if (!m) continue;
+      const q = Number(m[1]);
+      if (!Number.isFinite(q) || q < 1 || q > 100) continue;
       const ih = 12;
       const top = Math.max(0, Math.min(pageH - ih, pageH - row.y - ih));
       const ratio = Math.max(0, Math.min(1, top / pageH));
@@ -1297,36 +1433,109 @@
     return byQ;
   }
 
+  async function getReliableQuestionStartsForPage(pageNo){
+    const key = String(pageNo);
+    if (state.pageReliableQuestionStartCache[key]) return state.pageReliableQuestionStartCache[key];
+
+    const pdf = await ensurePdfDocument();
+    const page = await pdf.getPage(pageNo);
+    const viewport = page.getViewport({ scale: 1 });
+    const pageW = Math.max(1, viewport.width);
+    const pageH = Math.max(1, viewport.height);
+    const textContent = await page.getTextContent();
+
+    const rows = [];
+    for (const it of (textContent.items || [])){
+      const s = String(it.str || "").trim();
+      if (!s) continue;
+      const x = Number(it.transform && it.transform[4]);
+      const y = Number(it.transform && it.transform[5]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      let row = null;
+      for (const r of rows){
+        if (Math.abs(r.y - y) <= 2.0) { row = r; break; }
+      }
+      if (!row){
+        row = { y, parts: [] };
+        rows.push(row);
+      }
+      row.parts.push({ x, s });
+    }
+
+    const map = new Map();
+    for (const row of rows){
+      row.parts.sort((a, b) => a.x - b.x);
+      if (!row.parts.length) continue;
+      const startXRatio = row.parts[0].x / pageW;
+      if (startXRatio > 0.24) continue;
+      const line = row.parts.map(p => p.s).join(" ").replace(/\s+/g, " ").trim();
+      const m = line.match(/^\(?\s*(\d{1,3})\s*(?:[.]|번)(?:\s|$)/);
+      if (!m) continue;
+      const q = Number(m[1]);
+      if (!Number.isFinite(q) || q < 1 || q > 100) continue;
+      // 너무 짧은 토큰 라인(잡음) 배제
+      if (line.length < 6) continue;
+      const top = Math.max(0, Math.min(pageH - 1, pageH - row.y - 12));
+      const ratio = Math.max(0, Math.min(1, top / pageH));
+      if (!map.has(q) || ratio < map.get(q)) map.set(q, ratio);
+    }
+
+    state.pageReliableQuestionStartCache[key] = map;
+    return map;
+  }
+
   async function getQuestionCropRange(q, page){
     const pageMap = state.pdfNav.questionPageMap;
     const ratioMap = state.pdfNav.questionTopRatioMap;
     if (!Array.isArray(pageMap) || !Array.isArray(ratioMap)) return { start: 0, end: 1, focusStart: 0, focusEnd: 1, lowConfidence: true };
-    if (pageMap[q] !== page || !Number.isFinite(ratioMap[q])) return { start: 0, end: 1, focusStart: 0, focusEnd: 1, lowConfidence: true };
+    const mappedRatioForQ = (pageMap[q] === page && Number.isFinite(ratioMap[q])) ? Number(ratioMap[q]) : null;
+    const cropCacheKey = `${CROP_CACHE_VERSION}|${getCurrentPdfSourceKey()}|${page}|${q}|${mappedRatioForQ == null ? "na" : mappedRatioForQ.toFixed(4)}`;
+    if (state.questionCropRangeCache[cropCacheKey]) return state.questionCropRangeCache[cropCacheKey];
 
     const pageRatios = await getQuestionRatiosForPage(page);
     const rowStarts = await getRowQuestionStartRatiosForPage(page);
     const directStarts = await getDirectQuestionRatiosForPage(page);
-    let ocrStarts = null;
-    const pickStart = (qq) => {
+    const reliableStarts = await getReliableQuestionStartsForPage(page);
+    const pickStart = (qq, options = {}) => {
+      const preferTop = options.preferTop === true;
+      const expected = Number.isFinite(options.expected) ? options.expected : null;
+      const window = Number.isFinite(options.window) ? Math.max(0.02, options.window) : 0.12;
       const candidates = [];
       if (rowStarts && Number.isFinite(rowStarts.get(qq))) candidates.push(rowStarts.get(qq));
       if (directStarts && Number.isFinite(directStarts.get(qq))) candidates.push(directStarts.get(qq));
       if (pageRatios && Number.isFinite(pageRatios.get(qq))) candidates.push(pageRatios.get(qq));
-      if (ocrStarts && Number.isFinite(ocrStarts.get(qq))) candidates.push(ocrStarts.get(qq));
+      if (reliableStarts && Number.isFinite(reliableStarts.get(qq))) candidates.push(reliableStarts.get(qq));
       if (Array.isArray(pageMap) && pageMap[qq] === page && Number.isFinite(ratioMap[qq])) candidates.push(ratioMap[qq]);
       if (candidates.length === 0) return null;
-      candidates.sort((a, b) => a - b);
-      return candidates[Math.floor(candidates.length / 2)];
+      let usable = candidates.slice();
+      if (expected != null){
+        const near = usable.filter((v) => Math.abs(v - expected) <= window);
+        if (near.length) usable = near;
+      }
+      usable.sort((a, b) => a - b);
+      if (preferTop) return usable[0];
+      return usable[Math.floor(usable.length / 2)];
     };
 
-    const startCandidate = pickStart(q);
-    const startRaw = Math.max(0, Math.min(1, Number.isFinite(startCandidate) ? startCandidate : ratioMap[q]));
+    const mappedStart = Number.isFinite(mappedRatioForQ) ? Math.max(0, Math.min(1, mappedRatioForQ)) : null;
+    // 고품질 문서는 맵 근처 후보만 사용해 이전 문항 꼬리 포함을 방지한다.
+    const startCandidate = pickStart(q, { preferTop: true, expected: mappedStart, window: 0.14 });
+    const startRawBase = Math.max(0, Math.min(1,
+      Number.isFinite(startCandidate) ? startCandidate : (mappedStart != null ? mappedStart : 0.12)
+    ));
+    // 저품질/근접 케이스에서만 맵 기반 상단 보정을 적용한다.
+    let startRaw = (mappedStart == null) ? startRawBase : Math.min(startRawBase, Math.max(0, mappedStart - 0.01));
+    const startEvidenceCount =
+      (rowStarts && Number.isFinite(rowStarts.get(q)) ? 1 : 0) +
+      (directStarts && Number.isFinite(directStarts.get(q)) ? 1 : 0) +
+      (pageRatios && Number.isFinite(pageRatios.get(q)) ? 1 : 0);
 
     const choiceAnchors = await getChoiceAnchorsForQuestion(page, q);
     let maxChoiceBottom = null;
     let choice4Bottom = null;
     const choiceCount = Array.isArray(choiceAnchors) ? choiceAnchors.length : 0;
     const choiceConfidenceLow = choiceCount < 3;
+    const highQuality = (startEvidenceCount >= 1) || !choiceConfidenceLow;
     if (choiceAnchors && choiceAnchors.length){
       maxChoiceBottom = Math.max(...choiceAnchors.map(a => a.yRatio + a.hRatio));
       if (!Number.isFinite(maxChoiceBottom)) maxChoiceBottom = null;
@@ -1365,29 +1574,72 @@
       nextStartRaw = directNext;
     }
 
-    // 텍스트 레이어 검출이 실패한 페이지는 OCR로 q+1 시작점을 보강
+    // q+1 번호 매칭이 실패해도, "현재 문항 이후 첫 시작점"을 컷 경계로 사용한다.
     if (!Number.isFinite(nextStartRaw)) {
-      ocrStarts = await getOcrQuestionStartRatiosForPage(page);
-      const ocrNext = pickStart(q + 1);
-      if (isValidNextStart(ocrNext)) {
-        nextStartRaw = ocrNext;
-      } else {
-        for (let k = q + 1; k <= Math.min(100, q + 8); k++){
-          const cand = pickStart(k);
-          if (isValidNextStart(cand)) {
-            nextStartRaw = cand;
-            break;
-          }
+      const nextCandidates = [];
+      const collectNext = (m) => {
+        if (!m || typeof m.entries !== "function") return;
+        for (const [k, v] of m.entries()){
+          if (!Number.isFinite(k) || !Number.isFinite(v)) continue;
+          if (k <= q) continue;
+          if (v <= startRaw + 0.08) continue;
+          nextCandidates.push(v);
         }
+      };
+      collectNext(reliableStarts);
+      collectNext(rowStarts);
+      collectNext(directStarts);
+      collectNext(pageRatios);
+      if (nextCandidates.length) {
+        nextCandidates.sort((a, b) => a - b);
+        nextStartRaw = nextCandidates[0];
       }
     }
 
-    // 선택지 검출 신뢰도가 낮고 nextStart가 너무 이르면 오검출로 보고 무시
-    if (choiceConfidenceLow && Number.isFinite(nextStartRaw) && nextStartRaw < (startRaw + 0.45)) {
+    // 저신뢰 경로에서만 과도한 근접 후보를 제거한다.
+    if (!highQuality && choiceConfidenceLow && Number.isFinite(nextStartRaw) && nextStartRaw < (startRaw + 0.45)) {
       nextStartRaw = null;
     }
 
-    let focusStart = Math.max(0, startRaw - 0.018);
+    // 고품질에서는 전체문제 보기와 같은 앵커(ratio) 기준으로 시작점을 맞춘다.
+    let unifiedStartRatio = null;
+    let unifiedNextRatio = null;
+    if (highQuality){
+      try{
+        const here = await locateQuestionInPdf(q);
+        if (here && here.page === page && Number.isFinite(here.ratio)) {
+          unifiedStartRatio = Math.max(0, Math.min(1, here.ratio));
+        }
+        if (q < 100){
+          const next = await locateQuestionInPdf(q + 1);
+          if (next && next.page === page && Number.isFinite(next.ratio)) {
+            const nr = Math.max(0, Math.min(1, next.ratio));
+            if (unifiedStartRatio == null || nr > unifiedStartRatio + 0.06) {
+              unifiedNextRatio = nr;
+            }
+          }
+        }
+      }catch(_){}
+    }
+    // 고품질이면 전체모드 앵커를 절대 우선으로 사용한다.
+    if (highQuality && Number.isFinite(unifiedStartRatio)) {
+      startRaw = unifiedStartRatio;
+    }
+    if (highQuality && Number.isFinite(unifiedNextRatio)) {
+      nextStartRaw = unifiedNextRatio;
+    }
+    // 고품질인데 q+1 시작을 아직 못 찾은 경우, 한 번 더 완화된 범위로 탐색
+    if (highQuality && !Number.isFinite(nextStartRaw)) {
+      const relaxedNext = pickStart(q + 1, { expected: mappedStart, window: 0.35 });
+      if (Number.isFinite(relaxedNext) && relaxedNext > startRaw + 0.08) {
+        nextStartRaw = relaxedNext;
+      }
+    }
+
+    // 고품질은 전체모드와 동일한 상단 정렬, 저품질만 여백을 둔다.
+    const baseStart = startRaw;
+    const topPad = highQuality ? 0 : 0.036;
+    let focusStart = Math.max(0, baseStart - topPad);
     let focusEnd = null;
     // 한문제 보기 핵심: 선택지 하단을 우선으로 현재 문제만 포함
     if (Number.isFinite(maxChoiceBottom)) {
@@ -1402,8 +1654,17 @@
     } else if (Number.isFinite(nextStartRaw)) {
       focusEnd = Math.max(focusStart + 0.14, Math.min(1, nextStartRaw - 0.02));
     } else {
-      // 선택지/다음 시작 모두 미검출 시에만 페이지 하단 fallback
-      focusEnd = 0.995;
+      // 컷 경계 미검출 시 전체 페이지를 보여주지 않고, 현재 문항 근접 구간으로 제한한다.
+      if (highQuality) {
+        // 짧은 문제(특히 말미 문항)에서 다음 문제가 섞이지 않도록 보수적으로 제한
+        if (Number.isFinite(choice4Bottom)) {
+          focusEnd = Math.min(0.995, choice4Bottom + 0.08);
+        } else {
+          focusEnd = Math.min(0.995, focusStart + 0.24);
+        }
+      } else {
+        focusEnd = Math.min(0.995, focusStart + 0.38);
+      }
     }
 
     // 너무 짧게 잘리면 최소 높이 보장
@@ -1411,9 +1672,34 @@
       focusEnd = Math.min(0.995, focusStart + 0.2);
     }
 
-    // ④가 검출되면, 컷 끝이 ④ 하단보다 위로 가지 않도록 강제
+    // 고품질은 다음 문항 시작점을 컷 끝의 절대 기준으로 사용해 "한 문제만" 보이게 한다.
+    if (highQuality && Number.isFinite(nextStartRaw)) {
+      const hardEnd = Math.max(focusStart + 0.16, Math.min(0.995, nextStartRaw - 0.012));
+      focusEnd = Math.min(focusEnd, hardEnd);
+      // 선택지 ④가 약간 아래에 있어도 다음 문항 시작점은 넘지 않게 미세 보정
+      if (Number.isFinite(choice4Bottom)) {
+        const minForChoice = Math.min(hardEnd, Math.max(focusStart + 0.14, choice4Bottom + 0.02));
+        focusEnd = Math.max(focusEnd, minForChoice);
+      }
+    }
+
+    // 고품질 + 같은 페이지 다음 문항 앵커가 있으면 그 직전까지만 강제.
+    if (Number.isFinite(unifiedNextRatio)) {
+      focusEnd = Math.min(focusEnd, Math.max(focusStart + 0.16, unifiedNextRatio - 0.015));
+    }
+    if (highQuality && Number.isFinite(nextStartRaw)) {
+      focusEnd = Math.min(focusEnd, Math.max(focusStart + 0.16, nextStartRaw - 0.01));
+    }
+
+    // ④가 검출되면 컷 끝을 늘리되, 다음 문항 경계를 절대 넘지 않는다.
     if (Number.isFinite(choice4Bottom)) {
-      focusEnd = Math.max(focusEnd, Math.min(0.995, choice4Bottom + 0.05));
+      const choiceEnd = Math.min(0.995, choice4Bottom + 0.05);
+      if (highQuality && Number.isFinite(nextStartRaw)) {
+        const capEnd = Math.max(focusStart + 0.14, Math.min(0.995, nextStartRaw - 0.01));
+        focusEnd = Math.min(capEnd, Math.max(focusEnd, Math.min(choiceEnd, capEnd)));
+      } else {
+        focusEnd = Math.max(focusEnd, choiceEnd);
+      }
     }
 
     // 선택지 검출이 약하면 보수적으로 더 길게 보여서 오절단을 방지
@@ -1424,11 +1710,16 @@
     if (focusEnd - focusStart < 0.14) focusEnd = Math.min(1, focusStart + 0.14);
 
     // 저신뢰 PDF는 "정확 컷"보다 "근접 위치 표시"가 더 안정적이다.
-    const lowConfidence = choiceConfidenceLow && !Number.isFinite(nextStartRaw);
+    const lowConfidence = !highQuality && choiceConfidenceLow && !Number.isFinite(nextStartRaw);
     if (lowConfidence) {
-      const nearStart = Math.max(0, startRaw - 0.03);
-      const nearEnd = Math.min(1, nearStart + 0.34);
-      return { start: nearStart, end: nearEnd, focusStart: startRaw, focusEnd: Math.min(1, nearStart + 0.3), lowConfidence: true };
+      // 저신뢰 모드는 상단 누락 방지를 우선: 시작 여유를 더 크게 확보
+      let nearStart = Math.max(0, startRaw - 0.09);
+      // 회차 말미 문항은 하단 치우침이 자주 발생하므로 시작점을 상단쪽으로 제한
+      if (q >= 97) nearStart = Math.min(nearStart, 0.18);
+      const nearEnd = Math.min(1, nearStart + 0.44);
+      const resolved = { start: nearStart, end: nearEnd, focusStart: startRaw, focusEnd: Math.min(1, nearStart + 0.3), lowConfidence: true };
+      state.questionCropRangeCache[cropCacheKey] = resolved;
+      return resolved;
     }
 
     // 고정 컷맵 우선 적용(회차명 불일치 방지를 위해 PDF 파일명 기반 지원)
@@ -1447,7 +1738,74 @@
     // 단일 모드에서는 start/end를 focus와 동일하게 맞춰 해당 문제만 표시
     const start = focusStart;
     const end = focusEnd;
-    return { start, end, focusStart, focusEnd, lowConfidence: false };
+    const resolved = { start, end, focusStart, focusEnd, lowConfidence: false };
+    state.questionCropRangeCache[cropCacheKey] = resolved;
+    return resolved;
+  }
+
+  function makeSingleRenderCacheKey(pageNo, viewWidth, zoom, outputScale){
+    return `${getQuestionPdfBaseUrl()}|p:${pageNo}|w:${Math.round(viewWidth)}|z:${zoom}|s:${outputScale}`;
+  }
+
+  function pruneSinglePageRenderCache(limit = 8){
+    const cache = state.singlePageRenderCache;
+    if (!(cache instanceof Map) || cache.size <= limit) return;
+    const entries = Array.from(cache.entries()).sort((a, b) => (a[1].usedAt || 0) - (b[1].usedAt || 0));
+    const removeCount = Math.max(0, cache.size - limit);
+    for (let i = 0; i < removeCount; i++){
+      cache.delete(entries[i][0]);
+    }
+  }
+
+  async function getOrRenderSinglePageCanvas(pageObj, cacheKey, cssViewport, outputScale){
+    let rec = state.singlePageRenderCache.get(cacheKey);
+    if (rec && rec.promise){
+      rec.usedAt = Date.now();
+      return rec.promise;
+    }
+
+    const promise = (async () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(cssViewport.width * outputScale);
+      canvas.height = Math.ceil(cssViewport.height * outputScale);
+      const ctx = canvas.getContext("2d");
+      await pageObj.render({
+        canvasContext: ctx,
+        viewport: cssViewport,
+        transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null
+      }).promise;
+      return canvas;
+    })();
+
+    state.singlePageRenderCache.set(cacheKey, { promise, usedAt: Date.now() });
+    pruneSinglePageRenderCache();
+
+    try{
+      const canvas = await promise;
+      const latest = state.singlePageRenderCache.get(cacheKey);
+      if (latest) latest.usedAt = Date.now();
+      return canvas;
+    }catch(e){
+      state.singlePageRenderCache.delete(cacheKey);
+      throw e;
+    }
+  }
+
+  function prefetchSinglePageAround(pdf, currentPage, viewWidth, outputScale){
+    const candidates = [currentPage + 1, currentPage - 1];
+    setTimeout(async () => {
+      for (const p of candidates){
+        if (!Number.isFinite(p) || p < 1 || p > pdf.numPages) continue;
+        try{
+          const pageObj = await pdf.getPage(p);
+          const baseViewport = pageObj.getViewport({ scale: 1 });
+          const cssScale = Math.max(0.5, (viewWidth / baseViewport.width) * state.pdfZoom);
+          const cssViewport = pageObj.getViewport({ scale: cssScale });
+          const cacheKey = makeSingleRenderCacheKey(p, viewWidth, state.pdfZoom, outputScale);
+          await getOrRenderSinglePageCanvas(pageObj, cacheKey, cssViewport, outputScale);
+        }catch(_){}
+      }
+    }, 0);
   }
 
   async function renderPdfPage(page, q){
@@ -1468,18 +1826,9 @@
     const dpr = Math.max(1, Number(window.devicePixelRatio) || 1);
     const outputScale = Math.min(2.5, dpr * 1.25);
 
-    const fullCanvas = document.createElement("canvas");
-    fullCanvas.width = Math.ceil(cssViewport.width * outputScale);
-    fullCanvas.height = Math.ceil(cssViewport.height * outputScale);
-    const fullCtx = fullCanvas.getContext("2d");
-
     const token = ++state.renderToken;
-    const renderTask = pageObj.render({
-      canvasContext: fullCtx,
-      viewport: cssViewport,
-      transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null
-    });
-    await renderTask.promise;
+    const cacheKey = makeSingleRenderCacheKey(safePage, viewWidth, state.pdfZoom, outputScale);
+    const fullCanvas = await getOrRenderSinglePageCanvas(pageObj, cacheKey, cssViewport, outputScale);
     if (token !== state.renderToken) return;
 
     let srcTop = 0;
@@ -1555,9 +1904,11 @@
     const nearTag = activeRange && activeRange.lowConfidence ? " · 근접모드" : "";
     pdfStatus.textContent = `페이지 ${safePage}${Number.isFinite(q) ? ` · ${q}번` : ""} 표시 중${nearTag}`;
     setPdfLoading(false);
+    prefetchSinglePageAround(pdf, safePage, viewWidth, outputScale);
   }
 
   async function renderAllPdfPages(q){
+    const navToken = ++state.allNavToken;
     pdfStatus.textContent = "전체 PDF 로딩 중...";
     setPdfLoading(true, "전체 PDF 로딩 중...");
     const pdf = await ensurePdfDocument();
@@ -1571,6 +1922,7 @@
       state.allPageCanvases = [];
       for (let p = 1; p <= pdf.numPages; p++){
         const pageObj = await pdf.getPage(p);
+        if (navToken !== state.allNavToken) return;
         const baseViewport = pageObj.getViewport({ scale: 1 });
         const cssScale = Math.max(0.5, (viewWidth / baseViewport.width) * state.pdfZoom);
         const cssViewport = pageObj.getViewport({ scale: cssScale });
@@ -1588,6 +1940,7 @@
           viewport: cssViewport,
           transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null
         }).promise;
+        if (navToken !== state.allNavToken) return;
 
         pdfAllPages.appendChild(canvas);
         state.allPageCanvases[p] = canvas;
@@ -1597,6 +1950,7 @@
 
     const targetQ = Number.isFinite(q) ? q : (state.focusQ || 1);
     const located = await locateQuestionInPdf(targetQ);
+    if (navToken !== state.allNavToken) return;
     const targetPage = located.page;
     const targetCanvas = state.allPageCanvases[targetPage];
     const ratio = Number.isFinite(located.ratio) ? located.ratio : 0.12;
@@ -1628,13 +1982,7 @@
   function setPdfFramePage(page, q){
     state.currentPdfPage = Math.max(1, Math.floor(page));
     state.pdfNavNonce += 1;
-    renderPdfPage(state.currentPdfPage, q).then(() => {
-      if (state.viewMode === "single") return;
-      // 렌더 직후 레이아웃 반영 타이밍을 한 프레임 보장한 뒤 스크롤
-      requestAnimationFrame(() => {
-        scrollToQuestionAnchor(q, state.currentPdfPage);
-      });
-    }).catch((err) => {
+    renderPdfPage(state.currentPdfPage, q).catch((err) => {
       setPdfLoading(false);
       const msg = (err && err.message) ? err.message : "알 수 없는 오류";
       pdfStatus.innerHTML = `PDF 표시 실패: ${msg} <button id="btnPdfRetry" type="button">재시도</button>`;
@@ -1642,6 +1990,18 @@
   }
 
   function navigatePdfToQuestion(q){
+    if (state.viewMode === "single") {
+      locateQuestionInPdf(q).then((located) => {
+        const page = (located && Number.isFinite(located.page))
+          ? Math.max(1, Math.floor(located.page))
+          : getPdfPageByQuestion(q);
+        setPdfFramePage(page, q);
+      }).catch(() => {
+        const targetPage = getPdfPageByQuestion(q);
+        setPdfFramePage(targetPage, q);
+      });
+      return;
+    }
     const targetPage = getPdfPageByQuestion(q);
     setPdfFramePage(targetPage, q);
   }
@@ -1775,7 +2135,8 @@
     const t = lineText.trim();
     if (!t) return null;
 
-    let m = t.match(/^\(?\s*(\d{1,3})\s*(?:번|[.)])(?:\s+|$)/);
+    // 문제 번호는 "3." 또는 "3번" 계열만 허용해 선택지 "3)" 오검출을 줄인다.
+    let m = t.match(/^\(?\s*(\d{1,3})\s*(?:번|[.])(?:\s+|$)/);
     if (m) {
       const q = Number(m[1]);
       return q >= 1 && q <= 100 ? q : null;
@@ -2054,6 +2415,7 @@
       state.pdfNav.mode = "auto";
       state.pdfNav.questionPageMap = normalized;
       state.pdfNav.questionTopRatioMap = ratioMap;
+      state.questionCropRangeCache = {};
       state.pdfNav.source = getCurrentPdfSourceKey();
       state.pdfNav.version = PDF_MAP_VERSION;
       updatePdfInfo();
@@ -2064,6 +2426,7 @@
       state.pdfNav.mode = "basic";
       state.pdfNav.questionPageMap = null;
       state.pdfNav.questionTopRatioMap = null;
+      state.questionCropRangeCache = {};
       if (!silent) alert("PDF 자동 매핑에 실패했습니다.");
       updatePdfInfo();
     }
@@ -2175,12 +2538,6 @@
     }
   }
 
-  function jumpToFirst(){
-    const q = firstVisibleQuestion();
-    if (q == null) { sheet.scrollTo({top:0, behavior:"smooth"}); return; }
-    focusCard(q, true);
-  }
-
   function firstVisibleQuestion(){
     for(let q=1; q<=100; q++){
       const card = getCard(q);
@@ -2276,6 +2633,7 @@
     state.focusQ = q;
     navigatePdfToQuestion(q);
     mobileQNow.textContent = `${q}번`;
+    if (currentQInfo) currentQInfo.textContent = `현재 ${q}번`;
     updateBookmarkUi(q);
     for(let i=1;i<=100;i++){
       getCard(i).classList.toggle("focus", i===q);
