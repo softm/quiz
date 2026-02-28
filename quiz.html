@@ -1152,10 +1152,14 @@
 
   // ====== 단축키 ======
   document.addEventListener("keydown", (e) => {
+    const k = e.key;
+    if (k === "Escape" && sheetOverlay.classList.contains("open")) {
+      closeMobileSheet();
+      e.preventDefault();
+      return;
+    }
     const tag = (document.activeElement && document.activeElement.tagName || "").toLowerCase();
     if (tag === "textarea" || tag === "input") return;
-
-    const k = e.key;
 
     if (k >= "1" && k <= "4") { chooseByKeyboard(Number(k)); e.preventDefault(); return; }
     if (k === "ArrowRight") { moveFocus(1); e.preventDefault(); return; }
@@ -2678,7 +2682,7 @@
       : Math.max(0.04, Math.min(0.88, ratio));
     if (targetCanvas) {
       const top = targetCanvas.offsetTop + (targetCanvas.clientHeight * ratio) - 20;
-      pdfViewer.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+      scrollPdfViewportTo(Math.max(0, top));
     }
     state.currentPdfPage = targetPage;
     const precision = mobileViewport ? "맵기준" : (located && located.exact ? "정확" : "근사");
@@ -2697,8 +2701,19 @@
     if (ratio == null) ratio = 0.12;
     const maxScrollable = Math.max(0, pdfViewer.scrollHeight - pdfViewer.clientHeight);
     const targetTop = Math.max(0, Math.min(maxScrollable, Math.round(maxScrollable * ratio)));
-    pdfViewer.scrollTo({ top: targetTop, behavior: "auto" });
+    scrollPdfViewportTo(targetTop);
     pdfStatus.textContent = `페이지 ${page} · ${q}번 위치로 이동`;
+  }
+
+  function scrollPdfViewportTo(top){
+    const safeTop = Math.max(0, Number(top) || 0);
+    const canScrollInsideViewer = (pdfViewer.scrollHeight - pdfViewer.clientHeight) > 4;
+    if (canScrollInsideViewer){
+      pdfViewer.scrollTo({ top: safeTop, behavior: "auto" });
+      return;
+    }
+    const viewerRectTop = pdfViewer.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo({ top: Math.max(0, viewerRectTop + safeTop - 8), behavior: "auto" });
   }
 
   function setPdfFramePage(page, q){
@@ -3438,10 +3453,7 @@
     if (idx >= vis.length) idx = vis.length - 1;
 
     const targetQ = vis[idx];
-    focusCard(targetQ, true);
-    if (state.viewMode !== "single") {
-      renderAllPdfPages(targetQ).catch(() => {});
-    }
+    focusCard(targetQ, false);
   }
 
   function chooseByKeyboard(choice){
