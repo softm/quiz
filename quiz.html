@@ -188,6 +188,31 @@
       display:none;
     }
     .viewer.single #pdfCanvas{cursor:pointer}
+    .viewerTopBadge{
+      position:absolute;
+      right:10px;
+      bottom:10px;
+      z-index:6;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      min-width:56px;
+      height:32px;
+      padding:0 10px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.9);
+      color:var(--text);
+      font-size:11px;
+      font-weight:800;
+      box-shadow:0 4px 14px rgba(0,0,0,.14);
+      cursor:pointer;
+      white-space:nowrap;
+    }
+    .viewerTopBadge.show{display:inline-flex}
+    body.theme-dark .viewerTopBadge{
+      background:rgba(24,33,60,.9);
+    }
     .pdfStatus{
       margin-top:8px;
       font-size:12px;
@@ -245,8 +270,7 @@
     }
     .viewerNav{
       position:absolute;
-      top:50%;
-      transform:translateY(-50%);
+      bottom:12px;
       width:52px;
       height:120px;
       border:1px solid var(--line);
@@ -545,6 +569,7 @@
         height:84px;
         font-size:17px;
         border-radius:10px;
+        bottom:10px;
       }
       .viewerNav.left{left:4px}
       .viewerNav.right{right:4px}
@@ -685,7 +710,42 @@
       }
     }
     @media (max-width: 768px) and (orientation: portrait){
+      header{
+        position:sticky;
+        top:0;
+        z-index:20;
+      }
+      .pdfTitleBar{
+        position:sticky;
+        top:var(--mobile-header-h, 58px);
+        z-index:19;
+        background:var(--panel);
+      }
       .viewerNav{
+        display:none !important;
+      }
+      .viewer.single .bookmarkBtn{
+        top:auto;
+        right:8px;
+        bottom:44px;
+        width:34px;
+        height:34px;
+      }
+      .viewer.single .bookmarkBtn svg{
+        width:18px;
+        height:18px;
+      }
+      .viewerTopBadge{
+        right:8px;
+        bottom:8px;
+        min-width:52px;
+        height:30px;
+        padding:0 9px;
+        font-size:10px;
+      }
+    }
+    @media (max-width: 768px) and (orientation: landscape){
+      .viewerTopBadge{
         display:none !important;
       }
     }
@@ -726,7 +786,7 @@
       }
       .wrap{
         display:grid;
-        grid-template-columns: 1.55fr .95fr;
+        grid-template-columns: 1.45fr 1.05fr;
         gap:8px;
         padding:8px;
         height:calc(100dvh - var(--header-h));
@@ -739,6 +799,28 @@
       .panel .title{
         padding:6px 8px;
         gap:6px;
+      }
+      aside.panel > .title{
+        display:grid;
+        grid-template-columns:minmax(0,1fr) auto;
+        align-items:center;
+      }
+      aside.panel > .title > div:first-child{
+        min-width:0;
+        display:flex;
+        align-items:center;
+        white-space:nowrap;
+      }
+      aside.panel > .title > .controls{
+        margin-left:auto;
+        display:flex;
+        flex-wrap:nowrap;
+        gap:6px;
+      }
+      aside.panel > .title > .controls button{
+        font-size:12px;
+        padding:6px 9px;
+        white-space:nowrap;
       }
       .pdfControlRow .controls{
         gap:4px;
@@ -757,6 +839,7 @@
         height:64px;
         font-size:15px;
         border-radius:9px;
+        bottom:8px;
       }
       .viewer.single .viewerNav.left{left:2px}
       .viewer.single .viewerNav.right{right:2px}
@@ -767,26 +850,26 @@
         padding:8px;
       }
       .grid{
-        grid-template-columns: repeat(4, minmax(0,1fr));
-        gap:6px;
+        grid-template-columns: repeat(3, minmax(0,1fr));
+        gap:7px;
       }
       .qcard{
         min-width:0;
-        padding:6px 6px 5px;
+        padding:7px 7px 6px;
       }
       .qnum{
-        font-size:11px;
+        font-size:12px;
       }
       .choices{
         display:grid !important;
         grid-template-columns: repeat(4, minmax(0,1fr));
-        gap:4px;
+        gap:5px;
         visibility:visible;
       }
       .choice{
-        font-size:11px;
-        padding:4px 0;
-        min-height:24px;
+        font-size:12px;
+        padding:5px 0;
+        min-height:28px;
         visibility:visible;
       }
     .mobileDock,
@@ -845,6 +928,7 @@
           <path d="M7 3.5h10a1 1 0 0 1 1 1V21l-6-3.8L6 21V4.5a1 1 0 0 1 1-1z"></path>
         </svg>
       </button>
+      <button class="viewerTopBadge" id="btnViewerTop" aria-label="뷰어 맨위로" title="맨위로">맨위로</button>
       <button class="viewerNav left" id="btnPrevQ" aria-label="이전 문제">‹</button>
       <button class="viewerNav right" id="btnNextQ" aria-label="다음 문제">›</button>
       <div id="pdfAllPages" aria-label="문제 PDF 전체 페이지"></div>
@@ -1070,6 +1154,8 @@
   const noteArea = document.getElementById("noteArea");
   const copyHint = document.getElementById("copyHint");
   const btnBookmark = document.getElementById("btnBookmark");
+  const btnViewerTop = document.getElementById("btnViewerTop");
+  const appHeader = document.querySelector("header");
   let pdfJsLoaderPromise = null;
   let tesseractLoaderPromise = null;
   let questionManifestPromise = null;
@@ -1116,6 +1202,11 @@
     loadAdFitScript();
   }
 
+  function updateLayoutVars(){
+    if (!appHeader) return;
+    document.documentElement.style.setProperty("--mobile-header-h", `${Math.ceil(appHeader.offsetHeight)}px`);
+  }
+
   // ====== 버튼 이벤트 ======
   document.getElementById("btnHome").addEventListener("click", () => {
     const to = `./category.html?category=${encodeURIComponent(CATEGORY_NAME)}`;
@@ -1131,6 +1222,12 @@
   document.getElementById("btnPrevQ").addEventListener("click", () => moveFocus(-1));
   document.getElementById("btnNextQ").addEventListener("click", () => moveFocus(1));
   btnBookmark.addEventListener("click", () => toggleBookmark(state.focusQ));
+  if (btnViewerTop){
+    btnViewerTop.addEventListener("click", () => {
+      scrollPdfViewportTo(0);
+      updateViewerTopBadge();
+    });
+  }
 
   document.getElementById("scrollTop").addEventListener("click", () => sheet.scrollTo({top:0, behavior:"smooth"}));
 
@@ -1213,6 +1310,7 @@
   const examTitle = `${CATEGORY_NAME} · ${EXAM_NAME}`;
   document.title = `${examTitle} | 문제풀이 + 정답확인`;
   pageTitle.textContent = examTitle;
+  updateLayoutVars();
   initAdFit("adfitQuizSide", ADFIT_UNITS.quizSide, "300", "250");
 
   loadUi();
@@ -1229,9 +1327,12 @@
   }
   focusCard(state.focusQ, false);
   syncMobileSheet();
+  updateViewerTopBadge();
   initPdf();
   window.addEventListener("resize", () => {
     enforceMobileReadingMode();
+    updateLayoutVars();
+    updateViewerTopBadge();
   });
 
   // ====== 저장/로드(UI) ======
@@ -1358,6 +1459,7 @@
     btn.textContent = isSingle ? "↔" : "↕";
     btn.title = isSingle ? "한 문제 보기" : "전체문제 보기";
     btn.classList.toggle("active", isSingle);
+    updateViewerTopBadge();
   }
 
   function toggleViewMode(){
@@ -2561,6 +2663,60 @@
     }, 0);
   }
 
+  function detectHorizontalContentBounds(canvas, yStart = 0, yEnd = canvas.height){
+    try{
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return { left: 0, width: canvas.width };
+      const w = canvas.width;
+      const y0 = Math.max(0, Math.floor(yStart));
+      const y1 = Math.max(y0 + 1, Math.min(canvas.height, Math.ceil(yEnd)));
+      const h = y1 - y0;
+      if (w < 40 || h < 20) return { left: 0, width: w };
+
+      const img = ctx.getImageData(0, y0, w, h);
+      const data = img.data;
+      const colStep = 2;
+      const rowStep = 3;
+      const minHits = Math.max(2, Math.floor(h / 360));
+      const isInk = (x) => {
+        let hits = 0;
+        for (let y = 0; y < h; y += rowStep){
+          const i = ((y * w + x) * 4);
+          const a = data[i + 3];
+          if (a < 8) continue;
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          if (r < 244 || g < 244 || b < 244){
+            hits++;
+            if (hits >= minHits) return true;
+          }
+        }
+        return false;
+      };
+
+      let left = 0;
+      while (left < w - 1 && !isInk(left)) left += colStep;
+      if (left >= w - 1) return { left: 0, width: w };
+
+      let right = w - 1;
+      while (right > left && !isInk(right)) right -= colStep;
+
+      const pad = Math.max(8, Math.floor(w * 0.012));
+      left = Math.max(0, left - pad);
+      right = Math.min(w - 1, right + pad);
+      const width = Math.max(1, right - left + 1);
+
+      // 감지가 과도한 경우(너무 좁아짐)에는 원본 유지
+      if (width < Math.floor(w * 0.55)) return { left: 0, width: w };
+      // 공백 제거 이점이 거의 없으면 원본 유지
+      if (width > Math.floor(w * 0.97)) return { left: 0, width: w };
+      return { left, width };
+    }catch(_){
+      return { left: 0, width: canvas.width };
+    }
+  }
+
   async function renderPdfPage(page, q){
     if (state.viewMode !== "single") {
       return renderAllPdfPages(q);
@@ -2595,9 +2751,10 @@
       srcTop = Math.max(0, Math.floor(fullCanvas.height * range.start));
       const srcBottom = Math.max(srcTop + 1, Math.ceil(fullCanvas.height * range.end));
       srcHeight = Math.max(1, srcBottom - srcTop);
-      // 가로 텍스트 잘림 방지를 위해 좌우는 자르지 않는다.
-      srcLeft = 0;
-      srcWidth = fullCanvas.width;
+      // 좌우 여백(빈 흰 영역) 자동 트리밍으로 가독성을 높인다.
+      const trim = detectHorizontalContentBounds(fullCanvas, srcTop, srcTop + srcHeight);
+      srcLeft = trim.left;
+      srcWidth = trim.width;
     }
 
     const destWidth = fullCanvas.width;
@@ -2694,6 +2851,27 @@
           transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null
         }).promise;
         if (navToken !== state.allNavToken) return;
+
+        // 전체보기에서도 좌우 흰 여백을 줄여 실제 문제 영역 가독성을 높인다.
+        const trim = detectHorizontalContentBounds(canvas, 0, canvas.height);
+        if (trim.left > 0 || trim.width < canvas.width) {
+          const cropped = document.createElement("canvas");
+          cropped.className = "pdfPageCanvas";
+          cropped.dataset.page = String(p);
+          cropped.width = canvas.width;
+          cropped.height = canvas.height;
+          cropped.style.width = canvas.style.width;
+          cropped.style.height = canvas.style.height;
+          const cctx = cropped.getContext("2d");
+          cctx.drawImage(
+            canvas,
+            trim.left, 0, trim.width, canvas.height,
+            0, 0, cropped.width, cropped.height
+          );
+          pdfAllPages.appendChild(cropped);
+          state.allPageCanvases[p] = cropped;
+          continue;
+        }
 
         pdfAllPages.appendChild(canvas);
         state.allPageCanvases[p] = canvas;
@@ -2805,10 +2983,34 @@
     const canScrollInsideViewer = (pdfViewer.scrollHeight - pdfViewer.clientHeight) > 4;
     if (canScrollInsideViewer){
       pdfViewer.scrollTo({ top: safeTop, behavior: "auto" });
+      requestAnimationFrame(updateViewerTopBadge);
       return;
     }
     const viewerRectTop = pdfViewer.getBoundingClientRect().top + window.scrollY;
     window.scrollTo({ top: Math.max(0, viewerRectTop + safeTop - 8), behavior: "auto" });
+    requestAnimationFrame(updateViewerTopBadge);
+  }
+
+  function shouldShowViewerTopBadge(){
+    const portraitMobile = window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches;
+    const nonMobile = !window.matchMedia("(max-width: 768px)").matches;
+    return portraitMobile || nonMobile;
+  }
+
+  function getViewerScrollTop(){
+    const canScrollInsideViewer = (pdfViewer.scrollHeight - pdfViewer.clientHeight) > 4;
+    if (canScrollInsideViewer) return Math.max(0, pdfViewer.scrollTop || 0);
+    const viewerTop = pdfViewer.getBoundingClientRect().top + window.scrollY;
+    return Math.max(0, window.scrollY - (viewerTop - 8));
+  }
+
+  function updateViewerTopBadge(){
+    if (!btnViewerTop) return;
+    if (!shouldShowViewerTopBadge()){
+      btnViewerTop.classList.remove("show");
+      return;
+    }
+    btnViewerTop.classList.toggle("show", getViewerScrollTop() > 90);
   }
 
   function setPdfFramePage(page, q){
@@ -3522,11 +3724,14 @@
     if (!window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches) {
       closeMobileSheet();
     }
+    updateViewerTopBadge();
     if (state.viewMode !== "single") {
       state.allPagesRenderKey = null;
       navigatePdfToQuestion(state.focusQ || 1);
     }
   });
+  pdfViewer.addEventListener("scroll", () => updateViewerTopBadge());
+  window.addEventListener("scroll", () => updateViewerTopBadge(), { passive: true });
 
   function visibleQuestions(){
     const arr = [];
