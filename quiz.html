@@ -517,7 +517,7 @@
       }
       .panel{border-radius:10px}
       .panel .title{padding:8px 10px}
-      .viewer{min-height:calc(100dvh - 250px); padding:6px}
+      .viewer{min-height:calc(100dvh - 210px); padding:6px}
       .sheet{height:auto; max-height:none; padding:8px}
       .stats{grid-template-columns:repeat(2,1fr)}
       .subStats{grid-template-columns:repeat(2,1fr)}
@@ -536,7 +536,7 @@
         left:0; right:0; bottom:0;
         z-index:30;
         display:grid;
-        grid-template-columns: 1.3fr 1fr 1fr 1fr 1fr 1fr;
+        grid-template-columns: 1.2fr .9fr .9fr .8fr .8fr .8fr .8fr 1fr;
         gap:6px;
         padding:8px;
         border-top:1px solid var(--line);
@@ -552,9 +552,9 @@
       }
       .mobileDock button{
         padding:9px 6px;
-        font-size:12px;
+        font-size:11px;
       }
-      body{padding-bottom:76px}
+      body{padding-bottom:88px}
 
       .sheetOverlay{
         position:fixed;
@@ -716,10 +716,12 @@
 
 <div class="mobileDock" id="mobileDock">
   <div class="qnow" id="mobileQNow">1번</div>
-  <button id="mobilePrev" class="secondary">이전</button>
-  <button id="mobileNext" class="secondary">다음</button>
+  <button id="mobilePrev" class="secondary">&lt;</button>
+  <button id="mobileNext" class="secondary">&gt;</button>
   <button id="mobileChoice1">1</button>
   <button id="mobileChoice2">2</button>
+  <button id="mobileChoice3">3</button>
+  <button id="mobileChoice4">4</button>
   <button id="mobileSheetOpen" class="ghost">답안</button>
 </div>
 
@@ -728,8 +730,6 @@
     <div class="sheetTop">
       <strong style="font-size:13px;">답안지(모바일)</strong>
       <div class="controls">
-        <button id="mobileChoice3">3</button>
-        <button id="mobileChoice4">4</button>
         <button id="mobileSheetClose" class="secondary">닫기</button>
       </div>
     </div>
@@ -1001,6 +1001,7 @@
   initAdFit("adfitQuizSide", ADFIT_UNITS.quizSide, "300", "250");
 
   loadUi();
+  enforceMobileReadingMode();
   buildGrid();
   loadSaved();
   loadBookmarks();
@@ -1014,6 +1015,9 @@
   focusCard(state.focusQ, false);
   syncMobileSheet();
   initPdf();
+  window.addEventListener("resize", () => {
+    enforceMobileReadingMode();
+  });
 
   // ====== 저장/로드(UI) ======
   function saveUi(){
@@ -1099,6 +1103,30 @@
     btnFontDown.disabled = state.pdfZoom <= 0.7;
   }
 
+  function isMobileViewport(){
+    return window.matchMedia("(max-width: 768px)").matches;
+  }
+
+  function enforceMobileReadingMode(){
+    if (!isMobileViewport()) return;
+    let changed = false;
+    if (state.viewMode !== "single") {
+      state.viewMode = "single";
+      changed = true;
+    }
+    if (state.pdfZoom < 1.1) {
+      state.pdfZoom = 1.1;
+      changed = true;
+    }
+    if (changed) {
+      state.allPagesRenderKey = null;
+      state.allPageCanvases = [];
+      updateViewModeUi();
+      updateZoomButtons();
+      saveUi();
+    }
+  }
+
   function changePdfZoom(delta){
     const next = Math.max(0.7, Math.min(1.8, Number((state.pdfZoom + delta).toFixed(2))));
     if (next === state.pdfZoom) return;
@@ -1128,6 +1156,13 @@
   }
 
   function toggleViewMode(){
+    if (isMobileViewport()) {
+      state.viewMode = "single";
+      updateViewModeUi();
+      saveUi();
+      navigatePdfToQuestion(state.focusQ || 1);
+      return;
+    }
     state.viewMode = state.viewMode === "single" ? "all" : "single";
     updateViewModeUi();
     saveUi();
