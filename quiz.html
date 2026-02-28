@@ -601,6 +601,78 @@
       .qnum{font-size:11px}
       .mark{font-size:10px}
     }
+    @media (max-width: 1100px) and (orientation: landscape){
+      header{
+        position:sticky;
+        top:0;
+        padding:6px 10px;
+        gap:8px;
+        flex-direction:row;
+        align-items:center;
+      }
+      header .left{
+        width:auto;
+        min-width:0;
+        flex-wrap:nowrap;
+      }
+      header h1{
+        font-size:13px;
+        white-space:nowrap;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        max-width:45vw;
+      }
+      .pill{display:none}
+      header .controls{
+        display:flex;
+        flex-wrap:nowrap;
+        width:auto;
+        gap:4px;
+        overflow-x:auto;
+      }
+      header .controls button,
+      header .controls .toggle{
+        font-size:10px;
+        padding:5px 7px;
+        white-space:nowrap;
+      }
+      .wrap{
+        display:grid;
+        grid-template-columns: 1.55fr .95fr;
+        gap:8px;
+        padding:8px;
+        height:calc(100dvh - var(--header-h));
+      }
+      .wrap > section.panel,
+      .wrap > aside.panel{
+        margin:0;
+        display:flex !important;
+      }
+      .panel .title{
+        padding:6px 8px;
+        gap:6px;
+      }
+      .pdfControlRow .controls{
+        gap:4px;
+      }
+      .pdfControlRow .controls button{
+        font-size:10px;
+        padding:5px 7px;
+      }
+      #openQ,#openA{display:none}
+      .viewer{
+        min-height:calc(100dvh - 118px);
+        padding:4px;
+      }
+      .sheet{
+        min-height:calc(100dvh - 118px);
+      }
+      .mobileDock,
+      .sheetOverlay{
+        display:none !important;
+      }
+      body{padding-bottom:0}
+    }
   </style>
 </head>
 <body>
