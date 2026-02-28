@@ -868,6 +868,11 @@
   const mobileQNow = document.getElementById("mobileQNow");
   const sheetOverlay = document.getElementById("sheetOverlay");
   const mobileSheetMount = document.getElementById("mobileSheetMount");
+  const isLocalDevHost = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+
+  if (answerKeyInfo && !isLocalDevHost) {
+    answerKeyInfo.style.display = "none";
+  }
 
   function loadAdFitScript() {
     if (window.__adfitLoaded) return;
@@ -1155,6 +1160,7 @@
   }
 
   function updateAnswerKeyInfo(){
+    if (!isLocalDevHost) return;
     const isLocalRuntime = location.protocol === "file:" ||
       location.hostname === "localhost" ||
       location.hostname === "127.0.0.1" ||
@@ -1196,16 +1202,32 @@
 
     try{
       const rawPdfPath = String(ANSWER_PDF_URL || "").split("#")[0].split("?")[0].trim();
-      const normalizedPdfPath = rawPdfPath.replace(/^\.\//, "").replace(/^quiz\//, "");
+      const decodedPdfPath = (() => {
+        try { return decodeURIComponent(rawPdfPath); } catch(_) { return rawPdfPath; }
+      })();
+      const normalizedPdfPath = decodedPdfPath.replace(/^\.\//, "").replace(/^quiz\//, "");
       if (!normalizedPdfPath || !/\.pdf$/i.test(normalizedPdfPath)) {
         state.answerKeyDynamic = null;
         state.answerKeyStatus = "unavailable";
         return false;
       }
       const jsonRelPath = normalizedPdfPath.replace(/\.pdf$/i, ".json");
-      const path = `./${encodeURI(jsonRelPath)}`;
-      const res = await fetch(path, { cache: "no-store" });
-      if (!res.ok) {
+      const candidates = [];
+      for (const raw of [jsonRelPath, jsonRelPath.normalize("NFC"), jsonRelPath.normalize("NFD")]){
+        const rel = raw.replace(/^\.\//, "");
+        const encoded = `./${encodeURI(rel)}`;
+        const plain = `./${rel}`;
+        if (!candidates.includes(encoded)) candidates.push(encoded);
+        if (!candidates.includes(plain)) candidates.push(plain);
+      }
+      let res = null;
+      for (const c of candidates){
+        try{
+          const r = await fetch(c, { cache: "no-store" });
+          if (r.ok) { res = r; break; }
+        }catch(_){}
+      }
+      if (!res) {
         state.answerKeyDynamic = null;
         state.answerKeyStatus = "unavailable";
         return false;
@@ -1281,11 +1303,24 @@
   }
 
   async function resolveExistingPdfUrl(pathValue){
-    const baseRaw = String(pathValue || "").split("#")[0];
+    const baseRaw = String(pathValue || "").split("#")[0].split("?")[0].trim();
+    const decodedRaw = (() => {
+      try { return decodeURIComponent(baseRaw); } catch(_) { return baseRaw; }
+    })();
     const candidates = [];
-    for (const raw of [baseRaw, baseRaw.normalize("NFC"), baseRaw.normalize("NFD")]){
-      const encoded = encodeURI(raw);
+    for (const raw of [
+      baseRaw,
+      decodedRaw,
+      decodedRaw.normalize("NFC"),
+      decodedRaw.normalize("NFD"),
+      baseRaw.normalize("NFC"),
+      baseRaw.normalize("NFD")
+    ]){
+      const safe = String(raw || "").trim();
+      if (!safe) continue;
+      const encoded = encodeURI(safe);
       if (!candidates.includes(encoded)) candidates.push(encoded);
+      if (!candidates.includes(safe)) candidates.push(safe);
     }
 
     for (const c of candidates){
