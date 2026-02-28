@@ -529,6 +529,13 @@
       .panel{border-radius:10px}
       .panel .title{padding:8px 10px}
       .viewer{min-height:calc(100dvh - 210px); padding:6px}
+      .viewer:not(.single) .bookmarkBtn{
+        position:fixed;
+        right:10px;
+        bottom:96px;
+        left:auto;
+        top:auto;
+      }
       .viewerNav{
         width:40px;
         height:84px;
@@ -546,6 +553,14 @@
       .choices{gap:4px}
       .choice{padding:5px 0; font-size:11px}
       .notePanel textarea{min-height:110px}
+      .currentQInfo{
+        min-width:42px;
+        justify-content:center;
+        white-space:nowrap;
+        word-break:keep-all;
+        line-height:1.05;
+        padding:4px 8px;
+      }
 
       .wrap{display:block}
       .wrap > section.panel{margin-bottom:8px}
@@ -564,15 +579,23 @@
         backdrop-filter:blur(8px);
       }
       .mobileDock .qnow{
-        display:flex; align-items:center; justify-content:center;
-        border:1px solid var(--line);
-        border-radius:8px;
-        font-size:12px; font-weight:700;
-        color:var(--muted);
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        min-width:42px;
+        margin:0;
+        padding:4px 8px;
+        border-radius:999px;
       }
       .mobileDock button{
         padding:9px 6px;
         font-size:11px;
+      }
+      .mobileDock button.active{
+        border-color:rgba(10,102,214,.65);
+        background:rgba(10,102,214,.2);
+        color:#0a66d6;
+        box-shadow:0 0 0 1px rgba(10,102,214,.15) inset;
       }
       body{padding-bottom:88px}
 
@@ -686,11 +709,20 @@
       .sheet{
         min-height:calc(100dvh - 118px);
       }
-      .mobileDock,
-      .sheetOverlay{
-        display:none !important;
+    .mobileDock,
+    .sheetOverlay{
+      display:none !important;
+    }
+      .viewer:not(.single) .bookmarkBtn{
+        bottom:12px;
       }
       body{padding-bottom:0}
+    }
+    body.theme-dark .mobileDock button.active{
+      border-color:rgba(139,192,255,.75);
+      background:rgba(139,192,255,.22);
+      color:#d5e9ff;
+      box-shadow:0 0 0 1px rgba(139,192,255,.25) inset;
     }
   </style>
 </head>
@@ -716,8 +748,7 @@
     <div class="title pdfTitleBar">
       <div class="pdfControlRow">
         <div class="pdfLeadGroup">
-          <span class="currentQInfo" id="currentQInfo">현재 1번</span>
-          <span class="answerKeyInfo modeStateInfo mode-all" id="viewModeInfo">전체</span>
+          <span class="currentQInfo" id="currentQInfo">1번</span>
         </div>
         <div class="controls">
           <button id="btnFontUp" class="secondary">글자 ⊕</button>
@@ -806,14 +837,14 @@
 </div>
 
 <div class="mobileDock" id="mobileDock">
-  <div class="qnow" id="mobileQNow">1번</div>
+  <div class="qnow currentQInfo" id="mobileQNow">1번</div>
   <button id="mobilePrev" class="secondary">&lt;</button>
   <button id="mobileNext" class="secondary">&gt;</button>
   <button id="mobileChoice1">1</button>
   <button id="mobileChoice2">2</button>
   <button id="mobileChoice3">3</button>
   <button id="mobileChoice4">4</button>
-  <button id="mobileSheetOpen" class="ghost">답안</button>
+  <button id="mobileSheetOpen" class="ghost">답안지</button>
 </div>
 
 <div class="sheetOverlay" id="sheetOverlay">
@@ -1228,18 +1259,12 @@
 
   function updateViewModeUi(){
     const btn = document.getElementById("btnViewMode");
-    const viewModeInfo = document.getElementById("viewModeInfo");
     const isSingle = state.viewMode === "single";
     pdfViewer.classList.toggle("single", isSingle);
     pdfViewer.classList.toggle("all", !isSingle);
     btn.textContent = isSingle ? "↔" : "↕";
     btn.title = isSingle ? "한 문제 보기" : "전체문제 보기";
     btn.classList.toggle("active", isSingle);
-    if (viewModeInfo) {
-      viewModeInfo.textContent = isSingle ? "한 문제" : "전체";
-      viewModeInfo.classList.toggle("mode-single", isSingle);
-      viewModeInfo.classList.toggle("mode-all", !isSingle);
-    }
   }
 
   function toggleViewMode(){
@@ -2529,14 +2554,51 @@
     }
 
     const targetQ = Number.isFinite(q) ? q : (state.focusQ || 1);
-    const located = await locateQuestionInPdf(targetQ);
+    const mobileViewport = isMobileViewport();
+    const pageMap = state.pdfNav.questionPageMap;
+    const ratioMap = state.pdfNav.questionTopRatioMap;
+    let targetPage = null;
+    let located = null;
+    let presetRatio = null;
+
+    if (mobileViewport){
+      const presetAnchors = getPresetAnchorsForCurrentExam();
+      if (presetAnchors){
+        const mapped = buildMapFromAnchors(presetAnchors);
+        if (Array.isArray(mapped.pageMap) && Number.isFinite(mapped.pageMap[targetQ])) {
+          targetPage = Math.max(1, Math.min(pdf.numPages, Math.floor(mapped.pageMap[targetQ])));
+          if (Array.isArray(mapped.ratioMap) && Number.isFinite(mapped.ratioMap[targetQ])) {
+            presetRatio = Math.max(0, Math.min(1, Number(mapped.ratioMap[targetQ])));
+          }
+        }
+      }
+      if (!Number.isFinite(targetPage) && Array.isArray(pageMap) && Number.isFinite(pageMap[targetQ])) {
+        targetPage = Math.max(1, Math.min(pdf.numPages, Math.floor(pageMap[targetQ])));
+      }
+      if (!Number.isFinite(targetPage)) {
+        targetPage = Math.max(1, Math.min(pdf.numPages, getPdfPageByQuestion(targetQ)));
+      }
+    } else {
+      located = await locateQuestionInPdf(targetQ);
+      targetPage = located.page;
+    }
     if (navToken !== state.allNavToken) return;
-    const targetPage = located.page;
     const targetCanvas = state.allPageCanvases[targetPage];
-    let ratio = Number.isFinite(located.ratio) ? located.ratio : 0.12;
-    // 한 문제 보기와 동일한 시작점 계산을 전체 보기 앵커에도 반영한다.
-    // 저품질 문서 말미(98~100)에서 하단 과점프되는 현상을 줄이기 위함.
-    if (Number.isFinite(targetQ)) {
+    let ratio = 0.12;
+    if (mobileViewport){
+      if (Number.isFinite(presetRatio)) {
+        ratio = presetRatio;
+      } else if (Array.isArray(pageMap) && Array.isArray(ratioMap) && pageMap[targetQ] === targetPage && Number.isFinite(ratioMap[targetQ])) {
+        ratio = Math.max(0, Math.min(1, Number(ratioMap[targetQ])));
+      } else {
+        ratio = 0.12;
+      }
+    } else {
+      ratio = Number.isFinite(located?.ratio) ? located.ratio : 0.12;
+    }
+    // 한 문제 보기 시작점 보정은 데스크톱에만 적용.
+    // 모바일 전체보기에서는 과보정으로 문항 오프셋이 커지는 경우가 있어 제외한다.
+    if (!mobileViewport && Number.isFinite(targetQ)) {
       try{
         const range = await getQuestionCropRange(targetQ, targetPage);
         if (range && Number.isFinite(range.start) && Number.isFinite(range.focusStart)) {
@@ -2549,24 +2611,28 @@
     }
     // 전체보기에서는 저신뢰/말미 문항에서 하단 푸터로 과점프하는 경우가 있어,
     // 페이지맵 기반 비율을 우선 보정하고 하단 점프 상한을 둔다.
-    const pageMap = state.pdfNav.questionPageMap;
-    const ratioMap = state.pdfNav.questionTopRatioMap;
     const mappedRatio = (Array.isArray(pageMap) && Array.isArray(ratioMap) && pageMap[targetQ] === targetPage && Number.isFinite(ratioMap[targetQ]))
       ? Math.max(0, Math.min(1, Number(ratioMap[targetQ])))
       : null;
+    if (mobileViewport && mappedRatio != null) {
+      // 모바일 전체보기는 맵 기반 앵커를 우선해 문항 표시 일관성을 높인다.
+      ratio = mappedRatio;
+    }
     if (mappedRatio != null) {
       // 탐지값이 맵 기준보다 과도하게 아래쪽이면 맵 기준으로 되돌린다.
       if (!Number.isFinite(ratio) || ratio > (mappedRatio + 0.22)) {
         ratio = mappedRatio;
       }
     }
-    ratio = Math.max(0.04, Math.min(0.88, ratio));
+    ratio = mobileViewport
+      ? Math.max(0.03, Math.min(0.8, ratio))
+      : Math.max(0.04, Math.min(0.88, ratio));
     if (targetCanvas) {
       const top = targetCanvas.offsetTop + (targetCanvas.clientHeight * ratio) - 20;
       pdfViewer.scrollTo({ top: Math.max(0, top), behavior: "auto" });
     }
     state.currentPdfPage = targetPage;
-    const precision = located.exact ? "정확" : "근사";
+    const precision = mobileViewport ? "맵기준" : (located && located.exact ? "정확" : "근사");
     pdfStatus.textContent = `전체 페이지 표시 중 · ${targetPage}페이지${Number.isFinite(targetQ) ? ` · ${targetQ}번` : ""} (${precision})`;
     setPdfLoading(false);
   }
@@ -3240,7 +3306,8 @@
     state.focusQ = q;
     navigatePdfToQuestion(q);
     mobileQNow.textContent = `${q}번`;
-    if (currentQInfo) currentQInfo.textContent = `현재 ${q}번`;
+    if (currentQInfo) currentQInfo.textContent = `${q}번`;
+    updateMobileChoiceButtons();
     updateBookmarkUi(q);
     for(let i=1;i<=100;i++){
       getCard(i).classList.toggle("focus", i===q);
@@ -3320,7 +3387,20 @@
       if (autoGradeEl.checked) gradeQuestion(q);
       updateStats();
       applyFilter();
+      updateMobileChoiceButtons();
       if (state.viewMode === "single") navigatePdfToQuestion(q);
+    }
+  }
+
+  function updateMobileChoiceButtons(){
+    const q = state.focusQ;
+    const selected = Number.isFinite(q) ? state.answers[q] : null;
+    for (let c = 1; c <= 4; c++){
+      const btn = document.getElementById(`mobileChoice${c}`);
+      if (!btn) continue;
+      const on = selected === c;
+      btn.classList.toggle("active", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
     }
   }
 
