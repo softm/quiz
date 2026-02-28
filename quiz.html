@@ -571,8 +571,8 @@
         left:0; right:0; bottom:0;
         z-index:30;
         display:grid;
-        grid-template-columns: 1.2fr .9fr .9fr .8fr .8fr .8fr .8fr 1fr;
-        gap:6px;
+        grid-template-columns: repeat(9, minmax(0, 1fr));
+        gap:4px;
         padding:8px;
         border-top:1px solid var(--line);
         background:var(--panel);
@@ -588,8 +588,21 @@
         border-radius:999px;
       }
       .mobileDock button{
-        padding:9px 6px;
-        font-size:11px;
+        padding:8px 4px;
+        font-size:10px;
+        min-width:0;
+      }
+      .mobileDock #mobileBookmark{
+        width:36px;
+        height:36px;
+        border-radius:10px;
+        padding:0;
+        justify-self:center;
+        align-self:center;
+      }
+      .mobileDock #mobileBookmark svg{
+        width:18px;
+        height:18px;
       }
       .mobileDock button.active{
         border-color:rgba(10,102,214,.65);
@@ -598,6 +611,9 @@
         box-shadow:0 0 0 1px rgba(10,102,214,.15) inset;
       }
       body{padding-bottom:88px}
+      .viewer:not(.single) .bookmarkBtn{
+        display:none;
+      }
 
       .sheetOverlay{
         position:fixed;
@@ -621,10 +637,23 @@
       }
       .sheetOverlay .sheetTop{
         position:sticky; top:0;
-        display:flex; align-items:center; justify-content:space-between;
+        display:grid;
+        grid-template-columns:minmax(0,1fr) auto;
+        align-items:center;
         padding:10px;
         border-bottom:1px solid var(--line);
         background:var(--panel);
+        gap:8px;
+      }
+      .sheetOverlay .sheetTop strong{
+        white-space:nowrap;
+      }
+      .sheetOverlay .sheetTop .controls{
+        width:auto;
+        margin-left:auto;
+        display:flex;
+        justify-self:end;
+        justify-content:flex-end;
       }
       .sheetOverlay .sheetBody{
         padding:8px;
@@ -642,6 +671,19 @@
       .grid{grid-template-columns: repeat(3, minmax(0,1fr));}
       .qnum{font-size:11px}
       .mark{font-size:10px}
+      .mobileDock{
+        gap:3px;
+        padding:6px;
+      }
+      .mobileDock button{
+        padding:7px 3px;
+        font-size:10px;
+      }
+    }
+    @media (max-width: 768px) and (orientation: portrait){
+      .viewerNav{
+        display:none !important;
+      }
     }
     @media (max-width: 1100px) and (orientation: landscape){
       header{
@@ -837,6 +879,11 @@
 </div>
 
 <div class="mobileDock" id="mobileDock">
+  <button id="mobileBookmark" class="bookmarkBtn" aria-label="현재 문제 북마크" title="북마크">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 3.5h10a1 1 0 0 1 1 1V21l-6-3.8L6 21V4.5a1 1 0 0 1 1-1z"></path>
+    </svg>
+  </button>
   <div class="qnow currentQInfo" id="mobileQNow">1번</div>
   <button id="mobilePrev" class="secondary">&lt;</button>
   <button id="mobileNext" class="secondary">&gt;</button>
@@ -850,7 +897,7 @@
 <div class="sheetOverlay" id="sheetOverlay">
   <div class="sheetPanel">
     <div class="sheetTop">
-      <strong style="font-size:13px;">답안지(모바일)</strong>
+      <strong style="font-size:13px;">답안지</strong>
       <div class="controls">
         <button id="mobileSheetClose" class="secondary">닫기</button>
       </div>
@@ -988,6 +1035,7 @@
   let tesseractLoaderPromise = null;
   const mobileDock = document.getElementById("mobileDock");
   const mobileQNow = document.getElementById("mobileQNow");
+  const mobileBookmarkBtn = document.getElementById("mobileBookmark");
   const sheetOverlay = document.getElementById("sheetOverlay");
   const mobileSheetMount = document.getElementById("mobileSheetMount");
   const isLocalDevHost = location.hostname === "localhost" || location.hostname === "127.0.0.1";
@@ -1091,6 +1139,7 @@
 
   document.getElementById("mobilePrev").addEventListener("click", () => moveFocus(-1));
   document.getElementById("mobileNext").addEventListener("click", () => moveFocus(1));
+  document.getElementById("mobileBookmark").addEventListener("click", () => toggleBookmark(state.focusQ));
   document.getElementById("mobileChoice1").addEventListener("click", () => chooseByKeyboard(1));
   document.getElementById("mobileChoice2").addEventListener("click", () => chooseByKeyboard(2));
   document.getElementById("mobileChoice3").addEventListener("click", () => chooseByKeyboard(3));
@@ -2675,8 +2724,11 @@
       });
       return;
     }
-    const targetPage = getPdfPageByQuestion(q);
-    setPdfFramePage(targetPage, q);
+    renderAllPdfPages(q).catch((err) => {
+      setPdfLoading(false);
+      const msg = (err && err.message) ? err.message : "알 수 없는 오류";
+      pdfStatus.innerHTML = `PDF 표시 실패: ${msg} <button id="btnPdfRetry" type="button">재시도</button>`;
+    });
   }
 
   function loadPdfJsLib(){
@@ -3172,6 +3224,11 @@
     btnBookmark.classList.toggle("active", on);
     btnBookmark.setAttribute("aria-pressed", on ? "true" : "false");
     btnBookmark.title = on ? `${target}번 북마크 해제` : `${target}번 북마크`;
+    if (mobileBookmarkBtn){
+      mobileBookmarkBtn.classList.toggle("active", on);
+      mobileBookmarkBtn.setAttribute("aria-pressed", on ? "true" : "false");
+      mobileBookmarkBtn.title = on ? `${target}번 북마크 해제` : `${target}번 북마크`;
+    }
   }
   function toggleBookmark(q){
     const target = Number(q);
@@ -3274,6 +3331,12 @@
         lab.appendChild(document.createTextNode(String(c)));
 
         lab.addEventListener("click", (e) => {
+          if (window.matchMedia("(max-width: 768px)").matches && sheetOverlay.classList.contains("open")){
+            e.preventDefault();
+            focusCard(q, false);
+            closeMobileSheet();
+            return;
+          }
           if (isLocked(q)){
             e.preventDefault();
             return;
@@ -3293,7 +3356,13 @@
 
       card.appendChild(head);
       card.appendChild(choices);
-      card.addEventListener("click", () => focusCard(q, false));
+      card.addEventListener("click", (e) => {
+        if (e.target.closest(".choice")) return;
+        focusCard(q, false);
+        if (window.matchMedia("(max-width: 768px)").matches && sheetOverlay.classList.contains("open")){
+          closeMobileSheet();
+        }
+      });
 
       frag.appendChild(card);
     }
@@ -3368,7 +3437,11 @@
     if (idx < 0) idx = 0;
     if (idx >= vis.length) idx = vis.length - 1;
 
-    focusCard(vis[idx], true);
+    const targetQ = vis[idx];
+    focusCard(targetQ, true);
+    if (state.viewMode !== "single") {
+      renderAllPdfPages(targetQ).catch(() => {});
+    }
   }
 
   function chooseByKeyboard(choice){
@@ -3388,7 +3461,7 @@
       updateStats();
       applyFilter();
       updateMobileChoiceButtons();
-      if (state.viewMode === "single") navigatePdfToQuestion(q);
+      if (state.viewMode === "single" || isMobileViewport()) navigatePdfToQuestion(q);
     }
   }
 
