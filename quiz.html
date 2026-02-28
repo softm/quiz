@@ -500,16 +500,27 @@
         gap:6px;
       }
       header .controls{
-        display:grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        display:flex;
+        flex-wrap:nowrap;
+        align-items:center;
+        overflow-x:auto;
+        -webkit-overflow-scrolling:touch;
+        scrollbar-width:none;
+      }
+      header .controls::-webkit-scrollbar{
+        display:none;
       }
       button{
-        padding:7px 8px;
+        padding:6px 8px;
         font-size:11px;
+        white-space:nowrap;
+        flex:0 0 auto;
       }
       .toggle{
-        justify-content:center;
-        padding:5px 8px;
+        justify-content:flex-start;
+        padding:4px 8px;
+        flex:0 0 auto;
+        white-space:nowrap;
       }
       .wrap{
         padding:8px;
@@ -518,11 +529,20 @@
       .panel{border-radius:10px}
       .panel .title{padding:8px 10px}
       .viewer{min-height:calc(100dvh - 210px); padding:6px}
+      .viewerNav{
+        width:40px;
+        height:84px;
+        font-size:17px;
+        border-radius:10px;
+      }
+      .viewerNav.left{left:4px}
+      .viewerNav.right{right:4px}
       .sheet{height:auto; max-height:none; padding:8px}
       .stats{grid-template-columns:repeat(2,1fr)}
       .subStats{grid-template-columns:repeat(2,1fr)}
       .grid{grid-template-columns: repeat(4, minmax(0,1fr)); gap:6px}
       .qcard{padding:6px 6px 5px}
+      .qnum{font-size:10px}
       .choices{gap:4px}
       .choice{padding:5px 0; font-size:11px}
       .notePanel textarea{min-height:110px}
@@ -594,7 +614,6 @@
       }
     }
     @media (max-width: 520px){
-      header .controls{grid-template-columns: repeat(2, minmax(0, 1fr));}
       .pill{display:none}
       .viewer{min-height:calc(100dvh - 230px)}
       .grid{grid-template-columns: repeat(3, minmax(0,1fr));}
@@ -683,11 +702,12 @@
   </div>
   <div class="controls">
     <button id="btnTheme" class="secondary iconBtn" title="다크/기본 모드" aria-label="다크/기본 모드"><span class="themeIcon">☾</span></button>
+    <span class="answerKeyInfo" id="answerKeyInfo">정답키: 확인 중</span>
     <button id="btnHome" class="ghost">목록</button>
     <button id="btnReset" class="secondary">다시풀기 (R)</button>
-    <button id="btnGrade">채점(전체) (G)</button>
+    <button id="btnGrade">채점 (G)</button>
     <label class="toggle"><input id="autoGrade" type="checkbox" checked /> 자동채점</label>
-    <label class="toggle"><input id="showCorrect" type="checkbox" /> 정답표시(강조)</label>
+    <label class="toggle"><input id="showCorrect" type="checkbox" /> 정답표시</label>
   </div>
 </header>
 
@@ -697,14 +717,13 @@
       <div class="pdfControlRow">
         <div class="pdfLeadGroup">
           <span class="currentQInfo" id="currentQInfo">현재 1번</span>
-          <span class="answerKeyInfo" id="answerKeyInfo">정답키: 확인 중</span>
           <span class="answerKeyInfo modeStateInfo mode-all" id="viewModeInfo">전체</span>
         </div>
         <div class="controls">
-          <button id="btnFontUp" class="secondary">글자크게 ⊕</button>
-          <button id="btnFontDown" class="secondary">글자작게 ⊖</button>
-          <button id="openQ">문제 PDF 새창</button>
-          <button id="openA" class="secondary">정답 PDF 새창</button>
+          <button id="btnFontUp" class="secondary">글자 ⊕</button>
+          <button id="btnFontDown" class="secondary">글자 ⊖</button>
+          <button id="openQ">문제 PDF</button>
+          <button id="openA" class="secondary">정답 PDF</button>
           <button id="btnViewMode" class="ghost modeBtn">↕</button>
         </div>
       </div>
