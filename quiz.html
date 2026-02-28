@@ -492,6 +492,9 @@
     .mobileDock{
       display:none;
     }
+    .landscapeDockMount{
+      display:none;
+    }
     .sheetOverlay{
       display:none;
     }
@@ -737,7 +740,7 @@
         box-shadow:none;
       }
       .viewer{
-        padding-top:64px;
+        padding-top:calc(var(--mobile-toolbar-h, 56px) + 8px);
       }
       .viewerNav{
         display:none !important;
@@ -823,7 +826,7 @@
       }
       .wrap{
         display:grid;
-        grid-template-columns: 1.45fr 1.05fr;
+        grid-template-columns: 1.55fr .45fr;
         gap:8px;
         padding:8px;
         height:calc(100dvh - var(--header-h));
@@ -886,8 +889,38 @@
         -webkit-overflow-scrolling:touch;
         padding:8px;
       }
+      .landscapeDockMount{
+        display:block;
+        border-top:1px solid var(--line);
+        padding:6px;
+      }
+      .mobileDock.inPanel{
+        position:static;
+        left:auto;
+        right:auto;
+        bottom:auto;
+        z-index:auto;
+        display:grid !important;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap:4px;
+        padding:0;
+        border-top:none;
+        background:transparent;
+        backdrop-filter:none;
+      }
+      .mobileDock.inPanel .qnow{
+        min-width:0;
+        padding:3px 4px;
+      }
+      .mobileDock.inPanel button{
+        font-size:10px;
+        padding:6px 4px;
+      }
+      .mobileDock.inPanel #mobileSheetOpen{
+        display:none;
+      }
       .grid{
-        grid-template-columns: repeat(3, minmax(0,1fr));
+        grid-template-columns: repeat(2, minmax(0,1fr));
         gap:7px;
       }
       .qcard{
@@ -909,7 +942,6 @@
         min-height:28px;
         visibility:visible;
       }
-    .mobileDock,
     .sheetOverlay{
       display:none !important;
     }
@@ -989,7 +1021,6 @@
       </div>
       <div class="controls">
         <button id="btnInfoToggle" class="ghost iconBtn" title="정보 더보기/숨기기" aria-label="정보 더보기/숨기기">ⓘ</button>
-        <button id="scrollTop" class="secondary">맨위로</button>
         <button id="btnClearSaved" class="ghost">저장 초기화</button>
       </div>
     </div>
@@ -1034,6 +1065,7 @@
         <div>• 단축키: <b>1~4</b> 선택, <b>←/→</b> 이동, <b>B</b> 북마크, <b>G</b> 채점, <b>R</b> 리셋</div>
       </div>
     </div>
+    <div class="landscapeDockMount" id="landscapeDockMount"></div>
   </aside>
 </div>
 
@@ -1193,10 +1225,13 @@
   const btnBookmark = document.getElementById("btnBookmark");
   const btnViewerTop = document.getElementById("btnViewerTop");
   const appHeader = document.querySelector("header");
+  const pdfTitleBarEl = document.querySelector(".pdfTitleBar");
   let pdfJsLoaderPromise = null;
   let tesseractLoaderPromise = null;
   let questionManifestPromise = null;
   const mobileDock = document.getElementById("mobileDock");
+  const mobileDockHomeParent = mobileDock ? mobileDock.parentElement : null;
+  const landscapeDockMount = document.getElementById("landscapeDockMount");
   const mobileQNow = document.getElementById("mobileQNow");
   const mobileBookmarkBtn = document.getElementById("mobileBookmark");
   const sheetOverlay = document.getElementById("sheetOverlay");
@@ -1244,6 +1279,8 @@
     const rawH = Math.ceil(appHeader.getBoundingClientRect().height || appHeader.offsetHeight || 58);
     const h = Math.min(96, Math.max(48, rawH));
     document.documentElement.style.setProperty("--mobile-header-h", `${h}px`);
+    const barH = pdfTitleBarEl ? Math.max(0, Math.ceil(pdfTitleBarEl.getBoundingClientRect().height || pdfTitleBarEl.offsetHeight || 0)) : 0;
+    document.documentElement.style.setProperty("--mobile-toolbar-h", `${barH}px`);
     const dockH = mobileDock ? Math.max(0, Math.ceil(mobileDock.getBoundingClientRect().height || mobileDock.offsetHeight || 0)) : 0;
     document.documentElement.style.setProperty("--mobile-dock-h", `${dockH}px`);
   }
@@ -1269,8 +1306,6 @@
       updateViewerTopBadge();
     });
   }
-
-  document.getElementById("scrollTop").addEventListener("click", () => sheet.scrollTo({top:0, behavior:"smooth"}));
 
   document.getElementById("openQ").addEventListener("click", () => {
     const url = buildPdfUrl(state.currentPdfPage, true);
@@ -1368,10 +1403,12 @@
   }
   focusCard(state.focusQ, false);
   syncMobileSheet();
+  syncLandscapeDock();
   updateViewerTopBadge();
   initPdf();
   window.addEventListener("resize", () => {
     enforceMobileReadingMode();
+    syncLandscapeDock();
     updateStickyOffsets();
     updateViewerTopBadge();
   });
@@ -2714,21 +2751,29 @@
       const h = y1 - y0;
       if (w < 40 || h < 20) return { left: 0, width: w };
 
-      const img = ctx.getImageData(0, y0, w, h);
+      const ignoreTopRatio = Math.max(0, Math.min(0.35, Number(options.ignoreTopRatio) || 0));
+      const ignoreBottomRatio = Math.max(0, Math.min(0.35, Number(options.ignoreBottomRatio) || 0));
+      const innerY0 = Math.max(y0, Math.min(y1 - 1, y0 + Math.floor(h * ignoreTopRatio)));
+      const innerY1 = Math.max(innerY0 + 1, Math.min(y1, y1 - Math.floor(h * ignoreBottomRatio)));
+      const hh = innerY1 - innerY0;
+      if (hh < 12) return { left: 0, width: w };
+
+      const img = ctx.getImageData(0, innerY0, w, hh);
       const data = img.data;
-      const colStep = 2;
-      const rowStep = 3;
-      const minHits = Math.max(2, Math.floor(h / 360));
+      const colStep = Math.max(1, Math.min(4, Number(options.colStep) || 2));
+      const rowStep = Math.max(2, Math.min(6, Number(options.rowStep) || 3));
+      const minHits = Math.max(3, Math.floor(hh / 180));
+      const inkThreshold = Math.max(200, Math.min(252, Number(options.inkThreshold) || 244));
       const isInk = (x) => {
         let hits = 0;
-        for (let y = 0; y < h; y += rowStep){
+        for (let y = 0; y < hh; y += rowStep){
           const i = ((y * w + x) * 4);
           const a = data[i + 3];
           if (a < 8) continue;
           const r = data[i];
           const g = data[i + 1];
           const b = data[i + 2];
-          if (r < 244 || g < 244 || b < 244){
+          if (r < inkThreshold || g < inkThreshold || b < inkThreshold){
             hits++;
             if (hits >= minHits) return true;
           }
@@ -2744,7 +2789,9 @@
       while (right > left && !isInk(right)) right -= colStep;
 
       const preserveSideRatio = Math.max(0, Math.min(0.08, Number(options.preserveSideRatio) || 0));
-      const pad = Math.max(8, Math.floor(w * 0.012));
+      const edgePadRatio = Math.max(0, Math.min(0.06, Number(options.edgePadRatio) || 0.012));
+      const edgePadMin = Math.max(0, Math.min(24, Number(options.edgePadMin) || 8));
+      const pad = Math.max(edgePadMin, Math.floor(w * edgePadRatio));
       left = Math.max(0, left - pad);
       right = Math.min(w - 1, right + pad);
       if (preserveSideRatio > 0){
@@ -2816,7 +2863,14 @@
       srcHeight = Math.max(1, srcBottom - srcTop);
       // 좌우 여백(빈 흰 영역) 자동 트리밍으로 가독성을 높인다.
       const trim = detectHorizontalContentBounds(fullCanvas, srcTop, srcTop + srcHeight, {
-        preserveSideRatio: isMobileViewport() ? 0 : 0.025
+        preserveSideRatio: isMobileViewport() ? 0 : 0.025,
+        edgePadRatio: isMobileViewport() ? 0.002 : 0.012,
+        edgePadMin: isMobileViewport() ? 1 : 8,
+        inkThreshold: isMobileViewport() ? 232 : 244,
+        ignoreTopRatio: isMobileViewport() ? 0.12 : 0.08,
+        ignoreBottomRatio: isMobileViewport() ? 0.10 : 0.06,
+        colStep: isMobileViewport() ? 1 : 2,
+        rowStep: isMobileViewport() ? 2 : 3
       });
       srcLeft = trim.left;
       srcWidth = trim.width;
@@ -2920,7 +2974,14 @@
 
         // 전체보기에서도 좌우 흰 여백을 줄여 실제 문제 영역 가독성을 높인다.
         const trim = detectHorizontalContentBounds(canvas, 0, canvas.height, {
-          preserveSideRatio: mobileViewport ? 0 : 0.025
+          preserveSideRatio: mobileViewport ? 0 : 0.025,
+          edgePadRatio: mobileViewport ? 0.002 : 0.012,
+          edgePadMin: mobileViewport ? 1 : 8,
+          inkThreshold: mobileViewport ? 232 : 244,
+          ignoreTopRatio: mobileViewport ? 0.12 : 0.08,
+          ignoreBottomRatio: mobileViewport ? 0.10 : 0.06,
+          colStep: mobileViewport ? 1 : 2,
+          rowStep: mobileViewport ? 2 : 3
         });
         if (trim.left > 0 || trim.width < canvas.width) {
           const cropped = document.createElement("canvas");
@@ -3055,8 +3116,17 @@
       return;
     }
     const viewerRectTop = pdfViewer.getBoundingClientRect().top + window.scrollY;
-    window.scrollTo({ top: Math.max(0, viewerRectTop + safeTop - 8), behavior: "auto" });
+    window.scrollTo({ top: Math.max(0, viewerRectTop + safeTop - getViewerScrollAnchorOffset()), behavior: "auto" });
     requestAnimationFrame(updateViewerTopBadge);
+  }
+
+  function getViewerScrollAnchorOffset(){
+    const portraitMobile = window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches;
+    if (!portraitMobile) return 8;
+    const hh = appHeader ? Math.ceil(appHeader.getBoundingClientRect().height || appHeader.offsetHeight || 0) : 0;
+    const bh = pdfTitleBarEl ? Math.ceil(pdfTitleBarEl.getBoundingClientRect().height || pdfTitleBarEl.offsetHeight || 0) : 0;
+    // fixed 헤더 + fixed 컨트롤바 높이를 반영해 문항 위치 오프셋 보정
+    return Math.max(8, hh + bh + 6);
   }
 
   function shouldShowViewerTopBadge(){
@@ -3069,11 +3139,15 @@
     const canScrollInsideViewer = (pdfViewer.scrollHeight - pdfViewer.clientHeight) > 4;
     if (canScrollInsideViewer) return Math.max(0, pdfViewer.scrollTop || 0);
     const viewerTop = pdfViewer.getBoundingClientRect().top + window.scrollY;
-    return Math.max(0, window.scrollY - (viewerTop - 8));
+    return Math.max(0, window.scrollY - (viewerTop - getViewerScrollAnchorOffset()));
   }
 
   function updateViewerTopBadge(){
     if (!btnViewerTop) return;
+    if (state.viewMode === "single"){
+      btnViewerTop.classList.remove("show");
+      return;
+    }
     if (!shouldShowViewerTopBadge()){
       btnViewerTop.classList.remove("show");
       return;
@@ -3803,8 +3877,25 @@
     }
   }
 
+  function syncLandscapeDock(){
+    if (!mobileDock) return;
+    const mobileLandscapePanelMode = window.matchMedia("(max-width: 1100px) and (orientation: landscape) and (pointer: coarse)").matches;
+    if (mobileLandscapePanelMode && landscapeDockMount){
+      if (landscapeDockMount.firstElementChild !== mobileDock){
+        landscapeDockMount.appendChild(mobileDock);
+      }
+      mobileDock.classList.add("inPanel");
+      return;
+    }
+    if (mobileDockHomeParent && mobileDock.parentElement !== mobileDockHomeParent){
+      mobileDockHomeParent.appendChild(mobileDock);
+    }
+    mobileDock.classList.remove("inPanel");
+  }
+
   window.addEventListener("resize", () => {
     syncMobileSheet();
+    syncLandscapeDock();
     updateStickyOffsets();
     if (!window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches) {
       closeMobileSheet();
