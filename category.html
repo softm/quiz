@@ -153,10 +153,10 @@
     <section class="list" id="list"></section>
   </main>
 
-  <script src="./data/exams.manifest.js"></script>
   <script>
     const params = new URLSearchParams(location.search);
     const categoryName = params.get("category") || "농산물품질관리사";
+    const categoryNo = params.get("catNo") || "";
     const ADFIT_UNITS = {
       categoryTop: "DAN_REPLACE_CATEGORY_TOP",
     };
@@ -181,27 +181,37 @@
       loadAdFitScript();
     }
 
+    function normalizePdfPath(path) {
+      const raw = String(path || "").trim();
+      if (!raw) return "";
+      return raw.replace(/^\.\//, "").replace(/^quiz\//, "");
+    }
+
     function examStatus(exam) {
-      if (exam.questionPdf && exam.answerPdf) return "문제/정답 세트 준비 완료";
-      if (exam.questionPdf && !exam.answerPdf) return "정답 PDF 없음";
-      if (!exam.questionPdf && exam.answerPdf) return "문제 PDF 없음";
+      const hasQ = Boolean(normalizePdfPath(exam.questionPdf));
+      const hasA = Boolean(normalizePdfPath(exam.answerPdf));
+      if (hasQ && hasA) return "문제/정답 세트 준비 완료";
+      if (hasQ && !hasA) return "정답 PDF 없음";
+      if (!hasQ && hasA) return "문제 PDF 없음";
       return "파일 누락";
     }
 
     function makeQuizUrl(exam) {
+      const question = normalizePdfPath(exam.questionPdf);
+      const answer = normalizePdfPath(exam.answerPdf);
       const q = new URLSearchParams({
-        category: categoryName,
-        exam: exam.examName,
-        question: exam.questionPdf || "",
-        answer: exam.answerPdf || "",
+        category: exam.catNm || categoryName,
+        exam: exam.questionNm,
+        questionNo: exam.questionNo || "",
+        question,
+        answer,
       });
       return `./quiz.html?${q.toString()}`;
     }
 
-    async function loadManifest() {
-      if (window.__EXAMS_MANIFEST__) return window.__EXAMS_MANIFEST__;
-      const res = await fetch("./data/exams.json", { cache: "no-store" });
-      if (!res.ok) throw new Error("manifest fetch failed");
+    async function fetchJson(path) {
+      const res = await fetch(path, { cache: "no-store" });
+      if (!res.ok) throw new Error(`fetch failed: ${path}`);
       return res.json();
     }
 
@@ -213,11 +223,19 @@
       title.textContent = categoryName;
 
       try {
-        const data = await loadManifest();
-
-        const category = (data.categories || []).find((c) => c.categoryName === categoryName);
-        const exams = category ? (category.exams || []) : [];
-        const readyCount = exams.filter((e) => e.questionPdf && e.answerPdf).length;
+        const [categories, questions] = await Promise.all([
+          fetchJson("./json/category.json"),
+          fetchJson("./json/question.json"),
+        ]);
+        const category = (categories || []).find((c) =>
+          (categoryNo && String(c.catNo) === String(categoryNo)) ||
+          (!categoryNo && String(c.catNm) === String(categoryName))
+        );
+        const catNo = category ? category.catNo : categoryNo;
+        const exams = (questions || [])
+          .filter((q) => String(q.catNo) === String(catNo))
+          .sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0));
+        const readyCount = exams.filter((e) => normalizePdfPath(e.questionPdf) && normalizePdfPath(e.answerPdf)).length;
 
         meta.textContent = `총 ${exams.length}개 회차 · 풀이 가능 ${readyCount}개`;
         list.innerHTML = "";
@@ -228,22 +246,24 @@
         }
 
         for (const exam of exams) {
-          const ready = Boolean(exam.questionPdf && exam.answerPdf);
+          const questionPath = normalizePdfPath(exam.questionPdf);
+          const answerPath = normalizePdfPath(exam.answerPdf);
+          const ready = Boolean(questionPath && answerPath);
 
           const card = document.createElement("article");
           card.className = "exam";
 
           const quizUrl = makeQuizUrl(exam);
-          const qLink = exam.questionPdf ? `./${encodeURI(exam.questionPdf)}` : "#";
-          const aLink = exam.answerPdf ? `./${encodeURI(exam.answerPdf)}` : "#";
+          const qLink = questionPath ? `./${encodeURI(questionPath)}` : "#";
+          const aLink = answerPath ? `./${encodeURI(answerPath)}` : "#";
 
           card.innerHTML = `
-            <h2 class="name">${exam.examName}</h2>
+            <h2 class="name">${exam.questionNm}</h2>
             <p class="status">${examStatus(exam)}</p>
             <div class="row">
               <a class="btn ${ready ? "" : "disabled"}" href="${quizUrl}">풀이 시작</a>
-              <a class="btn secondary ${exam.questionPdf ? "" : "disabled"}" href="${qLink}" target="_blank">문제 PDF</a>
-              <a class="btn secondary ${exam.answerPdf ? "" : "disabled"}" href="${aLink}" target="_blank">정답 PDF</a>
+              <a class="btn secondary ${questionPath ? "" : "disabled"}" href="${qLink}" target="_blank">문제 PDF</a>
+              <a class="btn secondary ${answerPath ? "" : "disabled"}" href="${aLink}" target="_blank">정답 PDF</a>
             </div>
           `;
 
@@ -251,7 +271,7 @@
         }
       } catch (err) {
         meta.textContent = "데이터를 불러오지 못했습니다.";
-        list.innerHTML = '<article class="empty">`scripts/build-exams-manifest.mjs` 실행 후 새로고침하세요.</article>';
+        list.innerHTML = '<article class="empty">json 데이터(group/category/question)를 확인하세요.</article>';
       }
     }
 

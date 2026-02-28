@@ -156,14 +156,7 @@
     <section class="grid" id="categoryGrid"></section>
   </main>
 
-  <script src="./data/exams.manifest.js"></script>
   <script>
-    const categoryOrder = [
-      "농산물품질관리사",
-      "시설원예기사",
-      "유기농업기사",
-    ];
-
     const kindByCategory = {
       "농산물품질관리사": "qcm",
       "시설원예기사": "greenhouse",
@@ -193,11 +186,16 @@
       loadAdFitScript();
     }
 
-    async function loadManifest() {
-      if (window.__EXAMS_MANIFEST__) return window.__EXAMS_MANIFEST__;
-      const res = await fetch("./data/exams.json", { cache: "no-store" });
-      if (!res.ok) throw new Error("manifest fetch failed");
+    async function fetchJson(path) {
+      const res = await fetch(path, { cache: "no-store" });
+      if (!res.ok) throw new Error(`fetch failed: ${path}`);
       return res.json();
+    }
+
+    function normalizePdfPath(path) {
+      const raw = String(path || "").trim();
+      if (!raw) return "";
+      return raw.replace(/^\.\//, "").replace(/^quiz\//, "");
     }
 
     async function load() {
@@ -205,33 +203,40 @@
       const generatedAt = document.getElementById("generatedAt");
 
       try {
-        const data = await loadManifest();
+        const [groups, categories, questions] = await Promise.all([
+          fetchJson("./json/group.json"),
+          fetchJson("./json/category.json"),
+          fetchJson("./json/question.json"),
+        ]);
 
-        const map = new Map((data.categories || []).map((c) => [c.categoryName, c]));
-        const nowText = data.generatedAt ? new Date(data.generatedAt).toLocaleString("ko-KR") : "-";
-        generatedAt.textContent = `데이터 생성 시각: ${nowText}`;
+        const sortedGroups = (groups || []).slice().sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0));
+        const sortedCategories = (categories || []).slice().sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0));
+        const questionList = Array.isArray(questions) ? questions : [];
+
+        generatedAt.textContent = `그룹 ${sortedGroups.length}개 · 카테고리 ${sortedCategories.length}개`;
 
         grid.innerHTML = "";
-
-        for (const name of categoryOrder) {
-          const category = map.get(name) || { categoryName: name, exams: [] };
-          const solved = category.exams.filter((e) => e.questionPdf && e.answerPdf).length;
+        for (const category of sortedCategories) {
+          const catNm = category.catNm;
+          const catNo = category.catNo;
+          const rows = questionList.filter((q) => String(q.catNo) === String(catNo));
+          const solved = rows.filter((q) => normalizePdfPath(q.questionPdf) && normalizePdfPath(q.answerPdf)).length;
 
           const card = document.createElement("a");
           card.className = "banner";
-          card.dataset.kind = kindByCategory[name] || "qcm";
-          card.href = `./category.html?category=${encodeURIComponent(name)}`;
+          card.dataset.kind = kindByCategory[catNm] || "qcm";
+          card.href = `./category.html?catNo=${encodeURIComponent(catNo)}&category=${encodeURIComponent(catNm)}`;
           card.innerHTML = `
-            <span class="badge">카테고리</span>
-            <h2 class="title">${name}</h2>
-            <p class="count">등록 회차 ${category.exams.length}개 · 문제+정답 세트 ${solved}개</p>
+            <span class="badge">${category.gNm || "카테고리"}</span>
+            <h2 class="title">${catNm}</h2>
+            <p class="count">등록 회차 ${rows.length}개 · 문제+정답 세트 ${solved}개</p>
             <p class="cta">회차 목록 보기 →</p>
           `;
 
           grid.appendChild(card);
         }
       } catch (err) {
-        generatedAt.textContent = "데이터를 불러오지 못했습니다. scripts/build-exams-manifest.mjs 실행 후 새로고침하세요.";
+        generatedAt.textContent = "json 데이터(group/category/question)를 불러오지 못했습니다.";
         grid.innerHTML = "";
       }
     }
