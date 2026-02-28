@@ -727,7 +727,7 @@
         position:fixed;
         left:0;
         right:0;
-        top:calc(var(--mobile-header-h, 58px) - 8px);
+        top:calc(var(--mobile-header-h, 58px) - 12px);
         z-index:25;
         background:var(--panel);
         border-top:none;
@@ -2704,7 +2704,7 @@
     }, 0);
   }
 
-  function detectHorizontalContentBounds(canvas, yStart = 0, yEnd = canvas.height){
+  function detectHorizontalContentBounds(canvas, yStart = 0, yEnd = canvas.height, options = {}){
     try{
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       if (!ctx) return { left: 0, width: canvas.width };
@@ -2743,9 +2743,15 @@
       let right = w - 1;
       while (right > left && !isInk(right)) right -= colStep;
 
+      const preserveSideRatio = Math.max(0, Math.min(0.08, Number(options.preserveSideRatio) || 0));
       const pad = Math.max(8, Math.floor(w * 0.012));
       left = Math.max(0, left - pad);
       right = Math.min(w - 1, right + pad);
+      if (preserveSideRatio > 0){
+        const preservePx = Math.floor(w * preserveSideRatio);
+        left = Math.max(0, left - preservePx);
+        right = Math.min(w - 1, right + preservePx);
+      }
       const width = Math.max(1, right - left + 1);
 
       // 감지가 과도한 경우(너무 좁아짐)에는 원본 유지
@@ -2793,7 +2799,9 @@
       const srcBottom = Math.max(srcTop + 1, Math.ceil(fullCanvas.height * range.end));
       srcHeight = Math.max(1, srcBottom - srcTop);
       // 좌우 여백(빈 흰 영역) 자동 트리밍으로 가독성을 높인다.
-      const trim = detectHorizontalContentBounds(fullCanvas, srcTop, srcTop + srcHeight);
+      const trim = detectHorizontalContentBounds(fullCanvas, srcTop, srcTop + srcHeight, {
+        preserveSideRatio: isMobileViewport() ? 0.006 : 0.02
+      });
       srcLeft = trim.left;
       srcWidth = trim.width;
     }
@@ -2863,6 +2871,7 @@
     pdfStatus.textContent = "전체 PDF 로딩 중...";
     setPdfLoading(true, "전체 PDF 로딩 중...");
     const pdf = await ensurePdfDocument();
+    const mobileViewport = isMobileViewport();
     const viewWidth = Math.max(320, (pdfViewer.clientWidth || 900) - 20);
     const key = `${getQuestionPdfBaseUrl()}|${state.pdfZoom}|${Math.round(viewWidth)}`;
     const dpr = Math.max(1, Number(window.devicePixelRatio) || 1);
@@ -2894,7 +2903,9 @@
         if (navToken !== state.allNavToken) return;
 
         // 전체보기에서도 좌우 흰 여백을 줄여 실제 문제 영역 가독성을 높인다.
-        const trim = detectHorizontalContentBounds(canvas, 0, canvas.height);
+        const trim = detectHorizontalContentBounds(canvas, 0, canvas.height, {
+          preserveSideRatio: mobileViewport ? 0.006 : 0.02
+        });
         if (trim.left > 0 || trim.width < canvas.width) {
           const cropped = document.createElement("canvas");
           cropped.className = "pdfPageCanvas";
@@ -2921,7 +2932,7 @@
     }
 
     const targetQ = Number.isFinite(q) ? q : (state.focusQ || 1);
-    const mobileViewport = isMobileViewport();
+    
     const pageMap = state.pdfNav.questionPageMap;
     const ratioMap = state.pdfNav.questionTopRatioMap;
     let targetPage = null;
@@ -3054,9 +3065,19 @@
     const nonMobile = !window.matchMedia("(max-width: 768px)").matches;
     const top = getViewerScrollTop();
     if (nonMobile) {
+      const rect = pdfViewer.getBoundingClientRect();
+      const badgeW = Math.max(48, btnViewerTop.offsetWidth || 48);
+      const x = Math.max(8, Math.round(rect.right - badgeW - 12));
+      const y = 16;
+      btnViewerTop.style.left = `${x}px`;
+      btnViewerTop.style.right = "auto";
+      btnViewerTop.style.bottom = `${y}px`;
       btnViewerTop.classList.add("show");
       return;
     }
+    btnViewerTop.style.left = "";
+    btnViewerTop.style.right = "";
+    btnViewerTop.style.bottom = "";
     btnViewerTop.classList.toggle("show", top > 120);
   }
 
