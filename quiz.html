@@ -1110,10 +1110,6 @@
   function enforceMobileReadingMode(){
     if (!isMobileViewport()) return;
     let changed = false;
-    if (state.viewMode !== "single") {
-      state.viewMode = "single";
-      changed = true;
-    }
     if (state.pdfZoom < 1.1) {
       state.pdfZoom = 1.1;
       changed = true;
@@ -1156,13 +1152,6 @@
   }
 
   function toggleViewMode(){
-    if (isMobileViewport()) {
-      state.viewMode = "single";
-      updateViewModeUi();
-      saveUi();
-      navigatePdfToQuestion(state.focusQ || 1);
-      return;
-    }
     state.viewMode = state.viewMode === "single" ? "all" : "single";
     updateViewModeUi();
     saveUi();
