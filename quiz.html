@@ -2800,7 +2800,7 @@
       srcHeight = Math.max(1, srcBottom - srcTop);
       // 좌우 여백(빈 흰 영역) 자동 트리밍으로 가독성을 높인다.
       const trim = detectHorizontalContentBounds(fullCanvas, srcTop, srcTop + srcHeight, {
-        preserveSideRatio: isMobileViewport() ? 0.006 : 0.02
+        preserveSideRatio: isMobileViewport() ? 0 : 0.025
       });
       srcLeft = trim.left;
       srcWidth = trim.width;
@@ -2904,7 +2904,7 @@
 
         // 전체보기에서도 좌우 흰 여백을 줄여 실제 문제 영역 가독성을 높인다.
         const trim = detectHorizontalContentBounds(canvas, 0, canvas.height, {
-          preserveSideRatio: mobileViewport ? 0.006 : 0.02
+          preserveSideRatio: mobileViewport ? 0 : 0.025
         });
         if (trim.left > 0 || trim.width < canvas.width) {
           const cropped = document.createElement("canvas");
