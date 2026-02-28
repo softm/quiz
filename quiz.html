@@ -1467,8 +1467,8 @@
   function enforceMobileReadingMode(){
     if (!isMobileViewport()) return;
     let changed = false;
-    if (state.pdfZoom < 1.1) {
-      state.pdfZoom = 1.1;
+    if (state.pdfZoom < 1.22) {
+      state.pdfZoom = 1.22;
       changed = true;
     }
     if (changed) {
@@ -2795,8 +2795,24 @@
     if (state.viewMode === "single" && Number.isFinite(q)) {
       const range = await getQuestionCropRange(q, safePage);
       activeRange = range;
-      srcTop = Math.max(0, Math.floor(fullCanvas.height * range.start));
-      const srcBottom = Math.max(srcTop + 1, Math.ceil(fullCanvas.height * range.end));
+      let safeStart = Number.isFinite(range.start) ? range.start : 0;
+      let safeEnd = Number.isFinite(range.end) ? range.end : 1;
+      // 문항 영역 검출 실패 시 하단 일부만 보이는 케이스를 방지하기 위한 가드.
+      // 시작점이 과도하게 아래이거나 높이가 너무 작으면 근접 구간을 넓혀 다시 잡는다.
+      const rawSpan = Math.max(0, safeEnd - safeStart);
+      if (safeStart > 0.22 || rawSpan < 0.22) {
+        const focusStart = Number.isFinite(range.focusStart) ? range.focusStart : safeStart;
+        const focusEnd = Number.isFinite(range.focusEnd) ? range.focusEnd : safeEnd;
+        safeStart = Math.max(0, Math.min(safeStart, focusStart - 0.08));
+        safeEnd = Math.min(1, Math.max(safeEnd, focusEnd + 0.18, safeStart + 0.44));
+      }
+      // 초반 문항(1~5번)은 상단 시작점 오검출 시 체감이 커서 추가로 보수 보정.
+      if (q <= 5 && safeStart > 0.08) {
+        safeStart = 0.03;
+        safeEnd = Math.min(1, Math.max(safeEnd, 0.58));
+      }
+      srcTop = Math.max(0, Math.floor(fullCanvas.height * safeStart));
+      const srcBottom = Math.max(srcTop + 1, Math.ceil(fullCanvas.height * safeEnd));
       srcHeight = Math.max(1, srcBottom - srcTop);
       // 좌우 여백(빈 흰 영역) 자동 트리밍으로 가독성을 높인다.
       const trim = detectHorizontalContentBounds(fullCanvas, srcTop, srcTop + srcHeight, {
