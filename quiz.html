@@ -3498,6 +3498,7 @@
 
   function openMobileSheet(){
     syncMobileSheet();
+    if (!window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches) return;
     sheetOverlay.classList.add("open");
   }
   function closeMobileSheet(){
@@ -3506,8 +3507,8 @@
   function syncMobileSheet(){
     if (!mobileSheetMount) return;
     const desktopAside = document.querySelector(".wrap > aside.panel");
-    const mobile = window.matchMedia("(max-width: 768px)").matches;
-    if (mobile){
+    const mobileSheetMode = window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches;
+    if (mobileSheetMode){
       if (mobileSheetMount.firstElementChild !== sheet){
         mobileSheetMount.appendChild(sheet);
       }
@@ -3518,7 +3519,7 @@
 
   window.addEventListener("resize", () => {
     syncMobileSheet();
-    if (!window.matchMedia("(max-width: 768px)").matches) {
+    if (!window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches) {
       closeMobileSheet();
     }
     if (state.viewMode !== "single") {
