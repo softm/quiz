@@ -189,27 +189,32 @@
     }
     .viewer.single #pdfCanvas{cursor:pointer}
     .viewerTopBadge{
-      position:absolute;
-      right:10px;
-      bottom:10px;
-      z-index:6;
+      position:fixed !important;
+      right:12px;
+      bottom:14px;
+      z-index:60;
       display:none;
       align-items:center;
       justify-content:center;
-      min-width:56px;
-      height:32px;
-      padding:0 10px;
+      min-width:48px;
+      height:28px;
+      padding:0 8px;
       border-radius:999px;
       border:1px solid var(--line);
       background:rgba(255,255,255,.9);
       color:var(--text);
-      font-size:11px;
+      font-size:10px;
       font-weight:800;
       box-shadow:0 4px 14px rgba(0,0,0,.14);
       cursor:pointer;
       white-space:nowrap;
+      pointer-events:auto;
     }
     .viewerTopBadge.show{display:inline-flex}
+    .viewerTopBadge.disabled{
+      opacity:.45;
+      filter:saturate(.7);
+    }
     body.theme-dark .viewerTopBadge{
       background:rgba(24,33,60,.9);
     }
@@ -715,11 +720,24 @@
         top:0;
         z-index:20;
       }
+      .wrap > section.panel{
+        overflow:visible;
+      }
       .pdfTitleBar{
-        position:sticky;
-        top:var(--mobile-header-h, 58px);
-        z-index:19;
+        position:fixed;
+        left:0;
+        right:0;
+        top:calc(var(--mobile-header-h, 58px) - 8px);
+        z-index:25;
         background:var(--panel);
+        border-top:none;
+        border-left:none;
+        border-right:none;
+        border-radius:0;
+        box-shadow:none;
+      }
+      .viewer{
+        padding-top:64px;
       }
       .viewerNav{
         display:none !important;
@@ -736,12 +754,31 @@
         height:18px;
       }
       .viewerTopBadge{
-        right:8px;
-        bottom:8px;
-        min-width:52px;
-        height:30px;
-        padding:0 9px;
-        font-size:10px;
+        right:10px;
+        bottom:calc(var(--mobile-dock-h, 88px) + 15px);
+        min-width:44px;
+        height:26px;
+        padding:0 7px;
+        font-size:9px;
+      }
+    }
+    @media (orientation: portrait) and (pointer: coarse){
+      .mobileDock{
+        position:fixed;
+        left:0;
+        right:0;
+        bottom:0;
+        z-index:30;
+        display:grid !important;
+        grid-template-columns: repeat(9, minmax(0, 1fr));
+        gap:4px;
+        padding:8px;
+        border-top:1px solid var(--line);
+        background:var(--panel);
+        backdrop-filter:blur(8px);
+      }
+      body{
+        padding-bottom:88px;
       }
     }
     @media (max-width: 768px) and (orientation: landscape){
@@ -1202,9 +1239,13 @@
     loadAdFitScript();
   }
 
-  function updateLayoutVars(){
+  function updateStickyOffsets(){
     if (!appHeader) return;
-    document.documentElement.style.setProperty("--mobile-header-h", `${Math.ceil(appHeader.offsetHeight)}px`);
+    const rawH = Math.ceil(appHeader.getBoundingClientRect().height || appHeader.offsetHeight || 58);
+    const h = Math.min(96, Math.max(48, rawH));
+    document.documentElement.style.setProperty("--mobile-header-h", `${h}px`);
+    const dockH = mobileDock ? Math.max(0, Math.ceil(mobileDock.getBoundingClientRect().height || mobileDock.offsetHeight || 0)) : 0;
+    document.documentElement.style.setProperty("--mobile-dock-h", `${dockH}px`);
   }
 
   // ====== 버튼 이벤트 ======
@@ -1310,7 +1351,7 @@
   const examTitle = `${CATEGORY_NAME} · ${EXAM_NAME}`;
   document.title = `${examTitle} | 문제풀이 + 정답확인`;
   pageTitle.textContent = examTitle;
-  updateLayoutVars();
+  updateStickyOffsets();
   initAdFit("adfitQuizSide", ADFIT_UNITS.quizSide, "300", "250");
 
   loadUi();
@@ -1331,7 +1372,7 @@
   initPdf();
   window.addEventListener("resize", () => {
     enforceMobileReadingMode();
-    updateLayoutVars();
+    updateStickyOffsets();
     updateViewerTopBadge();
   });
 
@@ -3010,7 +3051,13 @@
       btnViewerTop.classList.remove("show");
       return;
     }
-    btnViewerTop.classList.toggle("show", getViewerScrollTop() > 90);
+    const nonMobile = !window.matchMedia("(max-width: 768px)").matches;
+    const top = getViewerScrollTop();
+    if (nonMobile) {
+      btnViewerTop.classList.add("show");
+      return;
+    }
+    btnViewerTop.classList.toggle("show", top > 120);
   }
 
   function setPdfFramePage(page, q){
@@ -3721,6 +3768,7 @@
 
   window.addEventListener("resize", () => {
     syncMobileSheet();
+    updateStickyOffsets();
     if (!window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches) {
       closeMobileSheet();
     }
