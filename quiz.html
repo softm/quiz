@@ -30,8 +30,38 @@
       display:flex; gap:12px; align-items:center; justify-content:space-between;
       position:sticky; top:0; background:var(--header-bg); backdrop-filter:blur(10px); z-index:10;
     }
-    header .left{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-    header h1{font-size:16px; margin:0; font-weight:700}
+    header .left{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+      padding-right:80px;
+      min-width:0;
+    }
+    header .controls #btnTheme{
+      position:absolute;
+      top:10px;
+      right:12px;
+      z-index:12;
+      margin:0;
+    }
+    header .controls #btnOrientation{
+      position:absolute;
+      top:10px;
+      right:46px;
+      z-index:12;
+      margin:0;
+    }
+    header h1{
+      font-size:16px;
+      margin:0;
+      font-weight:700;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      min-width:0;
+      max-width:100%;
+    }
     .pill{font-size:12px; padding:6px 10px; border:1px solid var(--line); border-radius:999px; color:var(--muted)}
     .wrap{display:grid; grid-template-columns: 1.25fr .75fr; gap:12px; padding:12px; min-height:calc(100dvh - var(--header-h))}
     .panel{
@@ -339,6 +369,33 @@
       font-size:16px;
       line-height:1;
     }
+    #btnTheme{
+      width:30px;
+      height:30px;
+      font-size:12px;
+      padding:0 !important;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      line-height:1;
+    }
+    #btnOrientation{
+      width:30px;
+      height:30px;
+      font-size:13px;
+      padding:0 !important;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      line-height:1;
+      font-weight:800;
+    }
+    #btnTheme .themeIcon{
+      font-size:14px;
+      display:inline-block;
+      line-height:1;
+      margin:0;
+    }
     button{
       background:var(--btn); color:var(--text); border:1px solid var(--line);
       padding:8px 10px; border-radius:10px; cursor:pointer; font-weight:600; font-size:12px;
@@ -529,6 +586,9 @@
         flex-direction:column;
       }
       header .left{width:100%; justify-content:space-between}
+      header .left{
+        padding-right:80px;
+      }
       header h1{font-size:14px}
       .pill{font-size:11px; padding:4px 8px}
       .controls{
@@ -551,6 +611,14 @@
         font-size:11px;
         white-space:nowrap;
         flex:0 0 auto;
+      }
+      #btnTheme{
+        width:28px;
+        height:28px;
+      }
+      #btnOrientation{
+        width:28px;
+        height:28px;
       }
       .toggle{
         justify-content:flex-start;
@@ -730,7 +798,7 @@
         position:fixed;
         left:0;
         right:0;
-        top:calc(var(--mobile-header-h, 58px) - 12px);
+        top:var(--mobile-header-h, 58px);
         z-index:25;
         background:var(--panel);
         border-top:none;
@@ -766,6 +834,13 @@
         padding:0 7px;
         font-size:9px;
       }
+      .pdfControlRow .controls button.fontSymbolOnly{
+        font-size:20px;
+        font-weight:800;
+        line-height:1;
+        padding:2px 10px;
+        min-width:38px;
+      }
     }
     @media (orientation: portrait) and (pointer: coarse){
       .mobileDock{
@@ -799,6 +874,22 @@
         gap:8px;
         flex-direction:row;
         align-items:center;
+      }
+      header .left{
+        padding-right:0;
+      }
+      header .controls #btnOrientation,
+      header .controls #btnTheme{
+        position:static;
+        top:auto;
+        right:auto;
+        margin:0;
+      }
+      header .controls #btnOrientation{
+        order:99;
+      }
+      header .controls #btnTheme{
+        order:100;
       }
       header .left{
         width:auto;
@@ -870,6 +961,13 @@
       .pdfControlRow .controls button{
         font-size:10px;
         padding:5px 7px;
+      }
+      .pdfControlRow .controls button.fontSymbolOnly{
+        font-size:18px;
+        font-weight:800;
+        line-height:1;
+        padding:2px 10px;
+        min-width:36px;
       }
       #openQ,#openA{display:none}
       .viewer{
@@ -967,11 +1065,12 @@
     <span class="pill">단축키( 문제이동 : ←→ 답 : 1~4 )</span>
   </div>
   <div class="controls">
+    <button id="btnOrientation" class="secondary iconBtn" title="화면 방향 전환" aria-label="화면 방향 전환">가</button>
     <button id="btnTheme" class="secondary iconBtn" title="다크/기본 모드" aria-label="다크/기본 모드"><span class="themeIcon">☾</span></button>
     <span class="answerKeyInfo" id="answerKeyInfo">정답키: 확인 중</span>
     <button id="btnHome" class="ghost">목록</button>
-    <button id="btnReset" class="secondary">다시풀기 (R)</button>
-    <button id="btnGrade">채점 (G)</button>
+    <button id="btnReset" class="secondary">다시풀기</button>
+    <button id="btnGrade">채점</button>
     <label class="toggle"><input id="autoGrade" type="checkbox" checked /> 자동채점</label>
     <label class="toggle"><input id="showCorrect" type="checkbox" /> 정답표시</label>
   </div>
@@ -987,6 +1086,7 @@
         <div class="controls">
           <button id="btnFontUp" class="secondary">글자 ⊕</button>
           <button id="btnFontDown" class="secondary">글자 ⊖</button>
+          <button id="btnFontReset" class="secondary">원래대로</button>
           <button id="openQ">문제 PDF</button>
           <button id="openA" class="secondary">정답 PDF</button>
           <button id="btnViewMode" class="ghost modeBtn">↕</button>
@@ -1149,7 +1249,10 @@
     focusQ: 1,
     theme: "basic",
     viewMode: "all",
+    scrollTopOnModeChange: false,
     pdfZoom: 1,
+    pdfZoomMobile: 1,
+    pdfZoomDesktop: 1,
     infoExpanded: false,
     currentPdfPage: 1,
     pdfNavNonce: 0,
@@ -1209,9 +1312,11 @@
   const saveHint = document.getElementById("saveHint");
   const modeHint = document.getElementById("modeHint");
   const btnTheme = document.getElementById("btnTheme");
+  const btnOrientation = document.getElementById("btnOrientation");
   const btnInfoToggle = document.getElementById("btnInfoToggle");
   const btnFontUp = document.getElementById("btnFontUp");
   const btnFontDown = document.getElementById("btnFontDown");
+  const btnFontReset = document.getElementById("btnFontReset");
 
   const sec1 = document.getElementById("sec1");
   const sec2 = document.getElementById("sec2");
@@ -1238,10 +1343,131 @@
   const mobileBookmarkBtn = document.getElementById("mobileBookmark");
   const sheetOverlay = document.getElementById("sheetOverlay");
   const mobileSheetMount = document.getElementById("mobileSheetMount");
-  const isLocalDevHost = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+  const isLocalDevHost = location.hostname === "localhost";
+  let allowAutoLandscapeFullscreen = false;
+  let landscapeFullscreenDismissed = false;
+  let orientationToggleLandscapeActive = false;
+  let orientationToggleInFlight = false;
 
   if (answerKeyInfo && !isLocalDevHost) {
     answerKeyInfo.style.display = "none";
+  }
+
+  function isMobileLandscapeFullscreenTarget(){
+    return window.matchMedia("(orientation: landscape) and (pointer: coarse)").matches;
+  }
+
+  function isMobileOrientationToggleTarget(){
+    return window.matchMedia("(pointer: coarse)").matches;
+  }
+
+  function getFullscreenElement(){
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+
+  function isAppFullscreen(){
+    return !!getFullscreenElement();
+  }
+
+  function requestAppFullscreen(){
+    const root = document.documentElement;
+    if (root.requestFullscreen) return root.requestFullscreen();
+    if (root.webkitRequestFullscreen) {
+      root.webkitRequestFullscreen();
+      return Promise.resolve();
+    }
+    return Promise.resolve();
+  }
+
+  function exitAppFullscreen(){
+    if (document.exitFullscreen) return document.exitFullscreen();
+    if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+      return Promise.resolve();
+    }
+    return Promise.resolve();
+  }
+
+  function syncLandscapeFullscreen(forceAttempt){
+    const targetMode = isMobileLandscapeFullscreenTarget();
+    if (!targetMode){
+      landscapeFullscreenDismissed = false;
+      if (isAppFullscreen() && !orientationToggleLandscapeActive){
+        exitAppFullscreen().catch(() => {});
+      }
+      return;
+    }
+    if (!allowAutoLandscapeFullscreen && !forceAttempt) return;
+    if (landscapeFullscreenDismissed || isAppFullscreen()) return;
+    requestAppFullscreen().catch(() => {});
+  }
+
+  function onFirstUserGesture(){
+    if (!allowAutoLandscapeFullscreen) {
+      allowAutoLandscapeFullscreen = true;
+    }
+    syncLandscapeFullscreen(true);
+  }
+
+  function sleep(ms){
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function toggleMobileScreenOrientation(){
+    if (!isMobileOrientationToggleTarget() || orientationToggleInFlight) return;
+    orientationToggleInFlight = true;
+    try{
+      const isLandscapeNow = window.matchMedia("(orientation: landscape)").matches;
+      const orientationApi = screen.orientation && typeof screen.orientation.lock === "function";
+      if (isLandscapeNow) {
+        orientationToggleLandscapeActive = false;
+        try{
+          if (orientationApi) {
+            await screen.orientation.lock("portrait-primary");
+          } else if (screen.orientation && typeof screen.orientation.unlock === "function") {
+            screen.orientation.unlock();
+          }
+        }catch(_){}
+        if (isAppFullscreen()) {
+          exitAppFullscreen().catch(() => {});
+        }
+        return;
+      }
+      orientationToggleLandscapeActive = false;
+      allowAutoLandscapeFullscreen = true;
+      landscapeFullscreenDismissed = false;
+      if (!isAppFullscreen()) {
+        await requestAppFullscreen().catch(() => {});
+      }
+      try{
+        if (orientationApi) {
+          await screen.orientation.lock("landscape-primary").catch(async () => {
+            await screen.orientation.lock("landscape");
+          });
+        }
+      }catch(_){}
+      await sleep(120);
+      const turnedLandscape = window.matchMedia("(orientation: landscape)").matches;
+      orientationToggleLandscapeActive = turnedLandscape;
+      if (!turnedLandscape && isAppFullscreen()) {
+        // 회전 실패 시 다음 시도를 막지 않도록 풀스크린 상태를 정리한다.
+        await exitAppFullscreen().catch(() => {});
+      }
+    } finally {
+      orientationToggleInFlight = false;
+    }
+  }
+
+  function updateOrientationButton(){
+    if (!btnOrientation) return;
+    const enabled = isMobileOrientationToggleTarget();
+    btnOrientation.style.display = enabled ? "inline-flex" : "none";
+    if (!enabled) return;
+    const isLandscapeNow = window.matchMedia("(orientation: landscape)").matches;
+    btnOrientation.textContent = isLandscapeNow ? "세" : "가";
+    const label = isLandscapeNow ? "세로 화면으로 전환" : "가로 화면으로 전환";
+    btnOrientation.title = label;
+    btnOrientation.setAttribute("aria-label", label);
   }
 
   function loadAdFitScript() {
@@ -1278,13 +1504,28 @@
 
   function updateStickyOffsets(){
     if (!appHeader) return;
-    const rawH = Math.ceil(appHeader.getBoundingClientRect().height || appHeader.offsetHeight || 58);
+    const portraitMobile = window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches;
+    const rectH = Math.ceil(appHeader.getBoundingClientRect().height || 0);
+    const offsetH = Math.ceil(appHeader.offsetHeight || 0);
+    const rawH = portraitMobile ? (rectH || 58) : (rectH || offsetH || 58);
     const h = Math.min(96, Math.max(48, rawH));
     document.documentElement.style.setProperty("--mobile-header-h", `${h}px`);
     const barH = pdfTitleBarEl ? Math.max(0, Math.ceil(pdfTitleBarEl.getBoundingClientRect().height || pdfTitleBarEl.offsetHeight || 0)) : 0;
     document.documentElement.style.setProperty("--mobile-toolbar-h", `${barH}px`);
     const dockH = mobileDock ? Math.max(0, Math.ceil(mobileDock.getBoundingClientRect().height || mobileDock.offsetHeight || 0)) : 0;
     document.documentElement.style.setProperty("--mobile-dock-h", `${dockH}px`);
+  }
+
+  function scheduleInitialStickyOffsets(){
+    const run = () => {
+      updateStickyOffsets();
+      requestAnimationFrame(() => updateStickyOffsets());
+    };
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", run, { once: true });
+      return;
+    }
+    run();
   }
 
   // ====== 버튼 이벤트 ======
@@ -1295,9 +1536,18 @@
   document.getElementById("btnReset").addEventListener("click", resetAll);
   document.getElementById("btnGrade").addEventListener("click", () => { gradeAll(true); makeWrongNote(); });
   btnTheme.addEventListener("click", () => setTheme(state.theme === "dark" ? "basic" : "dark"));
+  btnOrientation.addEventListener("click", () => {
+    toggleMobileScreenOrientation().finally(() => {
+      setTimeout(() => {
+        updateOrientationButton();
+        updateStickyOffsets();
+      }, 80);
+    });
+  });
   btnInfoToggle.addEventListener("click", toggleInfoPanel);
   btnFontUp.addEventListener("click", () => changePdfZoom(0.1));
   btnFontDown.addEventListener("click", () => changePdfZoom(-0.1));
+  btnFontReset.addEventListener("click", resetPdfZoom);
   document.getElementById("btnViewMode").addEventListener("click", toggleViewMode);
   document.getElementById("btnPrevQ").addEventListener("click", () => moveFocus(-1));
   document.getElementById("btnNextQ").addEventListener("click", () => moveFocus(1));
@@ -1388,10 +1638,12 @@
   const examTitle = `${CATEGORY_NAME} · ${EXAM_NAME}`;
   document.title = `${examTitle} | 문제풀이 + 정답확인`;
   pageTitle.textContent = examTitle;
-  updateStickyOffsets();
+  scheduleInitialStickyOffsets();
   initAdFit("adfitQuizSide", ADFIT_UNITS.quizSide, "300", "250");
 
   loadUi();
+  updateFontButtonLabels();
+  updateOrientationButton();
   enforceMobileReadingMode();
   buildGrid();
   loadSaved();
@@ -1406,11 +1658,30 @@
   focusCard(state.focusQ, false);
   syncMobileSheet();
   syncLandscapeDock();
+  syncLandscapeFullscreen(false);
   updateViewerTopBadge();
   initPdf();
+  document.addEventListener("pointerdown", onFirstUserGesture, { passive: true });
+  document.addEventListener("touchstart", onFirstUserGesture, { passive: true });
+  document.addEventListener("keydown", onFirstUserGesture);
+  document.addEventListener("fullscreenchange", () => {
+    if (!isAppFullscreen() && isMobileLandscapeFullscreenTarget()) {
+      landscapeFullscreenDismissed = true;
+      orientationToggleLandscapeActive = false;
+    }
+  });
+  document.addEventListener("webkitfullscreenchange", () => {
+    if (!isAppFullscreen() && isMobileLandscapeFullscreenTarget()) {
+      landscapeFullscreenDismissed = true;
+      orientationToggleLandscapeActive = false;
+    }
+  });
   window.addEventListener("resize", () => {
+    updateFontButtonLabels();
+    updateOrientationButton();
     enforceMobileReadingMode();
     syncLandscapeDock();
+    syncLandscapeFullscreen(false);
     updateStickyOffsets();
     updateViewerTopBadge();
   });
@@ -1418,6 +1689,8 @@
   // ====== 저장/로드(UI) ======
   function saveUi(){
     try{
+      if (isMobileViewport()) state.pdfZoomMobile = state.pdfZoom;
+      else state.pdfZoomDesktop = state.pdfZoom;
       localStorage.setItem(STORAGE_UI_KEY, JSON.stringify({
         autoGrade: autoGradeEl.checked,
         showCorrect: showCorrectEl.checked,
@@ -1425,6 +1698,8 @@
         theme: state.theme,
         viewMode: state.viewMode,
         pdfZoom: state.pdfZoom,
+        pdfZoomMobile: state.pdfZoomMobile,
+        pdfZoomDesktop: state.pdfZoomDesktop,
         infoExpanded: state.infoExpanded,
         pdfNav: state.pdfNav
       }));
@@ -1441,8 +1716,23 @@
         if (ui.theme === "basic" || ui.theme === "dark") state.theme = ui.theme;
         // 진입 기본 모드는 항상 전체문제 보기로 유지한다.
         state.viewMode = "all";
-        if (Number.isFinite(Number(ui.pdfZoom))) {
-          state.pdfZoom = Math.max(0.7, Math.min(1.8, Number(ui.pdfZoom)));
+        const mobileSaved = Number(ui.pdfZoomMobile);
+        const desktopSaved = Number(ui.pdfZoomDesktop);
+        state.pdfZoomMobile = Number.isFinite(mobileSaved) ? Math.max(0.7, Math.min(1.8, mobileSaved)) : 1;
+        state.pdfZoomDesktop = Number.isFinite(desktopSaved) ? Math.max(0.7, Math.min(1.8, desktopSaved)) : 1;
+        if (isMobileViewport()) {
+          if (Number.isFinite(mobileSaved)) {
+            state.pdfZoom = state.pdfZoomMobile;
+          } else if (Number.isFinite(Number(ui.pdfZoom))) {
+            // 구버전 공용 저장값은 모바일에서만 1회 이관
+            state.pdfZoom = Math.max(0.7, Math.min(1.8, Number(ui.pdfZoom)));
+            state.pdfZoomMobile = state.pdfZoom;
+          } else {
+            state.pdfZoom = 1;
+          }
+        } else {
+          // 비모바일은 공용 저장값을 무시하고 데스크톱 전용값(기본 1) 사용
+          state.pdfZoom = state.pdfZoomDesktop;
         }
         if (typeof ui.infoExpanded === "boolean") state.infoExpanded = ui.infoExpanded;
         if (ui.pdfNav && typeof ui.pdfNav === "object") {
@@ -1494,9 +1784,63 @@
   }
 
   function updateZoomButtons(){
-    if (!btnFontUp || !btnFontDown) return;
+    if (!btnFontUp || !btnFontDown || !btnFontReset) return;
+    const base = getDefaultPdfZoomForViewport();
     btnFontUp.disabled = state.pdfZoom >= 1.8;
     btnFontDown.disabled = state.pdfZoom <= 0.7;
+    btnFontReset.disabled = Math.abs((state.pdfZoom || 0) - base) < 0.01;
+  }
+
+  function updateFontButtonLabels(){
+    if (!btnFontUp || !btnFontDown || !btnFontReset) return;
+    const portraitMobile = window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches;
+    const landscapeMobile = window.matchMedia("(max-width: 1100px) and (orientation: landscape) and (pointer: coarse)").matches;
+    if (portraitMobile || landscapeMobile){
+      btnFontUp.textContent = "+";
+      btnFontDown.textContent = "-";
+      btnFontReset.textContent = "↺";
+      btnFontUp.classList.add("fontSymbolOnly");
+      btnFontDown.classList.add("fontSymbolOnly");
+      btnFontReset.classList.add("fontSymbolOnly");
+      btnFontReset.title = "글자 원래대로";
+      return;
+    }
+    btnFontUp.textContent = "글자 ⊕";
+    btnFontDown.textContent = "글자 ⊖";
+    btnFontReset.textContent = "원래대로";
+    btnFontUp.classList.remove("fontSymbolOnly");
+    btnFontDown.classList.remove("fontSymbolOnly");
+    btnFontReset.classList.remove("fontSymbolOnly");
+    btnFontReset.title = "";
+  }
+
+  function getDefaultPdfZoomForViewport(){
+    if (!isMobileViewport()) return 1;
+    const portraitMobile = window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches;
+    return portraitMobile ? 1.72 : 1.36;
+  }
+
+  function getPdfOutputScale(){
+    const dpr = Math.max(1, Number(window.devicePixelRatio) || 1);
+    const portraitMobile = window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches;
+    if (portraitMobile) {
+      return Math.min(4, dpr * 1.45);
+    }
+    return Math.min(2.6, dpr * 1.25);
+  }
+
+  function resetPdfZoom(){
+    const base = getDefaultPdfZoomForViewport();
+    if (Math.abs((state.pdfZoom || 0) - base) < 0.01) return;
+    state.pdfZoom = base;
+    if (isMobileViewport()) state.pdfZoomMobile = base;
+    else state.pdfZoomDesktop = base;
+    state.allPagesRenderKey = null;
+    state.allPageCanvases = [];
+    state.singlePageRenderCache = new Map();
+    updateZoomButtons();
+    saveUi();
+    navigatePdfToQuestion(state.focusQ || 1);
   }
 
   function isMobileViewport(){
@@ -1504,13 +1848,26 @@
   }
 
   function enforceMobileReadingMode(){
-    if (!isMobileViewport()) return;
+    if (!isMobileViewport()) {
+      const desktopZoom = Math.max(0.7, Math.min(1.8, Number(state.pdfZoomDesktop) || 1));
+      if (Math.abs((state.pdfZoom || 0) - desktopZoom) > 0.001) {
+        state.pdfZoom = desktopZoom;
+        state.allPagesRenderKey = null;
+        state.allPageCanvases = [];
+        updateViewModeUi();
+        updateZoomButtons();
+        saveUi();
+      }
+      return;
+    }
+    const minZoom = getDefaultPdfZoomForViewport();
     let changed = false;
-    if (state.pdfZoom < 1.22) {
-      state.pdfZoom = 1.22;
+    if (state.pdfZoom < minZoom) {
+      state.pdfZoom = minZoom;
       changed = true;
     }
     if (changed) {
+      state.pdfZoomMobile = state.pdfZoom;
       state.allPagesRenderKey = null;
       state.allPageCanvases = [];
       updateViewModeUi();
@@ -1523,6 +1880,8 @@
     const next = Math.max(0.7, Math.min(1.8, Number((state.pdfZoom + delta).toFixed(2))));
     if (next === state.pdfZoom) return;
     state.pdfZoom = next;
+    if (isMobileViewport()) state.pdfZoomMobile = next;
+    else state.pdfZoomDesktop = next;
     state.allPagesRenderKey = null;
     state.allPageCanvases = [];
     state.singlePageRenderCache = new Map();
@@ -1544,6 +1903,12 @@
 
   function toggleViewMode(){
     state.viewMode = state.viewMode === "single" ? "all" : "single";
+    state.scrollTopOnModeChange = true;
+    if (isMobileLandscapeFullscreenTarget()) {
+      allowAutoLandscapeFullscreen = true;
+      landscapeFullscreenDismissed = false;
+      syncLandscapeFullscreen(true);
+    }
     updateViewModeUi();
     saveUi();
     navigatePdfToQuestion(state.focusQ || 1);
@@ -1576,10 +1941,6 @@
 
   function updateAnswerKeyInfo(){
     if (!isLocalDevHost) return;
-    const isLocalRuntime = location.protocol === "file:" ||
-      location.hostname === "localhost" ||
-      location.hostname === "127.0.0.1" ||
-      location.hostname === "::1";
     if (!answerKeyInfo) return;
     answerKeyInfo.classList.remove("ready","fallback");
     if (state.answerKeyStatus === "ready"){
@@ -1596,7 +1957,7 @@
         ? state.answerKeyDynamic.filter((v, i) => i > 0 && Number.isFinite(v)).length
         : 0;
       if (state.answerKeySource === "json") {
-        answerKeyInfo.textContent = isLocalRuntime ? `정답키: JSON 부분(${count})` : "정답키: JSON";
+        answerKeyInfo.textContent = `정답키: JSON 부분(${count})`;
       }
       else answerKeyInfo.textContent = `정답키: PDF 부분(${count})`;
       answerKeyInfo.classList.add("fallback");
@@ -2426,6 +2787,40 @@
     const cropCacheKey = `${CROP_CACHE_VERSION}|${getCurrentPdfSourceKey()}|${page}|${q}|${mappedRatioForQ == null ? "na" : mappedRatioForQ.toFixed(4)}`;
     if (state.questionCropRangeCache[cropCacheKey]) return state.questionCropRangeCache[cropCacheKey];
 
+    const portraitSingleMode = state.viewMode === "single"
+      && window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches;
+    if (portraitSingleMode){
+      let start = Number.isFinite(mappedRatioForQ) ? Math.max(0, Math.min(1, mappedRatioForQ)) : null;
+      try{
+        const here = await locateQuestionInPdf(q);
+        if (here && here.page === page && Number.isFinite(here.ratio)) {
+          start = Math.max(0, Math.min(1, here.ratio));
+        }
+      }catch(_){}
+      if (!Number.isFinite(start)) start = 0.1;
+
+      let nextStart = null;
+      if (q < 100){
+        if (Array.isArray(pageMap) && Array.isArray(ratioMap) && pageMap[q + 1] === page && Number.isFinite(ratioMap[q + 1])) {
+          nextStart = Math.max(0, Math.min(1, Number(ratioMap[q + 1])));
+        }
+        try{
+          const next = await locateQuestionInPdf(q + 1);
+          if (next && next.page === page && Number.isFinite(next.ratio) && next.ratio > start + 0.06) {
+            nextStart = Math.max(0, Math.min(1, next.ratio));
+          }
+        }catch(_){}
+      }
+
+      const focusStart = Math.max(0, start - 0.01);
+      const focusEnd = Number.isFinite(nextStart)
+        ? Math.max(focusStart + 0.2, Math.min(0.995, nextStart - 0.012))
+        : Math.min(0.995, focusStart + 0.52);
+      const resolved = { start: focusStart, end: focusEnd, focusStart, focusEnd, lowConfidence: false };
+      state.questionCropRangeCache[cropCacheKey] = resolved;
+      return resolved;
+    }
+
     const pageRatios = await getQuestionRatiosForPage(page);
     const rowStarts = await getRowQuestionStartRatiosForPage(page);
     const directStarts = await getDirectQuestionRatiosForPage(page);
@@ -2828,8 +3223,7 @@
     const viewWidth = Math.max(320, (pdfCanvas.parentElement?.clientWidth || 900) - 20);
     const cssScale = Math.max(0.5, (viewWidth / baseViewport.width) * state.pdfZoom);
     const cssViewport = pageObj.getViewport({ scale: cssScale });
-    const dpr = Math.max(1, Number(window.devicePixelRatio) || 1);
-    const outputScale = Math.min(2.5, dpr * 1.25);
+    const outputScale = getPdfOutputScale();
 
     const token = ++state.renderToken;
     const cacheKey = makeSingleRenderCacheKey(safePage, viewWidth, state.pdfZoom, outputScale);
@@ -2935,6 +3329,10 @@
     const nearTag = activeRange && activeRange.lowConfidence ? " · 근접모드" : "";
     pdfStatus.textContent = `페이지 ${safePage}${Number.isFinite(q) ? ` · ${q}번` : ""} 표시 중${nearTag}`;
     setPdfLoading(false);
+    if (state.scrollTopOnModeChange) {
+      scrollPdfViewportTo(0);
+      state.scrollTopOnModeChange = false;
+    }
     prefetchSinglePageAround(pdf, safePage, viewWidth, outputScale);
   }
 
@@ -2946,8 +3344,7 @@
     const mobileViewport = isMobileViewport();
     const viewWidth = Math.max(320, (pdfViewer.clientWidth || 900) - 20);
     const key = `${getQuestionPdfBaseUrl()}|${state.pdfZoom}|${Math.round(viewWidth)}`;
-    const dpr = Math.max(1, Number(window.devicePixelRatio) || 1);
-    const outputScale = Math.min(2.5, dpr * 1.25);
+    const outputScale = getPdfOutputScale();
 
     if (state.allPagesRenderKey !== key) {
       pdfAllPages.innerHTML = "";
@@ -2986,18 +3383,20 @@
           rowStep: 2
         });
         if (trim.left > 0 || trim.width < canvas.width) {
+          const destWidth = canvas.width;
+          const destHeight = Math.max(1, Math.round(canvas.height * (destWidth / Math.max(1, trim.width))));
           const cropped = document.createElement("canvas");
           cropped.className = "pdfPageCanvas";
           cropped.dataset.page = String(p);
-          cropped.width = canvas.width;
-          cropped.height = canvas.height;
+          cropped.width = destWidth;
+          cropped.height = destHeight;
           cropped.style.width = canvas.style.width;
-          cropped.style.height = canvas.style.height;
+          cropped.style.height = `${Math.ceil(destHeight / outputScale)}px`;
           const cctx = cropped.getContext("2d");
           cctx.drawImage(
             canvas,
             trim.left, 0, trim.width, canvas.height,
-            0, 0, cropped.width, cropped.height
+            0, 0, destWidth, destHeight
           );
           pdfAllPages.appendChild(cropped);
           state.allPageCanvases[p] = cropped;
@@ -3084,13 +3483,20 @@
     ratio = mobileViewport
       ? Math.max(0.03, Math.min(0.8, ratio))
       : Math.max(0.04, Math.min(0.88, ratio));
-    if (targetCanvas) {
-      const top = targetCanvas.offsetTop + (targetCanvas.clientHeight * ratio) - 20;
-      scrollPdfViewportTo(Math.max(0, top));
+    if (state.scrollTopOnModeChange) {
+      scrollPdfViewportTo(0);
+      state.scrollTopOnModeChange = false;
+      state.currentPdfPage = 1;
+      pdfStatus.textContent = "전체 페이지 표시 중 · 상단";
+    } else {
+      if (targetCanvas) {
+        const top = targetCanvas.offsetTop + (targetCanvas.clientHeight * ratio) - 20;
+        scrollPdfViewportTo(Math.max(0, top));
+      }
+      state.currentPdfPage = targetPage;
+      const precision = mobileViewport ? "맵기준" : (located && located.exact ? "정확" : "근사");
+      pdfStatus.textContent = `전체 페이지 표시 중 · ${targetPage}페이지${Number.isFinite(targetQ) ? ` · ${targetQ}번` : ""} (${precision})`;
     }
-    state.currentPdfPage = targetPage;
-    const precision = mobileViewport ? "맵기준" : (located && located.exact ? "정확" : "근사");
-    pdfStatus.textContent = `전체 페이지 표시 중 · ${targetPage}페이지${Number.isFinite(targetQ) ? ` · ${targetQ}번` : ""} (${precision})`;
     setPdfLoading(false);
   }
 
@@ -3898,6 +4304,9 @@
   window.addEventListener("resize", () => {
     syncMobileSheet();
     syncLandscapeDock();
+    updateOrientationButton();
+    syncLandscapeFullscreen(false);
+    updateFontButtonLabels();
     updateStickyOffsets();
     if (!window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches) {
       closeMobileSheet();
