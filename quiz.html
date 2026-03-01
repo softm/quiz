@@ -158,7 +158,7 @@
       min-height:0;
       background:var(--viewer-bg);
       overflow:auto;
-      padding:10px;
+      padding:10px 0;
       position:relative;
     }
     #pdfCanvas{
@@ -564,7 +564,7 @@
       }
       .panel{border-radius:10px}
       .panel .title{padding:8px 10px}
-      .viewer{min-height:calc(100dvh - 210px); padding:6px}
+      .viewer{min-height:calc(100dvh - 210px); padding:6px 0}
       .viewer:not(.single) .bookmarkBtn{
         position:fixed;
         right:10px;
@@ -741,6 +741,8 @@
       }
       .viewer{
         padding-top:calc(var(--mobile-toolbar-h, 56px) + 8px);
+        padding-left:0;
+        padding-right:0;
       }
       .viewerNav{
         display:none !important;
@@ -872,7 +874,7 @@
       #openQ,#openA{display:none}
       .viewer{
         min-height:calc(100dvh - 118px);
-        padding:4px;
+        padding:4px 0;
       }
       .viewer.single .viewerNav{
         width:32px;
@@ -2863,14 +2865,14 @@
       srcHeight = Math.max(1, srcBottom - srcTop);
       // 좌우 여백(빈 흰 영역) 자동 트리밍으로 가독성을 높인다.
       const trim = detectHorizontalContentBounds(fullCanvas, srcTop, srcTop + srcHeight, {
-        preserveSideRatio: isMobileViewport() ? 0 : 0.025,
-        edgePadRatio: isMobileViewport() ? 0.002 : 0.012,
-        edgePadMin: isMobileViewport() ? 1 : 8,
-        inkThreshold: isMobileViewport() ? 232 : 244,
-        ignoreTopRatio: isMobileViewport() ? 0.12 : 0.08,
-        ignoreBottomRatio: isMobileViewport() ? 0.10 : 0.06,
-        colStep: isMobileViewport() ? 1 : 2,
-        rowStep: isMobileViewport() ? 2 : 3
+        preserveSideRatio: 0,
+        edgePadRatio: 0,
+        edgePadMin: 0,
+        inkThreshold: 232,
+        ignoreTopRatio: 0.12,
+        ignoreBottomRatio: 0.10,
+        colStep: 1,
+        rowStep: 2
       });
       srcLeft = trim.left;
       srcWidth = trim.width;
@@ -2974,14 +2976,14 @@
 
         // 전체보기에서도 좌우 흰 여백을 줄여 실제 문제 영역 가독성을 높인다.
         const trim = detectHorizontalContentBounds(canvas, 0, canvas.height, {
-          preserveSideRatio: mobileViewport ? 0 : 0.025,
-          edgePadRatio: mobileViewport ? 0.002 : 0.012,
-          edgePadMin: mobileViewport ? 1 : 8,
-          inkThreshold: mobileViewport ? 232 : 244,
-          ignoreTopRatio: mobileViewport ? 0.12 : 0.08,
-          ignoreBottomRatio: mobileViewport ? 0.10 : 0.06,
-          colStep: mobileViewport ? 1 : 2,
-          rowStep: mobileViewport ? 2 : 3
+          preserveSideRatio: 0,
+          edgePadRatio: 0,
+          edgePadMin: 0,
+          inkThreshold: 232,
+          ignoreTopRatio: 0.12,
+          ignoreBottomRatio: 0.10,
+          colStep: 1,
+          rowStep: 2
         });
         if (trim.left > 0 || trim.width < canvas.width) {
           const cropped = document.createElement("canvas");
