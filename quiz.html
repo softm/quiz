@@ -1240,6 +1240,7 @@
   const ANSWER_PARSE_VERSION = 2;
   const PDF_MAP_VERSION = 7;
   const CROP_CACHE_VERSION = 24;
+  const GRADE_MARKER_VERSION = 6;
   const PRESET_PAGE_ANCHORS = {
     "2022년 제19회 농산물품질관리사 1차": [1,6,10,14,18,22,26,33,39,47,51,57,64,70,76,81,87,94],
     "2023년 제20회 농산물품질관리사 1차": [1,5,10,15,19,23,26,34,40,48,51,57,64,70,76,83,90,97],
@@ -1248,23 +1249,41 @@
   };
   const SINGLE_CROP_OVERRIDES = {};
   const GRADE_MARKER_SVG = {
-    ok: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240">
-      <path d="M48 118
-               C42 72, 84 42, 140 36
-               C208 30, 252 70, 254 122
-               C256 176, 214 212, 152 214
-               C104 216, 62 192, 52 154"
-            fill="none" stroke="#ff8f7d" stroke-opacity=".42" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M48 118
-               C42 72, 84 42, 140 36
-               C208 30, 252 70, 254 122
-               C256 176, 214 212, 152 214
-               C104 216, 62 192, 52 154"
-            fill="none" stroke="#ef3b2d" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    ok: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">
+      <path d="M30 86
+               C28 57, 49 34, 81 31
+               C112 28, 136 45, 139 76
+               C141 109, 122 132, 90 135
+               C59 138, 34 119, 30 86"
+            fill="none" stroke="#ff5a5a" stroke-opacity=".24" stroke-width="16.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M33 88
+               C31 60, 50 38, 80 35
+               C108 33, 130 49, 133 76
+               C135 106, 118 128, 89 131
+               C61 134, 38 116, 33 88"
+            fill="none" stroke="#ff1f1f" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M96 126 C101 130, 108 136, 115 145" fill="none" stroke="#ff2e2e" stroke-opacity=".72" stroke-width="3.2" stroke-linecap="round"/>
     </svg>`,
-    bad: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 240">
-      <path d="M18 222 L122 18" fill="none" stroke="#ff8f7d" stroke-opacity=".42" stroke-width="18" stroke-linecap="round"/>
-      <path d="M18 222 L122 18" fill="none" stroke="#ef3b2d" stroke-width="12" stroke-linecap="round"/>
+    bad: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">
+      <path d="M34 126 L126 34" fill="none" stroke="#ff5e5e" stroke-opacity=".24" stroke-width="18" stroke-linecap="round"/>
+      <path d="M36 124 L124 36" fill="none" stroke="#ff1f1f" stroke-width="10.8" stroke-linecap="round"/>
+      <path d="M42 118 L118 42" fill="none" stroke="#df1111" stroke-opacity=".78" stroke-width="4.8" stroke-linecap="round"/>
+      <path d="M28 132 L36 124" fill="none" stroke="#ff2e2e" stroke-opacity=".7" stroke-width="3.1" stroke-linecap="round"/>
+    </svg>`,
+    num: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">
+      <path d="M30 86
+               C28 57, 49 34, 81 31
+               C112 28, 136 45, 139 76
+               C141 109, 122 132, 90 135
+               C59 138, 34 119, 30 86"
+            fill="none" stroke="#ff5a5a" stroke-opacity=".22" stroke-width="16.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M33 88
+               C31 60, 50 38, 80 35
+               C108 33, 130 49, 133 76
+               C135 106, 118 128, 89 131
+               C61 134, 38 116, 33 88"
+            fill="none" stroke="#ff1f1f" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M96 126 C101 130, 108 136, 115 145" fill="none" stroke="#ff2e2e" stroke-opacity=".72" stroke-width="3.2" stroke-linecap="round"/>
     </svg>`
   };
   const SINGLE_CROP_OVERRIDES_BY_PDF = [
@@ -4189,12 +4208,25 @@
 
   async function resolveQuestionAnchorForMark(pageNo, q){
     if (!Number.isFinite(pageNo) || !Number.isFinite(q)) return null;
+    const chosen = state.answers[q];
+    if (Number.isFinite(chosen)) {
+      try{
+        const anchors = await getChoiceAnchorsForQuestion(pageNo, q);
+        const sel = Array.isArray(anchors) ? anchors.find((a) => a.choice === chosen) : null;
+        if (sel && Number.isFinite(sel.xRatio) && Number.isFinite(sel.yRatio) && Number.isFinite(sel.wRatio) && Number.isFinite(sel.hRatio)) {
+          return {
+            xRatio: Math.max(0, Math.min(1, sel.xRatio + (sel.wRatio * 0.5))),
+            yRatio: Math.max(0, Math.min(1, sel.yRatio + (sel.hRatio * 0.5)))
+          };
+        }
+      }catch(_){}
+    }
     try{
       const anchorMap = await getQuestionStartAnchorsForPage(pageNo);
       const a = anchorMap && anchorMap.get(q);
       if (a && Number.isFinite(a.xRatio) && Number.isFinite(a.yRatio)) {
         return {
-          xRatio: Math.max(0.02, Math.min(0.20, a.xRatio)),
+          xRatio: Math.max(0.04, Math.min(0.14, a.xRatio)),
           yRatio: Math.max(0, Math.min(1, a.yRatio))
         };
       }
@@ -4202,50 +4234,86 @@
 
     const pageRatios = await getQuestionRatiosForPage(pageNo);
     if (pageRatios && Number.isFinite(pageRatios.get(q))) {
-      return { xRatio: 0.06, yRatio: Math.max(0, Math.min(1, pageRatios.get(q))) };
+      return { xRatio: 0.075, yRatio: Math.max(0, Math.min(1, pageRatios.get(q))) };
     }
     const pageMap = state.pdfNav.questionPageMap;
     const ratioMap = state.pdfNav.questionTopRatioMap;
     if (Array.isArray(pageMap) && Array.isArray(ratioMap) && pageMap[q] === pageNo && Number.isFinite(ratioMap[q])) {
-      return { xRatio: 0.06, yRatio: Math.max(0, Math.min(1, ratioMap[q])) };
+      return { xRatio: 0.075, yRatio: Math.max(0, Math.min(1, ratioMap[q])) };
     }
     try{
       const range = await getQuestionCropRange(q, pageNo);
       if (range && Number.isFinite(range.focusStart)) {
-        return { xRatio: 0.06, yRatio: Math.max(0, Math.min(1, range.focusStart)) };
+        return { xRatio: 0.075, yRatio: Math.max(0, Math.min(1, range.focusStart)) };
       }
     }catch(_){}
     return null;
   }
 
-  function drawQuestionGradeMarker(gradeState, anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight){
-    if (!gradeState || !anchor || !Number.isFinite(anchor.yRatio) || !fullCanvas) return;
-    const radius = Math.max(13, Math.min(24, pdfCanvas.width * 0.017));
+  async function resolveQuestionNumberAnchorForMark(pageNo, q){
+    if (!Number.isFinite(pageNo) || !Number.isFinite(q)) return null;
+    try{
+      const anchorMap = await getQuestionStartAnchorsForPage(pageNo);
+      const a = anchorMap && anchorMap.get(q);
+      if (a && Number.isFinite(a.xRatio) && Number.isFinite(a.yRatio)) {
+        return {
+          xRatio: Math.max(0.045, Math.min(0.14, a.xRatio)),
+          yRatio: Math.max(0, Math.min(1, a.yRatio))
+        };
+      }
+    }catch(_){}
+    const pageRatios = await getQuestionRatiosForPage(pageNo);
+    if (pageRatios && Number.isFinite(pageRatios.get(q))) {
+      return { xRatio: 0.075, yRatio: Math.max(0, Math.min(1, pageRatios.get(q))) };
+    }
+    return null;
+  }
+
+  function projectGradeMarkerPointSingle(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight){
+    if (!anchor || !fullCanvas || !Number.isFinite(anchor.yRatio)) return null;
     const sx = srcWidth / pdfCanvas.width;
     const sy = srcHeight / pdfCanvas.height;
-    const xRatio = Number.isFinite(anchor.xRatio) ? anchor.xRatio : 0.06;
-    const xFullRaw = fullCanvas.width * xRatio;
-    const markerOffset = Math.max(20, radius * 1.55);
-    const xFull = Math.max(srcLeft + radius + 6, Math.min(srcLeft + srcWidth - radius - 6, xFullRaw - markerOffset));
-    const yFull = Math.max(srcTop + 10, Math.min(srcTop + srcHeight - 10, Math.round(fullCanvas.height * anchor.yRatio) + 10));
+    const xFullRaw = Math.round(fullCanvas.width * (Number.isFinite(anchor.xRatio) ? anchor.xRatio : 0.075));
+    const xFull = Math.max(srcLeft + 8, Math.min(srcLeft + srcWidth - 8, xFullRaw));
+    const yFullRaw = Math.round(fullCanvas.height * anchor.yRatio);
+    const yFull = Math.max(srcTop + 10, Math.min(srcTop + srcHeight - 10, yFullRaw));
     const x = (xFull - srcLeft) / sx;
     const y = (yFull - srcTop) / sy;
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    if (x < -40 || x > (pdfCanvas.width + 40) || y < -40 || y > (pdfCanvas.height + 40)) return;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  }
 
-    const ok = gradeState === "ok";
+  function projectGradeMarkerPointAll(anchor, meta){
+    if (!anchor || !meta || !Number.isFinite(anchor.yRatio)) return null;
+    const sx = meta.srcWidth / meta.destWidth;
+    const sy = meta.fullHeight / meta.destHeight;
+    const xFullRaw = Math.round(meta.fullWidth * (Number.isFinite(anchor.xRatio) ? anchor.xRatio : 0.075));
+    const xFull = Math.max(meta.srcLeft + 8, Math.min(meta.srcLeft + meta.srcWidth - 8, xFullRaw));
+    const yFullRaw = Math.round(meta.fullHeight * anchor.yRatio);
+    const yFull = Math.max(10, Math.min(meta.fullHeight - 10, yFullRaw));
+    const x = (xFull - meta.srcLeft) / sx;
+    const y = yFull / sy;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  }
 
+  function drawQuestionGradeMarker(gradeState, anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight){
+    if (!gradeState) return;
+    const point = projectGradeMarkerPointSingle(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
+    if (!point) return;
+    const radius = Math.max(11, Math.min(20, pdfCanvas.width * 0.013));
     pdfCtx.save();
     pdfCtx.lineCap = "round";
     pdfCtx.lineJoin = "round";
-    drawGradeMarkerImage(pdfCtx, ok ? "ok" : "bad", x, y, radius);
+    drawGradeMarkerImage(pdfCtx, gradeState === "ok" ? "ok" : "bad", point.x, point.y, radius);
     pdfCtx.restore();
   }
 
   function getGradeMarkerImage(kind){
-    const key = (kind === "bad") ? "bad" : "ok";
+    const markerKind = (kind === "bad") ? "bad" : (kind === "num" ? "num" : "ok");
+    const key = `${markerKind}:v${GRADE_MARKER_VERSION}`;
     if (state.gradeMarkerImageCache[key]) return state.gradeMarkerImageCache[key];
-    const svg = GRADE_MARKER_SVG[key];
+    const svg = GRADE_MARKER_SVG[markerKind];
     const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
     const img = new Image();
     img.decoding = "async";
@@ -4257,22 +4325,19 @@
   function preloadGradeMarkerImages(){
     getGradeMarkerImage("ok");
     getGradeMarkerImage("bad");
+    getGradeMarkerImage("num");
   }
 
   function drawGradeMarkerImage(ctx, kind, x, y, radius){
     const img = getGradeMarkerImage(kind);
     if (!img || !img.complete) return;
-    const ok = kind === "ok";
     const scalePx = Math.max(1, (ctx.canvas.width || 1) / Math.max(1, ctx.canvas.clientWidth || 1));
-    const mobileBoost = isMobileViewport() ? 1.28 : 1;
-    const minCssW = ok ? (isMobileViewport() ? 44 : 30) : (isMobileViewport() ? 24 : 18);
-    const minCssH = ok ? (isMobileViewport() ? 34 : 24) : (isMobileViewport() ? 44 : 30);
-    const w = Math.max(minCssW * scalePx, (ok ? radius * 3.3 : radius * 2.1) * mobileBoost);
-    const h = Math.max(minCssH * scalePx, (ok ? radius * 2.5 : radius * 3.4) * mobileBoost);
-    const dx = ok ? (x - w * 0.58) : (x - w * 0.52);
-    const dy = ok ? (y - h * 0.62) : (y - h * 0.56);
-    ctx.globalAlpha = 0.96;
-    ctx.drawImage(img, dx, dy, w, h);
+    const mobileBoost = isMobileViewport() ? 1.14 : 1;
+    const size = Math.max(26 * scalePx, radius * 3.1 * mobileBoost);
+    const dx = x - (size * 0.5);
+    const dy = y - (size * 0.5);
+    ctx.globalAlpha = 0.97;
+    ctx.drawImage(img, dx, dy, size, size);
   }
 
   function cloneCanvas(src){
@@ -4350,28 +4415,15 @@
     const anchor = await resolveQuestionAnchorForMark(pageNo, q);
     if (!anchor || !Number.isFinite(anchor.yRatio)) return false;
 
-    const radius = Math.max(13, Math.min(24, canvas.width * 0.017));
     const ctx = canvas.getContext("2d");
-    const xRatio = Number.isFinite(anchor.xRatio) ? anchor.xRatio : 0.06;
-    const xFullRaw = meta.fullWidth * xRatio;
-    const markerOffset = Math.max(20, radius * 1.55);
-    const xFull = Math.max(meta.srcLeft + radius + 6, Math.min(meta.srcLeft + meta.srcWidth - radius - 6, xFullRaw - markerOffset));
-    const yFull = Math.max(10, Math.min(meta.fullHeight - 10, Math.round(meta.fullHeight * anchor.yRatio) + 10));
-    const sx = meta.srcWidth / meta.destWidth;
-    const sy = meta.fullHeight / meta.destHeight;
-    const x = (xFull - meta.srcLeft) / sx;
-    const y = yFull / sy;
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+    const point = projectGradeMarkerPointAll(anchor, meta);
+    if (!point) return false;
+    const radius = Math.max(11, Math.min(20, canvas.width * 0.013));
 
-    const ok = gradeState === "ok";
     ctx.save();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    if (ok) {
-      drawGradeMarkerImage(ctx, "ok", x, y, radius);
-    } else {
-      drawGradeMarkerImage(ctx, "bad", x, y, radius);
-    }
+    drawGradeMarkerImage(ctx, gradeState === "ok" ? "ok" : "bad", point.x, point.y, radius);
     ctx.restore();
     return true;
   }
