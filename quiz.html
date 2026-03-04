@@ -3936,6 +3936,8 @@
       if (gradeState) {
         const markAnchor = await resolveQuestionAnchorForMark(safePage, q);
         drawQuestionGradeMarker(gradeState, markAnchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
+        const numberAnchor = await resolveQuestionNumberAnchorForMark(safePage, q);
+        drawQuestionNumberMarker(numberAnchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
       }
     }
     state.lastRenderMeta = {
@@ -4309,6 +4311,17 @@
     pdfCtx.restore();
   }
 
+  function drawQuestionNumberMarker(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight){
+    const point = projectGradeMarkerPointSingle(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
+    if (!point) return;
+    const radius = Math.max(9, Math.min(16, pdfCanvas.width * 0.0105));
+    pdfCtx.save();
+    pdfCtx.lineCap = "round";
+    pdfCtx.lineJoin = "round";
+    drawGradeMarkerImage(pdfCtx, "num", point.x, point.y, radius);
+    pdfCtx.restore();
+  }
+
   function getGradeMarkerImage(kind){
     const markerKind = (kind === "bad") ? "bad" : (kind === "num" ? "num" : "ok");
     const key = `${markerKind}:v${GRADE_MARKER_VERSION}`;
@@ -4428,6 +4441,25 @@
     return true;
   }
 
+  async function drawAllModeQuestionNumberMarker(pageNo, q){
+    if (!Number.isFinite(pageNo) || !Number.isFinite(q)) return false;
+    const canvas = state.allPageCanvases[pageNo];
+    const meta = state.allPageCanvasMeta[pageNo];
+    if (!canvas || !meta) return false;
+    const anchor = await resolveQuestionNumberAnchorForMark(pageNo, q);
+    if (!anchor || !Number.isFinite(anchor.yRatio)) return false;
+    const point = projectGradeMarkerPointAll(anchor, meta);
+    if (!point) return false;
+    const radius = Math.max(9, Math.min(16, canvas.width * 0.0105));
+    const ctx = canvas.getContext("2d");
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    drawGradeMarkerImage(ctx, "num", point.x, point.y, radius);
+    ctx.restore();
+    return true;
+  }
+
   async function redrawAllModeMarkers(totalPages){
     for (let p = 1; p <= totalPages; p++){
       restoreAllPageCanvas(p);
@@ -4440,6 +4472,7 @@
       const gradeState = getViewerGradeState(q);
       if (gradeState) {
         await drawAllModeGradeMarker(pageNo, q, gradeState);
+        await drawAllModeQuestionNumberMarker(pageNo, q);
       }
     }
   }
