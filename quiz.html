@@ -1240,7 +1240,7 @@
   const ANSWER_PARSE_VERSION = 2;
   const PDF_MAP_VERSION = 7;
   const CROP_CACHE_VERSION = 24;
-  const GRADE_MARKER_VERSION = 6;
+  const GRADE_MARKER_VERSION = 9;
   const PRESET_PAGE_ANCHORS = {
     "2022년 제19회 농산물품질관리사 1차": [1,6,10,14,18,22,26,33,39,47,51,57,64,70,76,81,87,94],
     "2023년 제20회 농산물품질관리사 1차": [1,5,10,15,19,23,26,34,40,48,51,57,64,70,76,83,90,97],
@@ -1270,20 +1270,37 @@
       <path d="M42 118 L118 42" fill="none" stroke="#df1111" stroke-opacity=".78" stroke-width="4.8" stroke-linecap="round"/>
       <path d="M28 132 L36 124" fill="none" stroke="#ff2e2e" stroke-opacity=".7" stroke-width="3.1" stroke-linecap="round"/>
     </svg>`,
-    num: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">
-      <path d="M30 86
-               C28 57, 49 34, 81 31
-               C112 28, 136 45, 139 76
-               C141 109, 122 132, 90 135
-               C59 138, 34 119, 30 86"
-            fill="none" stroke="#ff5a5a" stroke-opacity=".22" stroke-width="16.5" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M33 88
-               C31 60, 50 38, 80 35
-               C108 33, 130 49, 133 76
-               C135 106, 118 128, 89 131
-               C61 134, 38 116, 33 88"
-            fill="none" stroke="#ff1f1f" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M96 126 C101 130, 108 136, 115 145" fill="none" stroke="#ff2e2e" stroke-opacity=".72" stroke-width="3.2" stroke-linecap="round"/>
+    num_ok: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+      <path d="M42 157
+               C20 147, 9 120, 16 90
+               C25 49, 67 19, 116 16
+               C154 13, 184 29, 191 61
+               C199 97, 180 133, 144 154
+               C119 169, 88 171, 61 164"
+            fill="none" stroke="#ff6a6a" stroke-opacity=".22" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M44 154
+               C23 145, 13 119, 20 90
+               C28 53, 67 25, 114 22
+               C149 20, 175 34, 182 63
+               C190 95, 174 126, 142 146
+               C119 160, 90 163, 64 157"
+            fill="none" stroke="#ff1f1f" stroke-width="10.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M84 160
+               C106 163, 127 168, 137 170
+               C145 172, 146 176, 136 182
+               C123 189, 111 193, 99 196"
+            fill="none" stroke="#ff1f1f" stroke-width="10.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M98 196
+               C110 191, 124 185, 136 178"
+            fill="none" stroke="#d91515" stroke-opacity=".82" stroke-width="5.2" stroke-linecap="round"/>
+    </svg>`,
+    num_bad: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+      <path d="M16 184 L176 16"
+            fill="none" stroke="#ff6666" stroke-opacity=".2" stroke-width="20" stroke-linecap="round"/>
+      <path d="M18 182 L174 18"
+            fill="none" stroke="#ff1f1f" stroke-width="11" stroke-linecap="round"/>
+      <path d="M28 170 L162 28"
+            fill="none" stroke="#d91515" stroke-opacity=".8" stroke-width="4.6" stroke-linecap="round"/>
     </svg>`
   };
   const SINGLE_CROP_OVERRIDES_BY_PDF = [
@@ -3937,7 +3954,7 @@
         const markAnchor = await resolveQuestionAnchorForMark(safePage, q);
         drawQuestionGradeMarker(gradeState, markAnchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
         const numberAnchor = await resolveQuestionNumberAnchorForMark(safePage, q);
-        drawQuestionNumberMarker(numberAnchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
+        drawQuestionNumberMarker(gradeState, numberAnchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
       }
     }
     state.lastRenderMeta = {
@@ -4258,15 +4275,16 @@
       const anchorMap = await getQuestionStartAnchorsForPage(pageNo);
       const a = anchorMap && anchorMap.get(q);
       if (a && Number.isFinite(a.xRatio) && Number.isFinite(a.yRatio)) {
+        // 문제 번호를 감싸는 손그림 마커는 문장 시작점보다 약간 좌측/하단에 위치시킨다.
         return {
-          xRatio: Math.max(0.045, Math.min(0.14, a.xRatio)),
-          yRatio: Math.max(0, Math.min(1, a.yRatio))
+          xRatio: Math.max(0.04, Math.min(0.12, a.xRatio + 0.006)),
+          yRatio: Math.max(0, Math.min(1, a.yRatio + 0.012))
         };
       }
     }catch(_){}
     const pageRatios = await getQuestionRatiosForPage(pageNo);
     if (pageRatios && Number.isFinite(pageRatios.get(q))) {
-      return { xRatio: 0.075, yRatio: Math.max(0, Math.min(1, pageRatios.get(q))) };
+      return { xRatio: 0.062, yRatio: Math.max(0, Math.min(1, pageRatios.get(q) + 0.012)) };
     }
     return null;
   }
@@ -4311,19 +4329,24 @@
     pdfCtx.restore();
   }
 
-  function drawQuestionNumberMarker(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight){
+  function drawQuestionNumberMarker(gradeState, anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight){
+    if (!gradeState) return;
     const point = projectGradeMarkerPointSingle(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
     if (!point) return;
-    const radius = Math.max(9, Math.min(16, pdfCanvas.width * 0.0105));
+    const radius = Math.max(12, Math.min(22, pdfCanvas.width * 0.0135));
     pdfCtx.save();
     pdfCtx.lineCap = "round";
     pdfCtx.lineJoin = "round";
-    drawGradeMarkerImage(pdfCtx, "num", point.x, point.y, radius);
+    drawGradeMarkerImage(pdfCtx, gradeState === "ok" ? "num_ok" : "num_bad", point.x, point.y, radius);
     pdfCtx.restore();
   }
 
   function getGradeMarkerImage(kind){
-    const markerKind = (kind === "bad") ? "bad" : (kind === "num" ? "num" : "ok");
+    const markerKind = (
+      kind === "bad" ? "bad"
+      : (kind === "num_bad" ? "num_bad"
+        : (kind === "num_ok" ? "num_ok" : "ok"))
+    );
     const key = `${markerKind}:v${GRADE_MARKER_VERSION}`;
     if (state.gradeMarkerImageCache[key]) return state.gradeMarkerImageCache[key];
     const svg = GRADE_MARKER_SVG[markerKind];
@@ -4338,7 +4361,8 @@
   function preloadGradeMarkerImages(){
     getGradeMarkerImage("ok");
     getGradeMarkerImage("bad");
-    getGradeMarkerImage("num");
+    getGradeMarkerImage("num_ok");
+    getGradeMarkerImage("num_bad");
   }
 
   function drawGradeMarkerImage(ctx, kind, x, y, radius){
@@ -4441,8 +4465,8 @@
     return true;
   }
 
-  async function drawAllModeQuestionNumberMarker(pageNo, q){
-    if (!Number.isFinite(pageNo) || !Number.isFinite(q)) return false;
+  async function drawAllModeQuestionNumberMarker(pageNo, q, gradeState){
+    if (!Number.isFinite(pageNo) || !Number.isFinite(q) || !gradeState) return false;
     const canvas = state.allPageCanvases[pageNo];
     const meta = state.allPageCanvasMeta[pageNo];
     if (!canvas || !meta) return false;
@@ -4450,12 +4474,12 @@
     if (!anchor || !Number.isFinite(anchor.yRatio)) return false;
     const point = projectGradeMarkerPointAll(anchor, meta);
     if (!point) return false;
-    const radius = Math.max(9, Math.min(16, canvas.width * 0.0105));
+    const radius = Math.max(12, Math.min(22, canvas.width * 0.0135));
     const ctx = canvas.getContext("2d");
     ctx.save();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    drawGradeMarkerImage(ctx, "num", point.x, point.y, radius);
+    drawGradeMarkerImage(ctx, gradeState === "ok" ? "num_ok" : "num_bad", point.x, point.y, radius);
     ctx.restore();
     return true;
   }
@@ -4472,7 +4496,7 @@
       const gradeState = getViewerGradeState(q);
       if (gradeState) {
         await drawAllModeGradeMarker(pageNo, q, gradeState);
-        await drawAllModeQuestionNumberMarker(pageNo, q);
+        await drawAllModeQuestionNumberMarker(pageNo, q, gradeState);
       }
     }
   }
