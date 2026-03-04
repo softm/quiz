@@ -1,4 +1,4 @@
-- group.json : 대분류 그룹, seq는 정렬 순서
+- json/group.json : 대분류 그룹, seq는 정렬 순서
 [
       {
            gNo : "01",
@@ -12,7 +12,7 @@
        },
 ]
 
-- category.json : 카테고리(과목), seq는 정렬 순서
+- json/category.json : 카테고리(과목), seq는 정렬 순서
 [
          {
          gNo : "01",
@@ -37,7 +37,7 @@
        },
 ]
 
-- question.json : 기출문제 묶음, seq는 정렬 순서
+- json/question.json : 기출문제 묶음, seq는 정렬 순서
 [
     {
          gNo : "01",
@@ -80,3 +80,8 @@
          seq : 4
     },
 ]
+
+## 문항 선택지
+  ①,②,③,④,⑤
+
+  한문제 보기 아래여백 조금더 추가

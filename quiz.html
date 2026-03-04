@@ -323,7 +323,10 @@
     .viewerNav.left{left:6px}
     .viewerNav.right{right:6px}
     .viewer.single .viewerNav{display:flex}
-    .viewer.single{overflow:hidden}
+    .viewer.single{
+      overflow:auto;
+      -webkit-overflow-scrolling:touch;
+    }
     .bookmarkBtn{
       width:42px;
       height:42px;
@@ -511,7 +514,13 @@
       user-select:none;
     }
     .choice input{display:none}
-    .choice.selected{outline:2px solid rgba(169,180,223,.55)}
+    .choice.selected{
+      outline:2px solid rgba(10,102,214,.85);
+      border-color:rgba(10,102,214,.72);
+      background:rgba(10,102,214,.16);
+      box-shadow:0 0 0 1px rgba(10,102,214,.2) inset, 0 1px 4px rgba(10,102,214,.22);
+      font-weight:800;
+    }
     .choice.correct{outline:2px solid rgba(39,209,127,.8)}
     .choice.wrong{outline:2px solid rgba(255,77,109,.85)}
     .choice.disabled{cursor:not-allowed; filter:grayscale(.2);}
@@ -1056,6 +1065,13 @@
       color:#d5e9ff;
       box-shadow:0 0 0 1px rgba(139,192,255,.25) inset;
     }
+    body.theme-dark .choice.selected{
+      outline:2px solid rgba(139,192,255,.9);
+      border-color:rgba(139,192,255,.8);
+      background:rgba(139,192,255,.2);
+      box-shadow:0 0 0 1px rgba(139,192,255,.28) inset, 0 1px 5px rgba(0,0,0,.35);
+      color:#e8f3ff;
+    }
   </style>
 </head>
 <body>
@@ -1222,8 +1238,8 @@
   const STORAGE_BOOKMARK_KEY = "quiz_bookmarks_v1";
   const STORAGE_UI_KEY = "quiz_ui_v3";
   const ANSWER_PARSE_VERSION = 2;
-  const PDF_MAP_VERSION = 5;
-  const CROP_CACHE_VERSION = 12;
+  const PDF_MAP_VERSION = 7;
+  const CROP_CACHE_VERSION = 22;
   const PRESET_PAGE_ANCHORS = {
     "2022년 제19회 농산물품질관리사 1차": [1,6,10,14,18,22,26,33,39,47,51,57,64,70,76,81,87,94],
     "2023년 제20회 농산물품질관리사 1차": [1,5,10,15,19,23,26,34,40,48,51,57,64,70,76,83,90,97],
@@ -1231,6 +1247,26 @@
     "2025년 제22회 농산물품질관리사 1차": [1,5,10,14,19,23,26,35,41,47,51,57,66,72,76,81,89,95],
   };
   const SINGLE_CROP_OVERRIDES = {};
+  const GRADE_MARKER_SVG = {
+    ok: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240">
+      <path d="M48 118
+               C42 72, 84 42, 140 36
+               C208 30, 252 70, 254 122
+               C256 176, 214 212, 152 214
+               C104 216, 62 192, 52 154"
+            fill="none" stroke="#ff8f7d" stroke-opacity=".42" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M48 118
+               C42 72, 84 42, 140 36
+               C208 30, 252 70, 254 122
+               C256 176, 214 212, 152 214
+               C104 216, 62 192, 52 154"
+            fill="none" stroke="#ef3b2d" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`,
+    bad: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 240">
+      <path d="M18 222 L122 18" fill="none" stroke="#ff8f7d" stroke-opacity=".42" stroke-width="18" stroke-linecap="round"/>
+      <path d="M18 222 L122 18" fill="none" stroke="#ef3b2d" stroke-width="12" stroke-linecap="round"/>
+    </svg>`
+  };
   const SINGLE_CROP_OVERRIDES_BY_PDF = [
     {
       // NFD/NFC 차이가 있어도 숫자/회차 토큰으로 매칭
@@ -1269,15 +1305,24 @@
     lastRenderMeta: null,
     allPagesRenderKey: null,
     allPageCanvases: [],
+    allPageBaseCanvases: [],
+    allPageCanvasMeta: {},
+    allModeLastMarked: null,
     allNavToken: 0,
     singlePageRenderCache: new Map(),
     pageQuestionRatioCache: {},
     pageQuestionDirectRatioCache: {},
     pageQuestionRowStartCache: {},
     pageReliableQuestionStartCache: {},
+    exactQuestionLabelRatioCache: {},
+    pageQuestionLabelTokenCache: {},
+    pageQuestionStartAnchorCache: {},
     questionChoiceAnchorCache: {},
     questionCropRangeCache: {},
     pageOcrQuestionStartCache: {},
+    gradeMarkerImageCache: {},
+    delayedPdfLoadingTimer: null,
+    delayedPdfLoadingToken: 0,
     pdfNav: {
       enabled: true,
       startPage: 1,
@@ -1491,6 +1536,30 @@
     }
   }
 
+  function beginDelayedPdfLoading(text = "PDF 로딩 중...", delayMs = 280){
+    state.delayedPdfLoadingToken += 1;
+    const token = state.delayedPdfLoadingToken;
+    if (state.delayedPdfLoadingTimer) {
+      clearTimeout(state.delayedPdfLoadingTimer);
+      state.delayedPdfLoadingTimer = null;
+    }
+    state.delayedPdfLoadingTimer = setTimeout(() => {
+      if (token !== state.delayedPdfLoadingToken) return;
+      setPdfLoading(true, text);
+    }, Math.max(0, Number(delayMs) || 0));
+    return token;
+  }
+
+  function endDelayedPdfLoading(token){
+    if (Number.isFinite(token) && token !== state.delayedPdfLoadingToken) return;
+    state.delayedPdfLoadingToken += 1;
+    if (state.delayedPdfLoadingTimer) {
+      clearTimeout(state.delayedPdfLoadingTimer);
+      state.delayedPdfLoadingTimer = null;
+    }
+    setPdfLoading(false);
+  }
+
   function initAdFit(slotId, unit, width, height) {
     const slot = document.getElementById(slotId);
     if (!slot) return;
@@ -1642,6 +1711,7 @@
   initAdFit("adfitQuizSide", ADFIT_UNITS.quizSide, "300", "250");
 
   loadUi();
+  preloadGradeMarkerImages();
   updateFontButtonLabels();
   updateOrientationButton();
   enforceMobileReadingMode();
@@ -2071,9 +2141,18 @@
   function getSingleCropOverrideByPdfUrl(){
     const raw = String(QUESTION_PDF_URL || "");
     const normalized = raw.normalize("NFC");
+    const decoded = tryDecodeURIComponent(raw).normalize("NFC");
+    const base = raw.split("/").pop() || raw;
+    const decodedBase = decoded.split("/").pop() || decoded;
     for (const item of SINGLE_CROP_OVERRIDES_BY_PDF){
       if (!item || !item.match || !item.ranges) continue;
-      if (item.match.test(raw) || item.match.test(normalized)) return item.ranges;
+      if (
+        item.match.test(raw)
+        || item.match.test(normalized)
+        || item.match.test(decoded)
+        || item.match.test(base)
+        || item.match.test(decodedBase)
+      ) return item.ranges;
     }
     return null;
   }
@@ -2187,6 +2266,9 @@
     state.pageQuestionDirectRatioCache = {};
     state.pageQuestionRowStartCache = {};
     state.pageReliableQuestionStartCache = {};
+    state.exactQuestionLabelRatioCache = {};
+    state.pageQuestionLabelTokenCache = {};
+    state.pageQuestionStartAnchorCache = {};
     state.questionChoiceAnchorCache = {};
     state.questionCropRangeCache = {};
     state.pageOcrQuestionStartCache = {};
@@ -2779,296 +2861,444 @@
     return map;
   }
 
-  async function getQuestionCropRange(q, page){
+  async function getQuestionStartAnchorsForPage(pageNo){
+    const key = String(pageNo);
+    if (state.pageQuestionStartAnchorCache[key]) return state.pageQuestionStartAnchorCache[key];
+
+    const pdf = await ensurePdfDocument();
+    const page = await pdf.getPage(pageNo);
+    const viewport = page.getViewport({ scale: 1 });
+    const pageW = Math.max(1, viewport.width);
+    const pageH = Math.max(1, viewport.height);
+    const textContent = await page.getTextContent();
+
+    const rows = [];
+    const itemAnchors = new Map();
+    for (const it of (textContent.items || [])){
+      const s = String(it.str || "").trim();
+      if (!s) continue;
+      const x = Number(it.transform && it.transform[4]);
+      const y = Number(it.transform && it.transform[5]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+
+      const token = s.replace(/\s+/g, "");
+      const tm = token.match(/^\(?(\d{1,3})(?:[.]|번)\)?$/);
+      if (tm) {
+        const q = Number(tm[1]);
+        const xRatio = x / pageW;
+        if (Number.isFinite(q) && q >= 1 && q <= 100 && xRatio <= 0.2) {
+          const ih = Math.max(10, Math.abs(Number(it.height) || 0));
+          const top = Math.max(0, Math.min(pageH - ih, pageH - y - ih));
+          const yRatio = Math.max(0, Math.min(1, top / pageH));
+          const prev = itemAnchors.get(q);
+          if (!prev || yRatio < prev.yRatio) {
+            itemAnchors.set(q, { xRatio: Math.max(0, Math.min(1, xRatio)), yRatio });
+          }
+        }
+      }
+
+      let row = null;
+      for (const r of rows){
+        if (Math.abs(r.y - y) <= 2.0) { row = r; break; }
+      }
+      if (!row){
+        row = { y, parts: [] };
+        rows.push(row);
+      }
+      row.parts.push({ x, s });
+    }
+
+    const map = new Map(itemAnchors);
+    for (const row of rows){
+      row.parts.sort((a, b) => a.x - b.x);
+      if (!row.parts.length) continue;
+      const startX = row.parts[0].x;
+      const startXRatio = startX / pageW;
+      if (startXRatio > 0.26) continue;
+      const line = row.parts.map((p) => p.s).join(" ").replace(/\s+/g, " ").trim();
+      const m = line.match(/^\(?\s*(\d{1,3})\s*(?:[.]|번)(?:\s|$)/);
+      if (!m) continue;
+      const q = Number(m[1]);
+      if (!Number.isFinite(q) || q < 1 || q > 100) continue;
+      if (line.length < 6) continue;
+      const top = Math.max(0, Math.min(pageH - 1, pageH - row.y - 12));
+      const yRatio = Math.max(0, Math.min(1, top / pageH));
+      const xRatio = Math.max(0, Math.min(1, startXRatio));
+      const prev = map.get(q);
+      if (!prev || yRatio < prev.yRatio) map.set(q, { xRatio, yRatio });
+    }
+
+    state.pageQuestionStartAnchorCache[key] = map;
+    return map;
+  }
+
+  async function getNextQuestionBoundaryRatioForPage(pageNo, q, startRatio = null, minAfterRatio = null){
+    const base = Number.isFinite(startRatio) ? Math.max(0, Math.min(1, Number(startRatio))) : 0;
+    const after = Number.isFinite(minAfterRatio) ? Math.max(0, Math.min(1, Number(minAfterRatio))) : null;
+    const minGap = 0.03;
+    const trusted = [];
+    const fallback = [];
+    const seen = new Set();
+    const push = (arr, v) => {
+      if (!Number.isFinite(v)) return;
+      const r = Math.max(0, Math.min(1, Number(v)));
+      if (r <= base + minGap) return;
+      // 선택지 하단과 다음 문항 시작이 매우 근접한(촘촘한) 레이아웃이 있어
+      // 과도한 최소 간격 필터를 쓰면 q+1 경계를 놓치게 된다.
+      if (after != null && r <= (after + 0.0015)) return;
+      const key = r.toFixed(5);
+      if (seen.has(key)) return;
+      seen.add(key);
+      arr.push(r);
+    };
+
     const pageMap = state.pdfNav.questionPageMap;
     const ratioMap = state.pdfNav.questionTopRatioMap;
-    if (!Array.isArray(pageMap) || !Array.isArray(ratioMap)) return { start: 0, end: 1, focusStart: 0, focusEnd: 1, lowConfidence: true };
-    const mappedRatioForQ = (pageMap[q] === page && Number.isFinite(ratioMap[q])) ? Number(ratioMap[q]) : null;
-    const cropCacheKey = `${CROP_CACHE_VERSION}|${getCurrentPdfSourceKey()}|${page}|${q}|${mappedRatioForQ == null ? "na" : mappedRatioForQ.toFixed(4)}`;
-    if (state.questionCropRangeCache[cropCacheKey]) return state.questionCropRangeCache[cropCacheKey];
-
-    const portraitSingleMode = state.viewMode === "single"
-      && window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches;
-    if (portraitSingleMode){
-      let start = Number.isFinite(mappedRatioForQ) ? Math.max(0, Math.min(1, mappedRatioForQ)) : null;
-      try{
-        const here = await locateQuestionInPdf(q);
-        if (here && here.page === page && Number.isFinite(here.ratio)) {
-          start = Math.max(0, Math.min(1, here.ratio));
-        }
-      }catch(_){}
-      if (!Number.isFinite(start)) start = 0.1;
-
-      let nextStart = null;
-      if (q < 100){
-        if (Array.isArray(pageMap) && Array.isArray(ratioMap) && pageMap[q + 1] === page && Number.isFinite(ratioMap[q + 1])) {
-          nextStart = Math.max(0, Math.min(1, Number(ratioMap[q + 1])));
-        }
-        try{
-          const next = await locateQuestionInPdf(q + 1);
-          if (next && next.page === page && Number.isFinite(next.ratio) && next.ratio > start + 0.06) {
-            nextStart = Math.max(0, Math.min(1, next.ratio));
-          }
-        }catch(_){}
-      }
-
-      const focusStart = Math.max(0, start - 0.01);
-      const focusEnd = Number.isFinite(nextStart)
-        ? Math.max(focusStart + 0.2, Math.min(0.995, nextStart - 0.012))
-        : Math.min(0.995, focusStart + 0.52);
-      const resolved = { start: focusStart, end: focusEnd, focusStart, focusEnd, lowConfidence: false };
-      state.questionCropRangeCache[cropCacheKey] = resolved;
-      return resolved;
-    }
-
-    const pageRatios = await getQuestionRatiosForPage(page);
-    const rowStarts = await getRowQuestionStartRatiosForPage(page);
-    const directStarts = await getDirectQuestionRatiosForPage(page);
-    const reliableStarts = await getReliableQuestionStartsForPage(page);
-    const pickStart = (qq, options = {}) => {
-      const preferTop = options.preferTop === true;
-      const expected = Number.isFinite(options.expected) ? options.expected : null;
-      const window = Number.isFinite(options.window) ? Math.max(0.02, options.window) : 0.12;
-      const candidates = [];
-      if (rowStarts && Number.isFinite(rowStarts.get(qq))) candidates.push(rowStarts.get(qq));
-      if (directStarts && Number.isFinite(directStarts.get(qq))) candidates.push(directStarts.get(qq));
-      if (pageRatios && Number.isFinite(pageRatios.get(qq))) candidates.push(pageRatios.get(qq));
-      if (reliableStarts && Number.isFinite(reliableStarts.get(qq))) candidates.push(reliableStarts.get(qq));
-      if (Array.isArray(pageMap) && pageMap[qq] === page && Number.isFinite(ratioMap[qq])) candidates.push(ratioMap[qq]);
-      if (candidates.length === 0) return null;
-      let usable = candidates.slice();
-      if (expected != null){
-        const near = usable.filter((v) => Math.abs(v - expected) <= window);
-        if (near.length) usable = near;
-      }
-      usable.sort((a, b) => a - b);
-      if (preferTop) return usable[0];
-      return usable[Math.floor(usable.length / 2)];
-    };
-
-    const mappedStart = Number.isFinite(mappedRatioForQ) ? Math.max(0, Math.min(1, mappedRatioForQ)) : null;
-    // 고품질 문서는 맵 근처 후보만 사용해 이전 문항 꼬리 포함을 방지한다.
-    const startCandidate = pickStart(q, { preferTop: true, expected: mappedStart, window: 0.14 });
-    const startRawBase = Math.max(0, Math.min(1,
-      Number.isFinite(startCandidate) ? startCandidate : (mappedStart != null ? mappedStart : 0.12)
-    ));
-    // 저품질/근접 케이스에서만 맵 기반 상단 보정을 적용한다.
-    let startRaw = (mappedStart == null) ? startRawBase : Math.min(startRawBase, Math.max(0, mappedStart - 0.01));
-    const startEvidenceCount =
-      (rowStarts && Number.isFinite(rowStarts.get(q)) ? 1 : 0) +
-      (directStarts && Number.isFinite(directStarts.get(q)) ? 1 : 0) +
-      (pageRatios && Number.isFinite(pageRatios.get(q)) ? 1 : 0);
-
-    const choiceAnchors = await getChoiceAnchorsForQuestion(page, q);
-    let maxChoiceBottom = null;
-    let choice4Bottom = null;
-    const choiceCount = Array.isArray(choiceAnchors) ? choiceAnchors.length : 0;
-    const choiceConfidenceLow = choiceCount < 3;
-    const highQuality = (startEvidenceCount >= 1) || !choiceConfidenceLow;
-    if (choiceAnchors && choiceAnchors.length){
-      maxChoiceBottom = Math.max(...choiceAnchors.map(a => a.yRatio + a.hRatio));
-      if (!Number.isFinite(maxChoiceBottom)) maxChoiceBottom = null;
-      const c4 = choiceAnchors.find((a) => a.choice === 4);
-      if (c4) {
-        const b4 = c4.yRatio + c4.hRatio;
-        if (Number.isFinite(b4)) choice4Bottom = b4;
+    if (Array.isArray(pageMap) && Array.isArray(ratioMap)) {
+      for (let k = q + 1; k <= 100; k++){
+        if (pageMap[k] !== pageNo || !Number.isFinite(ratioMap[k])) continue;
+        push(trusted, ratioMap[k]);
       }
     }
 
-    let nextStartRaw = null;
-    const isValidNextStart = (cand) => {
-      if (!Number.isFinite(cand)) return false;
-      // 현재 문항 본문/선지 내부 오검출을 막기 위해 최소 간격을 크게 둔다.
-      if (cand <= startRaw + 0.12) return false;
-      // 선택지 영역 위에서 잡힌 후보는 오검출(예: ② 라인) 가능성이 높아 배제
-      if (Number.isFinite(maxChoiceBottom) && cand <= maxChoiceBottom + 0.03) return false;
-      return true;
-    };
-    // 1순위: q+1 시작점
-    const directNext = pickStart(q + 1);
-    if (isValidNextStart(directNext)) {
-      nextStartRaw = directNext;
-    } else {
-      // 2순위: 이후 인접 문항 중 가장 가까운 시작점
-      for (let k = q + 1; k <= Math.min(100, q + 8); k++){
-        const cand = pickStart(k);
-        if (isValidNextStart(cand)) {
-          nextStartRaw = cand;
-          break;
+    try{
+      const anchorMap = await getQuestionStartAnchorsForPage(pageNo);
+      if (anchorMap && typeof anchorMap.entries === "function") {
+        for (const [k, v] of anchorMap.entries()){
+          if (!Number.isFinite(k) || !v || !Number.isFinite(v.yRatio)) continue;
+          if (k <= q) continue;
+          push(trusted, v.yRatio);
         }
       }
-    }
-    // q+1 직접값이 있고 유효하면 항상 우선 적용(공통 일관성)
-    if (isValidNextStart(directNext)) {
-      nextStartRaw = directNext;
+    }catch(_){}
+
+    try{
+      const next = await locateQuestionInPdf(q + 1);
+      if (next && next.page === pageNo && Number.isFinite(next.ratio)) {
+        push(trusted, next.ratio);
+      }
+    }catch(_){}
+
+    if (trusted.length) {
+      trusted.sort((a, b) => a - b);
+      return trusted[0];
     }
 
-    // q+1 번호 매칭이 실패해도, "현재 문항 이후 첫 시작점"을 컷 경계로 사용한다.
-    if (!Number.isFinite(nextStartRaw)) {
-      const nextCandidates = [];
-      const collectNext = (m) => {
-        if (!m || typeof m.entries !== "function") return;
+    try{
+      const maps = [
+        await getQuestionRatiosForPage(pageNo),
+        await getRowQuestionStartRatiosForPage(pageNo),
+        await getDirectQuestionRatiosForPage(pageNo),
+        await getReliableQuestionStartsForPage(pageNo)
+      ];
+      for (const m of maps){
+        if (!m || typeof m.entries !== "function") continue;
         for (const [k, v] of m.entries()){
           if (!Number.isFinite(k) || !Number.isFinite(v)) continue;
           if (k <= q) continue;
-          if (v <= startRaw + 0.08) continue;
-          nextCandidates.push(v);
+          push(fallback, v);
         }
-      };
-      collectNext(reliableStarts);
-      collectNext(rowStarts);
-      collectNext(directStarts);
-      collectNext(pageRatios);
-      if (nextCandidates.length) {
-        nextCandidates.sort((a, b) => a - b);
-        nextStartRaw = nextCandidates[0];
       }
-    }
+    }catch(_){}
 
-    // 저신뢰 경로에서만 과도한 근접 후보를 제거한다.
-    if (!highQuality && choiceConfidenceLow && Number.isFinite(nextStartRaw) && nextStartRaw < (startRaw + 0.45)) {
-      nextStartRaw = null;
+    if (fallback.length) {
+      fallback.sort((a, b) => a - b);
+      return fallback[0];
     }
+    return null;
+  }
 
-    // 고품질에서는 전체문제 보기와 같은 앵커(ratio) 기준으로 시작점을 맞춘다.
-    let unifiedStartRatio = null;
-    let unifiedNextRatio = null;
-    if (highQuality){
-      try{
-        const here = await locateQuestionInPdf(q);
-        if (here && here.page === page && Number.isFinite(here.ratio)) {
-          unifiedStartRatio = Math.max(0, Math.min(1, here.ratio));
+  async function getNearestNextQuestionStartRatioForPage(pageNo, q, startRatio = null){
+    const base = Number.isFinite(startRatio) ? Math.max(0, Math.min(1, Number(startRatio))) : 0;
+    const out = [];
+    const seen = new Set();
+    const push = (v) => {
+      if (!Number.isFinite(v)) return;
+      const r = Math.max(0, Math.min(1, Number(v)));
+      if (r <= base + 0.015) return;
+      const key = r.toFixed(5);
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(r);
+    };
+
+    try{
+      const tokenMap = await getQuestionLabelTokenRatiosForPage(pageNo);
+      if (tokenMap && typeof tokenMap.entries === "function") {
+        for (const [k, v] of tokenMap.entries()){
+          if (!Number.isFinite(k) || k <= q) continue;
+          push(v);
         }
-        if (q < 100){
-          const next = await locateQuestionInPdf(q + 1);
-          if (next && next.page === page && Number.isFinite(next.ratio)) {
-            const nr = Math.max(0, Math.min(1, next.ratio));
-            if (unifiedStartRatio == null || nr > unifiedStartRatio + 0.06) {
-              unifiedNextRatio = nr;
-            }
-          }
+      }
+    }catch(_){}
+
+    try{
+      const anchorMap = await getQuestionStartAnchorsForPage(pageNo);
+      if (anchorMap && typeof anchorMap.entries === "function") {
+        for (const [k, v] of anchorMap.entries()){
+          if (!Number.isFinite(k) || k <= q || !v || !Number.isFinite(v.yRatio)) continue;
+          push(v.yRatio);
+        }
+      }
+    }catch(_){}
+
+    try{
+      const maps = [
+        await getQuestionRatiosForPage(pageNo),
+        await getRowQuestionStartRatiosForPage(pageNo),
+        await getDirectQuestionRatiosForPage(pageNo),
+        await getReliableQuestionStartsForPage(pageNo)
+      ];
+      for (const m of maps){
+        if (!m || typeof m.entries !== "function") continue;
+        for (const [k, v] of m.entries()){
+          if (!Number.isFinite(k) || k <= q) continue;
+          push(v);
+        }
+      }
+    }catch(_){}
+
+    if (!out.length) return null;
+    out.sort((a, b) => a - b);
+    return out[0];
+  }
+
+  async function getQuestionStartRatioForPage(pageNo, q){
+    if (!Number.isFinite(pageNo) || !Number.isFinite(q)) return null;
+    try{
+      const exact = await getExactQuestionLabelRatioForPage(pageNo, q);
+      if (Number.isFinite(exact)) return Math.max(0, Math.min(1, Number(exact)));
+    }catch(_){}
+    try{
+      const anchorMap = await getQuestionStartAnchorsForPage(pageNo);
+      const a = anchorMap && anchorMap.get(q);
+      if (a && Number.isFinite(a.yRatio)) {
+        return Math.max(0, Math.min(1, Number(a.yRatio)));
+      }
+    }catch(_){}
+    try{
+      const ocrMap = await getOcrQuestionStartRatiosForPage(pageNo);
+      if (ocrMap && Number.isFinite(ocrMap[q])) {
+        return Math.max(0, Math.min(1, Number(ocrMap[q])));
+      }
+    }catch(_){}
+    try{
+      const located = await locateQuestionInPdf(q);
+      if (located && located.page === pageNo && Number.isFinite(located.ratio)) {
+        return Math.max(0, Math.min(1, Number(located.ratio)));
+      }
+    }catch(_){}
+    try{
+      const pageRatios = await getQuestionRatiosForPage(pageNo);
+      if (pageRatios && Number.isFinite(pageRatios.get(q))) {
+        return Math.max(0, Math.min(1, Number(pageRatios.get(q))));
+      }
+    }catch(_){}
+    const pageMap = state.pdfNav.questionPageMap;
+    const ratioMap = state.pdfNav.questionTopRatioMap;
+    if (Array.isArray(pageMap) && Array.isArray(ratioMap) && pageMap[q] === pageNo && Number.isFinite(ratioMap[q])) {
+      return Math.max(0, Math.min(1, Number(ratioMap[q])));
+    }
+    return null;
+  }
+
+  async function getQuestionLabelTokenRatiosForPage(pageNo){
+    const key = String(pageNo);
+    if (state.pageQuestionLabelTokenCache[key]) return state.pageQuestionLabelTokenCache[key];
+    const map = new Map();
+    try{
+      const pdf = await ensurePdfDocument();
+      const page = await pdf.getPage(pageNo);
+      const viewport = page.getViewport({ scale: 1 });
+      const pageW = Math.max(1, viewport.width);
+      const pageH = Math.max(1, viewport.height);
+      const textContent = await page.getTextContent();
+      for (const item of (textContent.items || [])){
+        const s = String(item.str || "").replace(/\s+/g, "");
+        if (!s) continue;
+        const m = s.match(/^\(?(\d{1,3})(?:\.|번)\)?$/);
+        if (!m) continue;
+        const q = Number(m[1]);
+        if (!Number.isFinite(q) || q < 1 || q > 100) continue;
+        const x = Number(item.transform && item.transform[4]);
+        const y = Number(item.transform && item.transform[5]);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        const xRatio = x / pageW;
+        if (xRatio > 0.20) continue;
+        const ih = Math.max(10, Math.abs(Number(item.height) || 0));
+        const top = Math.max(0, Math.min(pageH - ih, pageH - y - ih));
+        const yRatio = Math.max(0, Math.min(1, top / pageH));
+        if (!map.has(q) || yRatio < map.get(q)) map.set(q, yRatio);
+      }
+    }catch(_){}
+    state.pageQuestionLabelTokenCache[key] = map;
+    return map;
+  }
+
+  async function getExactQuestionLabelRatioForPage(pageNo, q){
+    if (!Number.isFinite(pageNo) || !Number.isFinite(q)) return null;
+    const key = `${pageNo}:${q}`;
+    if (Object.prototype.hasOwnProperty.call(state.exactQuestionLabelRatioCache, key)) {
+      return state.exactQuestionLabelRatioCache[key];
+    }
+    let found = null;
+    try{
+      const tokenMap = await getQuestionLabelTokenRatiosForPage(pageNo);
+      const tokenRatio = tokenMap && tokenMap.get(q);
+      if (Number.isFinite(tokenRatio)) found = Number(tokenRatio);
+    }catch(_){}
+    try{
+      const pdf = await ensurePdfDocument();
+      const page = await pdf.getPage(pageNo);
+      const viewport = page.getViewport({ scale: 1 });
+      const pageW = Math.max(1, viewport.width);
+      const pageH = Math.max(1, viewport.height);
+      const textContent = await page.getTextContent();
+      const target = String(Math.floor(q));
+      const rows = [];
+
+      const pushRowPart = (x, y, s) => {
+        let row = null;
+        for (const r of rows){
+          if (Math.abs(r.y - y) <= 2.2) { row = r; break; }
+        }
+        if (!row){
+          row = { y, parts: [] };
+          rows.push(row);
+        }
+        row.parts.push({ x, s });
+      };
+
+      for (const item of (textContent.items || [])){
+        const raw = String(item.str || "").trim();
+        if (!raw) continue;
+        const compact = raw.replace(/\s+/g, "");
+        // 다른 탐지 함수와 동일하게 PDF 원좌표(item.transform)를 사용해야
+        // y축 반전 오차가 생기지 않는다.
+        const x = Number(item.transform && item.transform[4]);
+        const y = Number(item.transform && item.transform[5]);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        pushRowPart(x, y, compact);
+      }
+
+      // 분할 토큰(예: "16" + ".", "16" + "번")도 문항번호로 인식한다.
+      for (const row of rows){
+        row.parts.sort((a, b) => a.x - b.x);
+        if (!row.parts.length) continue;
+        const first = String(row.parts[0].s || "");
+        const second = String((row.parts[1] && row.parts[1].s) || "");
+        const third = String((row.parts[2] && row.parts[2].s) || "");
+        const lineCompact = row.parts.map((p) => String(p.s || "")).join("");
+        const startsWithLabel =
+          new RegExp(`^\\(?${target}(?:\\.|번)\\)?`).test(lineCompact) ||
+          (first === target && (second === "." || second === "번" || second === ")")) ||
+          (first === "(" && second === target && (third === "." || third === "번" || third === ")"));
+        if (!startsWithLabel) continue;
+
+        const x = Number(row.parts[0].x);
+        if (!Number.isFinite(x)) continue;
+        const xRatio = x / pageW;
+        if (xRatio > 0.24) continue;
+        // 일부 PDF는 문항번호 토큰이 짧게 분리되어 들어와 길이 필터를 완화한다.
+        const lineText = row.parts.map((p) => String(p.s || "")).join(" ").trim();
+        if (lineText.length < 2) continue;
+        const top = Math.max(0, Math.min(pageH - 1, pageH - Number(row.y) - 12));
+        const yRatio = Math.max(0, Math.min(1, top / pageH));
+        if (found == null || yRatio < found) found = yRatio;
+      }
+    }catch(_){}
+
+    // null 결과를 캐시하면 일시적인 탐지 실패가 계속 고정된다.
+    // 성공값만 캐시해서 다음 렌더에서 재시도 가능하게 한다.
+    if (Number.isFinite(found)) {
+      state.exactQuestionLabelRatioCache[key] = found;
+      return found;
+    }
+    return null;
+  }
+
+  async function getQuestionCropRange(q, page){
+    const pageMap = state.pdfNav.questionPageMap;
+    const ratioMap = state.pdfNav.questionTopRatioMap;
+    if (!Array.isArray(pageMap) || !Array.isArray(ratioMap)) return { start: 0, end: 1, focusStart: 0, focusEnd: 1, lowConfidence: true, nextBoundary: null };
+    const mappedRatioForQ = (pageMap[q] === page && Number.isFinite(ratioMap[q])) ? Number(ratioMap[q]) : null;
+    const cropCacheKey = `${CROP_CACHE_VERSION}|${getCurrentPdfSourceKey()}|${page}|${q}|${mappedRatioForQ == null ? "na" : mappedRatioForQ.toFixed(4)}`;
+    if (state.questionCropRangeCache[cropCacheKey]) return state.questionCropRangeCache[cropCacheKey];
+    const mobileViewport = window.matchMedia("(max-width: 768px)").matches;
+
+    let startRaw = await getQuestionStartRatioForPage(page, q);
+    if (!Number.isFinite(startRaw)) {
+      startRaw = Number.isFinite(mappedRatioForQ) ? mappedRatioForQ : 0.12;
+    }
+    startRaw = Math.max(0, Math.min(1, Number(startRaw)));
+
+    let nextStartRaw = null;
+    if (q < 100) {
+      try{
+        const strictNext = await getQuestionStartRatioForPage(page, q + 1);
+        if (Number.isFinite(strictNext) && strictNext > startRaw + 0.03) {
+          nextStartRaw = strictNext;
         }
       }catch(_){}
-    }
-    // 고품질이면 전체모드 앵커를 절대 우선으로 사용한다.
-    if (highQuality && Number.isFinite(unifiedStartRatio)) {
-      startRaw = unifiedStartRatio;
-    }
-    if (highQuality && Number.isFinite(unifiedNextRatio)) {
-      nextStartRaw = unifiedNextRatio;
-    }
-    // 고품질인데 q+1 시작을 아직 못 찾은 경우, 한 번 더 완화된 범위로 탐색
-    if (highQuality && !Number.isFinite(nextStartRaw)) {
-      const relaxedNext = pickStart(q + 1, { expected: mappedStart, window: 0.35 });
-      if (Number.isFinite(relaxedNext) && relaxedNext > startRaw + 0.08) {
-        nextStartRaw = relaxedNext;
+      if (!Number.isFinite(nextStartRaw)) {
+        try{
+          const guessed = await getNextQuestionBoundaryRatioForPage(page, q, startRaw, null);
+          if (Number.isFinite(guessed) && guessed > startRaw + 0.03) nextStartRaw = guessed;
+        }catch(_){}
       }
     }
 
-    // 고품질은 전체모드와 동일한 상단 정렬, 저품질만 여백을 둔다.
-    const baseStart = startRaw;
-    const topPad = highQuality ? 0 : 0.036;
-    let focusStart = Math.max(0, baseStart - topPad);
+    const topPad = mobileViewport ? 0.006 : 0.008;
+    let focusStart = Math.max(0, startRaw - topPad);
     let focusEnd = null;
-    // 한문제 보기 핵심: 선택지 하단을 우선으로 현재 문제만 포함
-    if (Number.isFinite(maxChoiceBottom)) {
-      // 선택지 하단 기준 여유는 작게 유지해야 다음 문제가 섞이지 않는다.
-      const byChoices = Math.min(0.995, maxChoiceBottom + 0.035);
-      if (Number.isFinite(nextStartRaw)) {
-        // 다음 문제 시작이 있으면 그 직전까지로 제한
-        focusEnd = Math.min(byChoices, Math.max(focusStart + 0.14, nextStartRaw - 0.02));
-      } else {
-        focusEnd = Math.max(focusStart + 0.14, byChoices);
-      }
-    } else if (Number.isFinite(nextStartRaw)) {
-      focusEnd = Math.max(focusStart + 0.14, Math.min(1, nextStartRaw - 0.02));
+
+    if (Number.isFinite(nextStartRaw)) {
+      const gap = mobileViewport ? 0.022 : 0.018;
+      focusEnd = Math.max(focusStart + 0.08, Math.min(0.995, nextStartRaw - gap));
     } else {
-      // 컷 경계 미검출 시 전체 페이지를 보여주지 않고, 현재 문항 근접 구간으로 제한한다.
-      if (highQuality) {
-        // 짧은 문제(특히 말미 문항)에서 다음 문제가 섞이지 않도록 보수적으로 제한
-        if (Number.isFinite(choice4Bottom)) {
-          focusEnd = Math.min(0.995, choice4Bottom + 0.08);
-        } else {
-          focusEnd = Math.min(0.995, focusStart + 0.24);
+      let choiceBottom = null;
+      try{
+        const anchors = await getChoiceAnchorsForQuestion(page, q, { startRatio: startRaw });
+        if (Array.isArray(anchors) && anchors.length) {
+          const maxChoiceBottom = Math.max(...anchors.map((a) => a.yRatio + a.hRatio));
+          if (Number.isFinite(maxChoiceBottom)) choiceBottom = maxChoiceBottom;
         }
+      }catch(_){}
+      if (Number.isFinite(choiceBottom)) {
+        focusEnd = Math.min(0.995, Math.max(focusStart + 0.14, choiceBottom + 0.05));
       } else {
-        focusEnd = Math.min(0.995, focusStart + 0.38);
+        focusEnd = Math.min(0.995, focusStart + (mobileViewport ? 0.34 : 0.30));
       }
     }
 
-    // 너무 짧게 잘리면 최소 높이 보장(고품질은 낮게 유지해 다음 문항 혼입 방지)
-    const minWindow = highQuality ? 0.14 : 0.2;
-    if (focusEnd - focusStart < minWindow) {
-      focusEnd = Math.min(0.995, focusStart + minWindow);
+    // 단일 문항 보장: q+1 경계가 있으면 절대 넘지 않는다.
+    if (Number.isFinite(nextStartRaw)) {
+      const hardGap = mobileViewport ? 0.024 : 0.020;
+      const hardCap = Math.max(focusStart + 0.08, Math.min(0.995, nextStartRaw - hardGap));
+      focusEnd = Math.min(focusEnd, hardCap);
     }
 
-    // 고품질은 다음 문항 시작점을 컷 끝의 절대 기준으로 사용해 "한 문제만" 보이게 한다.
-    if (highQuality && Number.isFinite(nextStartRaw)) {
-      const hardEnd = Math.max(focusStart + 0.16, Math.min(0.995, nextStartRaw - 0.012));
-      focusEnd = Math.min(focusEnd, hardEnd);
-      // 선택지 ④가 약간 아래에 있어도 다음 문항 시작점은 넘지 않게 미세 보정
-      if (Number.isFinite(choice4Bottom)) {
-        const minForChoice = Math.min(hardEnd, Math.max(focusStart + 0.14, choice4Bottom + 0.02));
-        focusEnd = Math.max(focusEnd, minForChoice);
-      }
-    }
-
-    // 고품질 + 같은 페이지 다음 문항 앵커가 있으면 그 직전까지만 강제.
-    if (Number.isFinite(unifiedNextRatio)) {
-      focusEnd = Math.min(focusEnd, Math.max(focusStart + 0.16, unifiedNextRatio - 0.015));
-    }
-    if (highQuality && Number.isFinite(nextStartRaw)) {
-      focusEnd = Math.min(focusEnd, Math.max(focusStart + 0.16, nextStartRaw - 0.01));
-    }
-
-    // ④가 검출되면 컷 끝을 늘리되, 다음 문항 경계를 절대 넘지 않는다.
-    if (Number.isFinite(choice4Bottom)) {
-      const choiceEnd = Math.min(0.995, choice4Bottom + 0.05);
-      if (highQuality && Number.isFinite(nextStartRaw)) {
-        const capEnd = Math.max(focusStart + 0.14, Math.min(0.995, nextStartRaw - 0.01));
-        focusEnd = Math.min(capEnd, Math.max(focusEnd, Math.min(choiceEnd, capEnd)));
-      } else {
-        focusEnd = Math.max(focusEnd, choiceEnd);
-      }
-    }
-
-    // 저신뢰에서만 보수적으로 더 길게 보여서 오절단을 방지
-    if (!highQuality && choiceConfidenceLow && focusEnd - focusStart < 0.5) {
-      focusEnd = Math.min(0.995, focusStart + 0.5);
-    }
-
-    if (focusEnd - focusStart < 0.14) focusEnd = Math.min(1, focusStart + 0.14);
-
-    // 저신뢰 PDF는 "정확 컷"보다 "근접 위치 표시"가 더 안정적이다.
-    const lowConfidence = !highQuality && choiceConfidenceLow && !Number.isFinite(nextStartRaw);
-    if (lowConfidence) {
-      // 저신뢰 모드는 상단 누락 방지를 우선: 시작 여유를 더 크게 확보
-      let nearStart = Math.max(0, startRaw - 0.09);
-      // 회차 말미 문항은 하단 치우침이 자주 발생하므로 시작점을 상단쪽으로 제한
-      if (q >= 97) nearStart = Math.min(nearStart, 0.18);
-      const nearEnd = Math.min(1, nearStart + 0.44);
-      const resolved = { start: nearStart, end: nearEnd, focusStart: startRaw, focusEnd: Math.min(1, nearStart + 0.3), lowConfidence: true };
-      state.questionCropRangeCache[cropCacheKey] = resolved;
-      return resolved;
-    }
-
-    // 고정 컷맵 우선 적용(회차명 불일치 방지를 위해 PDF 파일명 기반 지원)
     const examOverride = getSingleCropOverrideForExam(EXAM_NAME);
     const pdfOverride = getSingleCropOverrideByPdfUrl();
     const qOverride = (pdfOverride && pdfOverride[q]) || (examOverride && examOverride[q]);
     if (qOverride) {
       if (Number.isFinite(qOverride.start)) {
-        focusStart = Math.max(0, Math.min(1, qOverride.start));
+        startRaw = Math.max(0, Math.min(1, Number(qOverride.start)));
+        focusStart = Math.max(0, Math.min(1, startRaw));
       }
       if (Number.isFinite(qOverride.end)) {
-        focusEnd = Math.max(focusStart + 0.1, Math.min(1, qOverride.end));
+        focusEnd = Math.max(startRaw + 0.08, Math.min(1, Number(qOverride.end)));
       }
     }
 
-    // 단일 모드에서는 start/end를 focus와 동일하게 맞춰 해당 문제만 표시
-    const start = focusStart;
-    const end = focusEnd;
-    const resolved = { start, end, focusStart, focusEnd, lowConfidence: false };
+    const resolved = {
+      start: Math.max(0, Math.min(1, focusStart)),
+      end: Math.max(0, Math.min(1, focusEnd)),
+      focusStart: Math.max(0, Math.min(1, focusStart)),
+      focusEnd: Math.max(0, Math.min(1, focusEnd)),
+      lowConfidence: false,
+      nextBoundary: Number.isFinite(nextStartRaw) ? nextStartRaw : null
+    };
     state.questionCropRangeCache[cropCacheKey] = resolved;
     return resolved;
   }
@@ -3212,8 +3442,6 @@
     if (state.viewMode !== "single") {
       return renderAllPdfPages(q);
     }
-    pdfStatus.textContent = "PDF 로딩 중...";
-    setPdfLoading(true, "PDF 로딩 중...");
     const pdf = await ensurePdfDocument();
     const safePage = Math.min(Math.max(1, Math.floor(page)), pdf.numPages);
     state.currentPdfPage = safePage;
@@ -3240,36 +3468,378 @@
       activeRange = range;
       let safeStart = Number.isFinite(range.start) ? range.start : 0;
       let safeEnd = Number.isFinite(range.end) ? range.end : 1;
+      const examOverride = getSingleCropOverrideForExam(EXAM_NAME);
+      const pdfOverride = getSingleCropOverrideByPdfUrl();
+      const qOverride = (pdfOverride && pdfOverride[q]) || (examOverride && examOverride[q]);
+      const hasEndOverride = !!(qOverride && Number.isFinite(qOverride.end));
+      const rangeNextBoundary = Number.isFinite(range && range.nextBoundary)
+        ? Math.max(0, Math.min(1, Number(range.nextBoundary)))
+        : null;
+      const lowConfidenceRange = !!(range && range.lowConfidence);
+      const pageMap = state.pdfNav.questionPageMap;
+      const ratioMap = state.pdfNav.questionTopRatioMap;
+      const mobileViewport = window.matchMedia("(max-width: 768px)").matches;
+      const mappedNextSamePage = (q < 100
+        && Array.isArray(pageMap)
+        && Array.isArray(ratioMap)
+        && pageMap[q + 1] === safePage
+        && Number.isFinite(ratioMap[q + 1]))
+        ? Math.max(0, Math.min(1, Number(ratioMap[q + 1])))
+        : null;
+      const strictStartSamePage = await getQuestionStartRatioForPage(safePage, q);
+      const strictPrevSamePage = (q > 1)
+        ? await getQuestionStartRatioForPage(safePage, q - 1)
+        : null;
+      const strictStartLabelBoundary = await getExactQuestionLabelRatioForPage(safePage, q);
+      const strictNextSamePage = (q < 100)
+        ? await getQuestionStartRatioForPage(safePage, q + 1)
+        : null;
+      const strictNextLabelBoundary = (q < 100)
+        ? await getExactQuestionLabelRatioForPage(safePage, q + 1)
+        : null;
+      let finalNextBoundaryUsed = null;
+      const labelStartBoundary = Number.isFinite(strictStartLabelBoundary)
+        ? Number(strictStartLabelBoundary)
+        : (Number.isFinite(strictStartSamePage) ? Number(strictStartSamePage) : null);
+      const labelNextBoundary = Number.isFinite(strictNextLabelBoundary)
+        ? Number(strictNextLabelBoundary)
+        : (Number.isFinite(strictNextSamePage) ? Number(strictNextSamePage) : null);
+      // 단일문항 렌더의 시작/끝 기준을 문항 라벨에 맞춰 강제한다.
+      // - 상단: q 라벨이 잘리지 않도록 여유를 두고 맞춤
+      // - 하단: q+1 라벨 이전까지만 허용
+      {
+        const startBase = labelStartBoundary;
+        if (Number.isFinite(startBase)) {
+          const topPad = mobileViewport ? 0.022 : 0.018;
+          let forcedStart = Math.max(0, Math.min(1, startBase - topPad));
+          if (Number.isFinite(strictPrevSamePage)) {
+            const prevGuard = Number(strictPrevSamePage) + 0.035;
+            forcedStart = Math.max(forcedStart, prevGuard);
+          }
+          safeStart = forcedStart;
+        }
+
+        const nextBase = labelNextBoundary;
+        if (Number.isFinite(nextBase)) {
+          const endGap = Number.isFinite(strictNextLabelBoundary)
+            ? (mobileViewport ? 0.020 : 0.016)
+            : (mobileViewport ? 0.055 : 0.045);
+          const forcedEnd = Math.min(0.995, nextBase - endGap);
+          safeEnd = Math.min(safeEnd, forcedEnd);
+          finalNextBoundaryUsed = nextBase;
+        }
+      }
+      let nextStartBoundaryRatio = null;
+      let hardEndCapRatio = null;
+      let provisionalBoundary = null;
+
+      // 선택지 하단은 최소 보장
+      let minEndByChoice = null;
+      let maxEndByChoice = null;
+      let choice4Bottom = null;
+      const earlyBoundaryHint = Number.isFinite(strictNextSamePage)
+        ? strictNextSamePage
+        : (Number.isFinite(rangeNextBoundary)
+          ? rangeNextBoundary
+          : (Number.isFinite(mappedNextSamePage) ? mappedNextSamePage : null));
+      if (!Number.isFinite(earlyBoundaryHint) && q < 100) {
+        try{
+          provisionalBoundary = await getNextQuestionBoundaryRatioForPage(safePage, q, safeStart, null);
+        }catch(_){}
+      }
+      try{
+        let anchors = await getChoiceAnchorsForQuestion(safePage, q, {
+          startRatio: safeStart,
+          endRatio: Number.isFinite(earlyBoundaryHint)
+            ? Math.max(safeStart + 0.02, earlyBoundaryHint - 0.004)
+            : (Number.isFinite(provisionalBoundary) ? Math.max(safeStart + 0.02, provisionalBoundary - 0.004) : null)
+        });
+        // 초기 경계 힌트가 이르게 잡히면 ④가 누락되어 컷이 짧아질 수 있으므로
+        // 제한 없는 범위에서 한 번 더 탐색해 선지 하단을 보정한다.
+        if (Array.isArray(anchors) && anchors.length < 4) {
+          try{
+            const relaxedAnchors = await getChoiceAnchorsForQuestion(safePage, q, { startRatio: safeStart });
+            if (Array.isArray(relaxedAnchors) && relaxedAnchors.length > anchors.length) {
+              anchors = relaxedAnchors;
+            }
+          }catch(_){}
+        }
+        if (Array.isArray(anchors) && anchors.length >= 2) {
+          const activeAnchors = anchors;
+          const ys = activeAnchors.map((a) => Number(a.yRatio)).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+          const ySpread = ys.length ? (ys[ys.length - 1] - ys[0]) : 0;
+          const verticalChoices = ySpread > 0.06;
+          const maxChoiceBottom = Math.max(...activeAnchors.map((a) => a.yRatio + a.hRatio));
+          if (Number.isFinite(maxChoiceBottom)) {
+            minEndByChoice = Math.max(safeStart + 0.16, Math.min(0.995, maxChoiceBottom + 0.05));
+            // 경계 탐지 실패 시 선택지 배치(가로/세로)에 맞춰 상한 여유를 차등 적용
+            // 경계 미검출 fallback 상한: 세로 배열은 하단이 길어 다음 문항 혼입이 쉬워 더 타이트하게.
+            const tailPad = verticalChoices ? 0.014 : 0.012;
+            maxEndByChoice = Math.max(safeStart + 0.18, Math.min(0.995, maxChoiceBottom + tailPad));
+          }
+          const c4 = activeAnchors.find((a) => a.choice === 4) || anchors.find((a) => a.choice === 4);
+          if (c4 && Number.isFinite(c4.yRatio) && Number.isFinite(c4.hRatio)) {
+            choice4Bottom = Math.max(0, Math.min(1, c4.yRatio + c4.hRatio));
+          }
+        }
+      }catch(_){}
+
+      if (q < 100) {
+        try{
+          provisionalBoundary = await getNextQuestionBoundaryRatioForPage(
+            safePage,
+            q,
+            safeStart,
+            Number.isFinite(choice4Bottom) ? choice4Bottom : null
+          );
+        }catch(_){}
+      }
+
+      // 다음 문항 경계: 공통 함수로 페이지 전체 후보를 수집해 첫 경계 사용
+      nextStartBoundaryRatio = Number.isFinite(strictNextSamePage)
+        ? strictNextSamePage
+        : provisionalBoundary;
+
+      // 경계 적용: 선택지 하단보다 이르면 무시
+      if (Number.isFinite(nextStartBoundaryRatio)) {
+        const endGapRatio = mobileViewport ? 0.022 : (lowConfidenceRange ? 0.018 : 0.015);
+        const capEnd = Math.min(0.995, Number(nextStartBoundaryRatio) - endGapRatio);
+        if (capEnd > safeStart + 0.03) hardEndCapRatio = capEnd;
+      } else if (Number.isFinite(mappedNextSamePage)) {
+        // 실측 경계 탐지가 실패해도, 같은 페이지 q+1 맵 경계는 하드 상한으로 사용
+        const mapGapRatio = mobileViewport ? 0.022 : 0.015;
+        const mapCap = Math.min(0.995, Number(mappedNextSamePage) - mapGapRatio);
+        if (mapCap > safeStart + 0.03) hardEndCapRatio = mapCap;
+      } else if (Number.isFinite(rangeNextBoundary)) {
+        const rangeGapRatio = mobileViewport ? 0.022 : 0.015;
+        const rangeCap = Math.min(0.995, Number(rangeNextBoundary) - rangeGapRatio);
+        if (rangeCap > safeStart + 0.03) hardEndCapRatio = rangeCap;
+      }
+      if (Number.isFinite(hardEndCapRatio) && !hasEndOverride) safeEnd = Math.min(safeEnd, hardEndCapRatio);
+      // 경계 탐지 실패 시에는 선지 하단 기반 상한으로 다음 문항 혼입을 방지
+      if (!Number.isFinite(hardEndCapRatio) && Number.isFinite(maxEndByChoice)) {
+        safeEnd = Math.min(safeEnd, maxEndByChoice);
+      }
+
+      if (Number.isFinite(minEndByChoice)) {
+        if (Number.isFinite(hardEndCapRatio)) {
+          minEndByChoice = Math.min(minEndByChoice, hardEndCapRatio);
+        }
+        safeEnd = Math.max(safeEnd, minEndByChoice);
+      }
+      // 핵심 규칙:
+      // 1) 끝은 항상 q+1 이전 (hardEndCapRatio 이하)
+      // 2) 같은 범위 내에서는 ④ 선택지 하단이 보이도록 보장
+      if (Number.isFinite(hardEndCapRatio) && Number.isFinite(choice4Bottom) && !hasEndOverride) {
+        const c4Need = Math.min(0.995, choice4Bottom + (mobileViewport ? 0.022 : 0.018));
+        if (c4Need <= hardEndCapRatio) {
+          safeEnd = Math.max(safeEnd, c4Need);
+        }
+        safeEnd = Math.min(safeEnd, hardEndCapRatio);
+      }
+      const minSpan = mobileViewport ? 0.24 : 0.20;
+      const hasStrictNextLabel = Number.isFinite(strictNextLabelBoundary);
+      if (!hasStrictNextLabel && (safeEnd - safeStart) < minSpan) {
+        const widened = Math.min(0.995, safeStart + minSpan);
+        if (Number.isFinite(hardEndCapRatio)) {
+          const capLimit = Math.min(0.995, Number(hardEndCapRatio));
+          safeEnd = Math.max(safeEnd, Math.min(widened, capLimit));
+        } else if (Number.isFinite(mappedNextSamePage)) {
+          const capGap = mobileViewport ? 0.022 : 0.015;
+          const capLimit = Math.min(0.995, Number(mappedNextSamePage) - capGap);
+          safeEnd = Math.max(safeEnd, Math.min(widened, capLimit));
+        } else {
+          safeEnd = Math.max(safeEnd, widened);
+        }
+      }
       // 문항 영역 검출 실패 시 하단 일부만 보이는 케이스를 방지하기 위한 가드.
       // 시작점이 과도하게 아래이거나 높이가 너무 작으면 근접 구간을 넓혀 다시 잡는다.
       const rawSpan = Math.max(0, safeEnd - safeStart);
-      if (safeStart > 0.22 || rawSpan < 0.22) {
+      if (lowConfidenceRange && (safeStart > 0.22 || rawSpan < 0.22)) {
         const focusStart = Number.isFinite(range.focusStart) ? range.focusStart : safeStart;
         const focusEnd = Number.isFinite(range.focusEnd) ? range.focusEnd : safeEnd;
         safeStart = Math.max(0, Math.min(safeStart, focusStart - 0.08));
         safeEnd = Math.min(1, Math.max(safeEnd, focusEnd + 0.18, safeStart + 0.44));
       }
       // 초반 문항(1~5번)은 상단 시작점 오검출 시 체감이 커서 추가로 보수 보정.
-      if (q <= 5 && safeStart > 0.08) {
+      if (lowConfidenceRange && q <= 5 && safeStart > 0.08) {
         safeStart = 0.03;
         safeEnd = Math.min(1, Math.max(safeEnd, 0.58));
+      }
+      // 안전장치: 컷 범위가 비정상적으로 좁아지면 focus 범위로 복구
+      const hardMinSpan = mobileViewport ? 0.18 : 0.14;
+      if (!Number.isFinite(safeStart) || !Number.isFinite(safeEnd) || (safeEnd - safeStart) < hardMinSpan) {
+        const fbStart = Number.isFinite(range.focusStart) ? Number(range.focusStart) : Math.max(0, safeStart - 0.02);
+        const fbEnd = Number.isFinite(range.focusEnd)
+          ? Number(range.focusEnd)
+          : Math.min(0.995, fbStart + (mobileViewport ? 0.34 : 0.26));
+        safeStart = Math.max(0, Math.min(0.96, fbStart));
+        safeEnd = Math.max(safeStart + hardMinSpan, Math.min(0.995, fbEnd));
+      }
+      // 최종 안전장치: 단일문항 컷은 어떤 후처리에서도 다음 문항 경계를 넘지 않게 강제
+      if (Number.isFinite(hardEndCapRatio) && !hasEndOverride) {
+        safeEnd = Math.min(safeEnd, Number(hardEndCapRatio));
+      }
+      // 라벨 기반 최종 경계 강제: q+1 문항번호 라벨이 보이면 항상 그 직전에서 컷.
+      if (!hasEndOverride && Number.isFinite(strictNextLabelBoundary)) {
+        const labelGap = mobileViewport ? 0.020 : 0.016;
+        const labelCap = Math.min(0.995, Number(strictNextLabelBoundary) - labelGap);
+        safeEnd = Math.min(safeEnd, labelCap);
+      }
+      const minContentEnd = Number.isFinite(minEndByChoice)
+        ? Math.max(safeStart + 0.02, Number(minEndByChoice))
+        : (
+          Number.isFinite(choice4Bottom)
+            ? Math.max(safeStart + 0.02, Math.min(0.995, Number(choice4Bottom) + (mobileViewport ? 0.02 : 0.016)))
+            : (safeStart + 0.10)
+        );
+      // 절대 규칙: 페이지 내 "다음 문항(>q) 시작점" 이전으로 최종 캡.
+      // 중간 분기에서 safeEnd가 늘어나더라도 마지막에 반드시 잘라낸다.
+      if (!hasEndOverride && q < 100) {
+        try{
+          const absoluteNextStart = await getNearestNextQuestionStartRatioForPage(safePage, q, safeStart);
+          if (Number.isFinite(absoluteNextStart)) {
+            const absoluteGap = mobileViewport ? 0.018 : 0.014;
+            const absoluteCap = Math.min(0.995, Number(absoluteNextStart) - absoluteGap);
+            // 오탐 경계(선택지 하단보다 이른 값)는 무시한다.
+            if (absoluteCap >= minContentEnd) {
+              safeEnd = Math.min(safeEnd, absoluteCap);
+              finalNextBoundaryUsed = Number(absoluteNextStart);
+            }
+          }
+        }catch(_){}
+      }
+      // 공통 최종 경계 강제:
+      // 선지 배열(세로/2열)과 무관하게 "다음 문항 시작점 직전"을 절대 상한으로 둔다.
+      if (!hasEndOverride) {
+        const finalNextBoundary = Number.isFinite(strictNextSamePage)
+          ? Number(strictNextSamePage)
+          : (
+            Number.isFinite(nextStartBoundaryRatio)
+              ? Number(nextStartBoundaryRatio)
+              : (
+                Number.isFinite(mappedNextSamePage)
+                  ? Number(mappedNextSamePage)
+                  : (Number.isFinite(rangeNextBoundary) ? Number(rangeNextBoundary) : null)
+              )
+          );
+        if (Number.isFinite(finalNextBoundary)) {
+          finalNextBoundaryUsed = finalNextBoundary;
+          const finalGap = mobileViewport ? 0.024 : 0.022;
+          const finalCap = Math.min(0.995, finalNextBoundary - finalGap);
+          if (finalCap >= minContentEnd) {
+            safeEnd = Math.min(safeEnd, finalCap);
+          }
+        }
+        if (Number.isFinite(strictNextLabelBoundary)) {
+          finalNextBoundaryUsed = Number(strictNextLabelBoundary);
+        }
+      }
+      // 최종 보장: 선택지 하단(특히 ④)이 잘리지 않도록 최소 하단을 보장한다.
+      // 경계값이 이 최소 하단보다 이르면 오탐으로 보고 경계를 무시한다.
+      safeEnd = Math.max(safeEnd, Math.min(0.995, minContentEnd));
+      // render 단계 후처리에서 다시 잘리지 않도록 회차/문항 오버라이드를 최종 우선 적용
+      if (qOverride) {
+        if (Number.isFinite(qOverride.start)) {
+          safeStart = Math.max(0, Math.min(1, Number(qOverride.start)));
+        }
+        if (Number.isFinite(qOverride.end)) {
+          safeEnd = Math.max(safeStart + 0.1, Math.min(1, Number(qOverride.end)));
+        }
       }
       srcTop = Math.max(0, Math.floor(fullCanvas.height * safeStart));
       const srcBottom = Math.max(srcTop + 1, Math.ceil(fullCanvas.height * safeEnd));
       srcHeight = Math.max(1, srcBottom - srcTop);
+      // 한문제 보기에서는 상하 여백을 약간 추가해 문항이 답답하게 잘리지 않도록 보정
+      const singlePadRatio = window.matchMedia("(max-width: 768px)").matches ? 0.016 : 0.011;
+      const singlePadPx = Math.max(6, Math.floor(fullCanvas.height * singlePadRatio));
+      let paddedTop = Math.max(0, srcTop - singlePadPx);
+      if (Number.isFinite(labelStartBoundary)) {
+        const startTopPx = Math.max(0, Math.floor(fullCanvas.height * Math.max(0, Number(labelStartBoundary) - 0.006)));
+        paddedTop = Math.max(paddedTop, startTopPx);
+      }
+      const bottomPadPx = Number.isFinite(labelNextBoundary)
+        ? 0
+        : (
+          Number.isFinite(finalNextBoundaryUsed)
+            ? Math.max(0, Math.floor(singlePadPx * 0.2))
+            : singlePadPx
+        );
+      let paddedBottom = Math.min(fullCanvas.height, srcTop + srcHeight + bottomPadPx);
+      // 오버라이드 문항은 하단 패딩이 다음 문항을 다시 끌어오지 않게
+      // 계산된 safeEnd 경계를 절대 넘지 못하도록 고정한다.
+      if (hasEndOverride) {
+        const strictBottom = Math.max(srcTop + 1, Math.ceil(fullCanvas.height * safeEnd));
+        paddedBottom = Math.min(paddedBottom, strictBottom);
+      }
+      // 다음 문항 시작점이 같은 페이지에 있으면 하단 패딩이 경계를 넘지 않도록 제한
+      const padBoundaryRatioRaw = Number.isFinite(hardEndCapRatio)
+        ? Number(hardEndCapRatio)
+        : (
+          Number.isFinite(finalNextBoundaryUsed)
+            ? Number(finalNextBoundaryUsed)
+            : (
+          Number.isFinite(nextStartBoundaryRatio)
+            ? Number(nextStartBoundaryRatio)
+            : (
+              Number.isFinite(mappedNextSamePage)
+              ? Number(mappedNextSamePage)
+                : null
+            )
+            )
+        );
+      const padBoundaryRatio = Number.isFinite(padBoundaryRatioRaw)
+        ? Math.max(0, Math.min(1, Number(padBoundaryRatioRaw)))
+        : null;
+      if (Number.isFinite(padBoundaryRatio) && !hasEndOverride) {
+        const nextTopPx = Math.floor(fullCanvas.height * padBoundaryRatio);
+        const nextGapPx = mobileViewport
+          ? Math.max(18, Math.floor(fullCanvas.height * 0.018))
+          : Math.max(12, Math.floor(fullCanvas.height * 0.012));
+        // 패딩 단계에서도 다음 문항 시작 경계를 절대 넘지 않게 강제
+        paddedBottom = Math.min(paddedBottom, Math.max(srcTop + 1, nextTopPx - nextGapPx));
+      }
+      // 절대 안전 경계: 패딩 이후에도 start/end 컷을 넘지 않게 최종 클램프
+      const safeTopPx = Math.max(0, Math.floor(fullCanvas.height * safeStart));
+      const safeBottomPx = Math.max(safeTopPx + 1, Math.ceil(fullCanvas.height * safeEnd));
+      paddedTop = Math.max(paddedTop, safeTopPx);
+      paddedBottom = Math.min(paddedBottom, safeBottomPx);
+      srcTop = paddedTop;
+      srcHeight = Math.max(1, paddedBottom - srcTop);
+      const portraitSingleMode = window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches;
       // 좌우 여백(빈 흰 영역) 자동 트리밍으로 가독성을 높인다.
       const trim = detectHorizontalContentBounds(fullCanvas, srcTop, srcTop + srcHeight, {
-        preserveSideRatio: 0,
-        edgePadRatio: 0,
-        edgePadMin: 0,
+        preserveSideRatio: portraitSingleMode
+          ? (lowConfidenceRange ? 0.012 : 0)
+          : (lowConfidenceRange ? 0.008 : 0),
+        edgePadRatio: portraitSingleMode
+          ? (lowConfidenceRange ? 0.01 : 0)
+          : (lowConfidenceRange ? 0.006 : 0),
+        edgePadMin: portraitSingleMode
+          ? (lowConfidenceRange ? 4 : 0)
+          : (lowConfidenceRange ? 2 : 0),
         inkThreshold: 232,
-        ignoreTopRatio: 0.12,
+        // 상단 문항번호(예: "3.")가 잘리는 것을 막기 위해 상단 무시 비율을 축소
+        ignoreTopRatio: 0.03,
         ignoreBottomRatio: 0.10,
         colStep: 1,
         rowStep: 2
       });
-      srcLeft = trim.left;
-      srcWidth = trim.width;
+      // 좌우 여백을 줄이기 위해 트리밍을 더 허용하되,
+      // 과도한 확대/축소 편차를 막기 위한 최소 유지폭은 남겨둔다.
+      const minKeepRatio = portraitSingleMode
+        ? (lowConfidenceRange ? 0.76 : 0.74)
+        : (lowConfidenceRange ? 0.72 : 0.70);
+      if (trim.width < Math.floor(fullCanvas.width * minKeepRatio)) {
+        // 모바일 세로 한문제는 과크롭 시 우측 선지가 잘려 보일 수 있어 보수적으로 원본 유지
+        srcLeft = 0;
+        srcWidth = fullCanvas.width;
+      } else {
+        const trimRight = Math.min(fullCanvas.width, trim.left + trim.width);
+        const maxSafeLeftTrimPx = Math.floor(fullCanvas.width * 0.015);
+        srcLeft = Math.max(0, Math.min(trim.left, maxSafeLeftTrimPx));
+        srcWidth = Math.max(1, trimRight - srcLeft);
+      }
     }
 
     const destWidth = fullCanvas.width;
@@ -3315,6 +3885,13 @@
         pdfCtx.restore();
       }
     }
+    if (state.viewMode === "single" && Number.isFinite(q)) {
+      const gradeState = getViewerGradeState(q);
+      if (gradeState) {
+        const markAnchor = await resolveQuestionAnchorForMark(safePage, q);
+        drawQuestionGradeMarker(gradeState, markAnchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
+      }
+    }
     state.lastRenderMeta = {
       page: safePage,
       q: Number.isFinite(q) ? q : null,
@@ -3338,8 +3915,6 @@
 
   async function renderAllPdfPages(q){
     const navToken = ++state.allNavToken;
-    pdfStatus.textContent = "전체 PDF 로딩 중...";
-    setPdfLoading(true, "전체 PDF 로딩 중...");
     const pdf = await ensurePdfDocument();
     const mobileViewport = isMobileViewport();
     const viewWidth = Math.max(320, (pdfViewer.clientWidth || 900) - 20);
@@ -3349,6 +3924,9 @@
     if (state.allPagesRenderKey !== key) {
       pdfAllPages.innerHTML = "";
       state.allPageCanvases = [];
+      state.allPageBaseCanvases = [];
+      state.allPageCanvasMeta = {};
+      state.allModeLastMarked = null;
       for (let p = 1; p <= pdf.numPages; p++){
         const pageObj = await pdf.getPage(p);
         if (navToken !== state.allNavToken) return;
@@ -3400,11 +3978,29 @@
           );
           pdfAllPages.appendChild(cropped);
           state.allPageCanvases[p] = cropped;
+          state.allPageBaseCanvases[p] = cloneCanvas(cropped);
+          state.allPageCanvasMeta[p] = {
+            srcLeft: trim.left,
+            srcWidth: trim.width,
+            fullWidth: canvas.width,
+            fullHeight: canvas.height,
+            destWidth,
+            destHeight
+          };
           continue;
         }
 
         pdfAllPages.appendChild(canvas);
         state.allPageCanvases[p] = canvas;
+        state.allPageBaseCanvases[p] = cloneCanvas(canvas);
+        state.allPageCanvasMeta[p] = {
+          srcLeft: 0,
+          srcWidth: canvas.width,
+          fullWidth: canvas.width,
+          fullHeight: canvas.height,
+          destWidth: canvas.width,
+          destHeight: canvas.height
+        };
       }
       state.allPagesRenderKey = key;
     }
@@ -3497,6 +4093,8 @@
       const precision = mobileViewport ? "맵기준" : (located && located.exact ? "정확" : "근사");
       pdfStatus.textContent = `전체 페이지 표시 중 · ${targetPage}페이지${Number.isFinite(targetQ) ? ` · ${targetQ}번` : ""} (${precision})`;
     }
+    await redrawAllModeMarkers(pdf.numPages);
+    state.allModeLastMarked = null;
     setPdfLoading(false);
   }
 
@@ -3550,6 +4148,223 @@
     return Math.max(0, window.scrollY - (viewerTop - getViewerScrollAnchorOffset()));
   }
 
+  function getViewerGradeState(q){
+    if (!Number.isFinite(q)) return null;
+    const chosen = state.answers[q];
+    const correct = getCorrectAnswer(q);
+    if (chosen == null || !Number.isFinite(correct)) return null;
+    const card = getCard(q);
+    const mark = card ? card.querySelector('[data-role="mark"]') : null;
+    const graded = !!autoGradeEl.checked || !!(mark && (mark.classList.contains("ok") || mark.classList.contains("bad")));
+    if (!graded) return null;
+    return chosen === correct ? "ok" : "bad";
+  }
+
+  async function resolveQuestionAnchorForMark(pageNo, q){
+    if (!Number.isFinite(pageNo) || !Number.isFinite(q)) return null;
+    try{
+      const anchorMap = await getQuestionStartAnchorsForPage(pageNo);
+      const a = anchorMap && anchorMap.get(q);
+      if (a && Number.isFinite(a.xRatio) && Number.isFinite(a.yRatio)) {
+        return {
+          xRatio: Math.max(0.02, Math.min(0.20, a.xRatio)),
+          yRatio: Math.max(0, Math.min(1, a.yRatio))
+        };
+      }
+    }catch(_){}
+
+    const pageRatios = await getQuestionRatiosForPage(pageNo);
+    if (pageRatios && Number.isFinite(pageRatios.get(q))) {
+      return { xRatio: 0.06, yRatio: Math.max(0, Math.min(1, pageRatios.get(q))) };
+    }
+    const pageMap = state.pdfNav.questionPageMap;
+    const ratioMap = state.pdfNav.questionTopRatioMap;
+    if (Array.isArray(pageMap) && Array.isArray(ratioMap) && pageMap[q] === pageNo && Number.isFinite(ratioMap[q])) {
+      return { xRatio: 0.06, yRatio: Math.max(0, Math.min(1, ratioMap[q])) };
+    }
+    try{
+      const range = await getQuestionCropRange(q, pageNo);
+      if (range && Number.isFinite(range.focusStart)) {
+        return { xRatio: 0.06, yRatio: Math.max(0, Math.min(1, range.focusStart)) };
+      }
+    }catch(_){}
+    return null;
+  }
+
+  function drawQuestionGradeMarker(gradeState, anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight){
+    if (!gradeState || !anchor || !Number.isFinite(anchor.yRatio) || !fullCanvas) return;
+    const radius = Math.max(13, Math.min(24, pdfCanvas.width * 0.017));
+    const sx = srcWidth / pdfCanvas.width;
+    const sy = srcHeight / pdfCanvas.height;
+    const xRatio = Number.isFinite(anchor.xRatio) ? anchor.xRatio : 0.06;
+    const xFullRaw = fullCanvas.width * xRatio;
+    const markerOffset = Math.max(20, radius * 1.55);
+    const xFull = Math.max(srcLeft + radius + 6, Math.min(srcLeft + srcWidth - radius - 6, xFullRaw - markerOffset));
+    const yFull = Math.max(srcTop + 10, Math.min(srcTop + srcHeight - 10, Math.round(fullCanvas.height * anchor.yRatio) + 10));
+    const x = (xFull - srcLeft) / sx;
+    const y = (yFull - srcTop) / sy;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (x < -40 || x > (pdfCanvas.width + 40) || y < -40 || y > (pdfCanvas.height + 40)) return;
+
+    const ok = gradeState === "ok";
+
+    pdfCtx.save();
+    pdfCtx.lineCap = "round";
+    pdfCtx.lineJoin = "round";
+    drawGradeMarkerImage(pdfCtx, ok ? "ok" : "bad", x, y, radius);
+    pdfCtx.restore();
+  }
+
+  function getGradeMarkerImage(kind){
+    const key = (kind === "bad") ? "bad" : "ok";
+    if (state.gradeMarkerImageCache[key]) return state.gradeMarkerImageCache[key];
+    const svg = GRADE_MARKER_SVG[key];
+    const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    const img = new Image();
+    img.decoding = "async";
+    img.src = dataUrl;
+    state.gradeMarkerImageCache[key] = img;
+    return img;
+  }
+
+  function preloadGradeMarkerImages(){
+    getGradeMarkerImage("ok");
+    getGradeMarkerImage("bad");
+  }
+
+  function drawGradeMarkerImage(ctx, kind, x, y, radius){
+    const img = getGradeMarkerImage(kind);
+    if (!img || !img.complete) return;
+    const ok = kind === "ok";
+    const scalePx = Math.max(1, (ctx.canvas.width || 1) / Math.max(1, ctx.canvas.clientWidth || 1));
+    const mobileBoost = isMobileViewport() ? 1.28 : 1;
+    const minCssW = ok ? (isMobileViewport() ? 44 : 30) : (isMobileViewport() ? 24 : 18);
+    const minCssH = ok ? (isMobileViewport() ? 34 : 24) : (isMobileViewport() ? 44 : 30);
+    const w = Math.max(minCssW * scalePx, (ok ? radius * 3.3 : radius * 2.1) * mobileBoost);
+    const h = Math.max(minCssH * scalePx, (ok ? radius * 2.5 : radius * 3.4) * mobileBoost);
+    const dx = ok ? (x - w * 0.58) : (x - w * 0.52);
+    const dy = ok ? (y - h * 0.62) : (y - h * 0.56);
+    ctx.globalAlpha = 0.96;
+    ctx.drawImage(img, dx, dy, w, h);
+  }
+
+  function cloneCanvas(src){
+    if (!src) return null;
+    const c = document.createElement("canvas");
+    c.width = src.width;
+    c.height = src.height;
+    const ctx = c.getContext("2d");
+    ctx.drawImage(src, 0, 0);
+    return c;
+  }
+
+  function restoreAllPageCanvas(pageNo){
+    const canvas = state.allPageCanvases[pageNo];
+    const base = state.allPageBaseCanvases[pageNo];
+    if (!canvas || !base) return false;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(base, 0, 0);
+    return true;
+  }
+
+  async function drawAllModeSelectedMarker(pageNo, q){
+    if (!Number.isFinite(pageNo) || !Number.isFinite(q)) return false;
+    const selected = state.answers[q];
+    if (!Number.isFinite(selected)) return false;
+    const canvas = state.allPageCanvases[pageNo];
+    const meta = state.allPageCanvasMeta[pageNo];
+    if (!canvas || !meta) return false;
+
+    const anchors = await getChoiceAnchorsForQuestion(pageNo, q);
+    const sel = Array.isArray(anchors) ? anchors.find((a) => a.choice === selected) : null;
+    if (!sel) return false;
+
+    const sx = meta.srcWidth / meta.destWidth;
+    const sy = meta.fullHeight / meta.destHeight;
+    const ax = sel.xRatio * meta.fullWidth;
+    const ay = sel.yRatio * meta.fullHeight;
+    const aw = sel.wRatio * meta.fullWidth;
+    const ah = sel.hRatio * meta.fullHeight;
+    const dx = (ax - meta.srcLeft) / sx;
+    const dy = ay / sy;
+    const dw = Math.max(14, aw / sx);
+    const dh = Math.max(16, ah / sy);
+    const cx = dx + (dw * 0.5);
+    const cy = dy + (dh * 0.5);
+    const r = Math.max(11, Math.min(22, Math.max(dw, dh) * 0.62));
+
+    const ctx = canvas.getContext("2d");
+    ctx.save();
+    ctx.lineWidth = 2.6;
+    ctx.strokeStyle = "#0a66d6";
+    ctx.fillStyle = "rgba(10,102,214,0.2)";
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+    return true;
+  }
+
+  function getAllModePageForQuestion(q, totalPages){
+    const pageMap = state.pdfNav.questionPageMap;
+    if (Array.isArray(pageMap) && Number.isFinite(pageMap[q])) {
+      return Math.max(1, Math.min(totalPages, Math.floor(pageMap[q])));
+    }
+    return Math.max(1, Math.min(totalPages, getPdfPageByQuestion(q)));
+  }
+
+  async function drawAllModeGradeMarker(pageNo, q, gradeState){
+    if (!Number.isFinite(pageNo) || !Number.isFinite(q) || !gradeState) return false;
+    const canvas = state.allPageCanvases[pageNo];
+    const meta = state.allPageCanvasMeta[pageNo];
+    if (!canvas || !meta) return false;
+    const anchor = await resolveQuestionAnchorForMark(pageNo, q);
+    if (!anchor || !Number.isFinite(anchor.yRatio)) return false;
+
+    const radius = Math.max(13, Math.min(24, canvas.width * 0.017));
+    const ctx = canvas.getContext("2d");
+    const xRatio = Number.isFinite(anchor.xRatio) ? anchor.xRatio : 0.06;
+    const xFullRaw = meta.fullWidth * xRatio;
+    const markerOffset = Math.max(20, radius * 1.55);
+    const xFull = Math.max(meta.srcLeft + radius + 6, Math.min(meta.srcLeft + meta.srcWidth - radius - 6, xFullRaw - markerOffset));
+    const yFull = Math.max(10, Math.min(meta.fullHeight - 10, Math.round(meta.fullHeight * anchor.yRatio) + 10));
+    const sx = meta.srcWidth / meta.destWidth;
+    const sy = meta.fullHeight / meta.destHeight;
+    const x = (xFull - meta.srcLeft) / sx;
+    const y = yFull / sy;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+
+    const ok = gradeState === "ok";
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    if (ok) {
+      drawGradeMarkerImage(ctx, "ok", x, y, radius);
+    } else {
+      drawGradeMarkerImage(ctx, "bad", x, y, radius);
+    }
+    ctx.restore();
+    return true;
+  }
+
+  async function redrawAllModeMarkers(totalPages){
+    for (let p = 1; p <= totalPages; p++){
+      restoreAllPageCanvas(p);
+    }
+    for (let q = 1; q <= 100; q++){
+      const selected = state.answers[q];
+      if (!Number.isFinite(selected)) continue;
+      const pageNo = getAllModePageForQuestion(q, totalPages);
+      await drawAllModeSelectedMarker(pageNo, q);
+      const gradeState = getViewerGradeState(q);
+      if (gradeState) {
+        await drawAllModeGradeMarker(pageNo, q, gradeState);
+      }
+    }
+  }
+
   function updateViewerTopBadge(){
     if (!btnViewerTop) return;
     if (state.viewMode === "single"){
@@ -3579,33 +4394,40 @@
     btnViewerTop.classList.toggle("show", top > 120);
   }
 
-  function setPdfFramePage(page, q){
+  function setPdfFramePage(page, q, loadingToken = null){
     state.currentPdfPage = Math.max(1, Math.floor(page));
     state.pdfNavNonce += 1;
+    const token = Number.isFinite(loadingToken) ? loadingToken : beginDelayedPdfLoading("PDF 로딩 중...");
     renderPdfPage(state.currentPdfPage, q).catch((err) => {
-      setPdfLoading(false);
+      endDelayedPdfLoading(token);
       const msg = (err && err.message) ? err.message : "알 수 없는 오류";
       pdfStatus.innerHTML = `PDF 표시 실패: ${msg} <button id="btnPdfRetry" type="button">재시도</button>`;
+    }).then(() => {
+      endDelayedPdfLoading(token);
     });
   }
 
   function navigatePdfToQuestion(q){
     if (state.viewMode === "single") {
+      const loadingToken = beginDelayedPdfLoading("PDF 로딩 중...");
       locateQuestionInPdf(q).then((located) => {
         const page = (located && Number.isFinite(located.page))
           ? Math.max(1, Math.floor(located.page))
           : getPdfPageByQuestion(q);
-        setPdfFramePage(page, q);
+        setPdfFramePage(page, q, loadingToken);
       }).catch(() => {
         const targetPage = getPdfPageByQuestion(q);
-        setPdfFramePage(targetPage, q);
+        setPdfFramePage(targetPage, q, loadingToken);
       });
       return;
     }
+    const loadingToken = beginDelayedPdfLoading("PDF 로딩 중...");
     renderAllPdfPages(q).catch((err) => {
-      setPdfLoading(false);
+      endDelayedPdfLoading(loadingToken);
       const msg = (err && err.message) ? err.message : "알 수 없는 오류";
       pdfStatus.innerHTML = `PDF 표시 실패: ${msg} <button id="btnPdfRetry" type="button">재시도</button>`;
+    }).then(() => {
+      endDelayedPdfLoading(loadingToken);
     });
   }
 
@@ -3786,16 +4608,21 @@
     ctx.closePath();
   }
 
-  async function getChoiceAnchorsForQuestion(pageNo, q){
+  async function getChoiceAnchorsForQuestion(pageNo, q, options = null){
+    const hasOptions = !!(options && typeof options === "object");
     const cacheKey = `${pageNo}:${q}`;
-    if (state.questionChoiceAnchorCache[cacheKey]) return state.questionChoiceAnchorCache[cacheKey];
+    if (!hasOptions && state.questionChoiceAnchorCache[cacheKey]) return state.questionChoiceAnchorCache[cacheKey];
 
     const pageRatios = await getQuestionRatiosForPage(pageNo);
     if (!pageRatios || !pageRatios.has(q)) {
       state.questionChoiceAnchorCache[cacheKey] = [];
       return [];
     }
-    const startRatio = pageRatios.get(q);
+    const startRatioBase = pageRatios.get(q);
+    const optStart = (hasOptions && Number.isFinite(options.startRatio)) ? Number(options.startRatio) : null;
+    const startRatio = Number.isFinite(optStart)
+      ? Math.max(0, Math.min(1, optStart))
+      : startRatioBase;
     let endRatio = 1;
     if (pageRatios.size > 0){
       const sorted = Array.from(pageRatios.entries()).sort((a, b) => a[0] - b[0]);
@@ -3805,6 +4632,10 @@
           break;
         }
       }
+    }
+    if (hasOptions && Number.isFinite(options.endRatio)) {
+      const optEnd = Math.max(startRatio + 0.02, Math.min(1, Number(options.endRatio)));
+      endRatio = Math.min(endRatio, optEnd);
     }
 
     const pdf = await ensurePdfDocument();
@@ -3816,7 +4647,8 @@
     const anchors = [];
 
     for (const item of (textContent.items || [])){
-      const choice = parseChoiceNumberToken(item.str);
+      const rawToken = String(item.str || "").trim();
+      const choice = parseChoiceNumberToken(rawToken);
       if (!choice) continue;
       const tx = (window.pdfjsLib && window.pdfjsLib.Util && item.transform)
         ? window.pdfjsLib.Util.transform(viewport.transform, item.transform)
@@ -3828,6 +4660,10 @@
       const ih = Math.max(8, Math.abs(Number(item.height) || 0));
       const top = Math.max(0, Math.min(pageH - ih, y - ih));
       const topRatio = top / pageH;
+      if (topRatio < startRatio + 0.028) continue;
+      const compact = rawToken.replace(/\s+/g, "");
+      const numericToken = /^\(?[1-4][.)]/.test(compact);
+      if (numericToken && (x / pageW) < 0.16 && topRatio < startRatio + 0.09) continue;
       if (topRatio < startRatio - 0.01 || topRatio > endRatio + 0.01) continue;
 
       anchors.push({
@@ -3839,20 +4675,63 @@
       });
     }
 
-    // 보기는 대체로 좌측 세로 라인에 있으므로, 가장 좌측 그룹 중심으로 정제한다.
+    const pickChoices = (list, targetYRatio = null) => {
+      const picked = [];
+      for (let c = 1; c <= 4; c++){
+        const rows = list.filter(a => a.choice === c).sort((a, b) => {
+          if (targetYRatio != null) {
+            const da = Math.abs(a.yRatio - targetYRatio);
+            const db = Math.abs(b.yRatio - targetYRatio);
+            if (da !== db) return da - db;
+          }
+          return a.yRatio - b.yRatio || a.xRatio - b.xRatio;
+        });
+        if (rows.length) picked.push(rows[0]);
+      }
+      return picked;
+    };
+
+    // 1차: 좌측 그룹 우선(문항 번호 오인식 완화)
     let refined = anchors;
     if (anchors.length){
       const minX = Math.min(...anchors.map(a => a.xRatio));
       const xCut = Math.min(0.38, minX + 0.22);
       refined = anchors.filter(a => a.xRatio <= xCut);
     }
-
-    const result = [];
-    for (let c = 1; c <= 4; c++){
-      const rows = refined.filter(a => a.choice === c).sort((a, b) => a.yRatio - b.yRatio || a.xRatio - b.xRatio);
-      if (rows.length) result.push(rows[0]);
+    let result = pickChoices(refined);
+    // 2차: 선지 누락 시 전체 앵커로 재탐색(세로 배열/다단 배치 대응)
+    if (result.length < 4) {
+      result = pickChoices(anchors);
     }
-    state.questionChoiceAnchorCache[cacheKey] = result;
+    // 3차: 문항번호 숫자 토큰이 섞여 y축이 크게 벌어질 때,
+    // 가장 밀집된 y대역을 선택지 행으로 보고 재선정한다.
+    if (result.length >= 3) {
+      const ys = result.map((a) => a.yRatio).sort((a, b) => a - b);
+      const spread = ys[ys.length - 1] - ys[0];
+      // 2열/세로 배열(정상 배치)까지 오검출로 간주해 상단 한 줄만 뽑지 않도록
+      // 아주 크게 벌어진 경우에만 밀집대역 재선정을 수행한다.
+      if (spread > 0.16) {
+        let bestCenter = null;
+        let bestCount = 0;
+        const win = 0.06;
+        for (let i = 0; i < anchors.length; i++){
+          const center = anchors[i].yRatio;
+          let cnt = 0;
+          for (let j = 0; j < anchors.length; j++){
+            if (Math.abs(anchors[j].yRatio - center) <= win) cnt++;
+          }
+          if (cnt > bestCount) {
+            bestCount = cnt;
+            bestCenter = center;
+          }
+        }
+        if (bestCenter != null) {
+          const alt = pickChoices(anchors, bestCenter);
+          if (alt.length >= result.length) result = alt;
+        }
+      }
+    }
+    if (!hasOptions) state.questionChoiceAnchorCache[cacheKey] = result;
     return result;
   }
 
@@ -4361,7 +5240,7 @@
       updateStats();
       applyFilter();
       updateMobileChoiceButtons();
-      if (state.viewMode === "single" || isMobileViewport()) navigatePdfToQuestion(q);
+      if (state.viewMode === "single" || state.viewMode === "all" || isMobileViewport()) navigatePdfToQuestion(q);
     }
   }
 
@@ -4395,26 +5274,55 @@
 
     const anchors = await getChoiceAnchorsForQuestion(meta.page, q);
     if (anchors.length){
-      let best = null;
-      let bestScore = Infinity;
-      for (const a of anchors){
+      const points = anchors.map((a) => {
         const ax = a.xRatio * meta.fullWidthPx;
         const ay = a.yRatio * meta.fullHeightPx;
         const aw = Math.max(10, a.wRatio * meta.fullWidthPx);
         const ah = Math.max(12, a.hRatio * meta.fullHeightPx);
-        const cx = ax + (aw * 0.5);
-        const cy = ay + (ah * 0.5);
-        const dx = Math.abs(xFull - cx);
-        const dy = Math.abs(yFull - cy);
-        const score = dy + (dx * 0.35); // 세로 근접도를 우선
+        return {
+          choice: a.choice,
+          ax, ay, aw, ah,
+          cx: ax + (aw * 0.5),
+          cy: ay + (ah * 0.5)
+        };
+      });
+      const ys = points.map((p) => p.cy);
+      const xs = points.map((p) => p.cx);
+      const ySpread = ys.length ? (Math.max(...ys) - Math.min(...ys)) : 0;
+      const xSpread = xs.length ? (Math.max(...xs) - Math.min(...xs)) : 0;
+      const horizontalLayout = ySpread <= Math.max(22, xSpread * 0.22);
+      if (horizontalLayout && points.length >= 3) {
+        const avgH = points.reduce((s, p) => s + p.ah, 0) / points.length;
+        const rowBand = Math.max(28, avgH * 3.8);
+        const nearRow = points.filter((p) => Math.abs(yFull - p.cy) <= rowBand);
+        const cand = (nearRow.length >= 2 ? nearRow : points)
+          .sort((a, b) => Math.abs(xFull - a.cx) - Math.abs(xFull - b.cx))[0];
+        if (cand && Math.abs(yFull - cand.cy) <= (rowBand * 1.25)) {
+          chooseByKeyboard(cand.choice);
+          pdfStatus.textContent = `${q}번 ${cand.choice} 선택`;
+          return;
+        }
+      }
+      let best = null;
+      let bestScore = Infinity;
+      for (const p of points){
+        const dx = Math.abs(xFull - p.cx);
+        const dy = Math.abs(yFull - p.cy);
+        const score = horizontalLayout
+          ? (dx + (dy * 0.45)) // 가로 배열은 x 근접도를 우선
+          : (dy + (dx * 0.35)); // 세로 배열은 y 근접도를 우선
         if (score < bestScore) {
           bestScore = score;
-          best = { choice: a.choice, dx, dy, aw, ah };
+          best = { choice: p.choice, dx, dy, aw: p.aw, ah: p.ah };
         }
       }
       if (best) {
-        const yLimit = Math.max(22, best.ah * 2.6);
-        const xLimit = Math.max(90, best.aw * 10.0);
+        const yLimit = horizontalLayout
+          ? Math.max(36, best.ah * 4.4)
+          : Math.max(22, best.ah * 2.6);
+        const xLimit = horizontalLayout
+          ? Math.max(180, best.aw * 18.0)
+          : Math.max(90, best.aw * 10.0);
         if (best.dy <= yLimit && best.dx <= xLimit) {
           chooseByKeyboard(best.choice);
           pdfStatus.textContent = `${q}번 ${best.choice} 선택`;
@@ -4486,12 +5394,14 @@
       for(let q=1;q<=100;q++) gradeQuestion(q);
       updateStats();
       applyFilter();
+      if (state.viewMode === "single" || state.viewMode === "all") navigatePdfToQuestion(state.focusQ || 1);
       return;
     }
     if (autoGradeEl.checked){
       for(let q=1;q<=100;q++) gradeQuestion(q);
       updateStats();
       applyFilter();
+      if (state.viewMode === "single" || state.viewMode === "all") navigatePdfToQuestion(state.focusQ || 1);
     }
   }
 
@@ -4588,6 +5498,7 @@
         else el.classList.remove("correct");
       });
     }
+    if (state.viewMode === "single" || state.viewMode === "all") navigatePdfToQuestion(state.focusQ || 1);
   }
 
   // ====== 통계(전체 + 섹션) ======
