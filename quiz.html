@@ -4676,7 +4676,7 @@
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
       const iw = Math.max(8, Math.abs(Number(item.width) || 0));
       const ih = Math.max(8, Math.abs(Number(item.height) || 0));
-      const top = Math.max(0, Math.min(pageH - ih, y - ih));
+      const top = Math.max(0, Math.min(pageH - ih, pageH - y - ih));
       const topRatio = top / pageH;
       if (topRatio < startRatio + 0.028) continue;
       const compact = rawToken.replace(/\s+/g, "");
