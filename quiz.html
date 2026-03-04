@@ -3851,16 +3851,20 @@
       // 좌우 여백을 줄이기 위해 트리밍을 더 허용하되,
       // 과도한 확대/축소 편차를 막기 위한 최소 유지폭은 남겨둔다.
       const minKeepRatio = portraitSingleMode
-        ? (lowConfidenceRange ? 0.76 : 0.74)
-        : (lowConfidenceRange ? 0.72 : 0.70);
+        ? (lowConfidenceRange ? 0.70 : 0.68)
+        : (lowConfidenceRange ? 0.64 : 0.62);
+      const desiredLeftMarginPx = Math.floor(fullCanvas.width * 0.018);
       if (trim.width < Math.floor(fullCanvas.width * minKeepRatio)) {
-        // 모바일 세로 한문제는 과크롭 시 우측 선지가 잘려 보일 수 있어 보수적으로 원본 유지
-        srcLeft = 0;
-        srcWidth = fullCanvas.width;
+        // 과크롭 의심 시에도 좌측 여백을 전체보기 수준으로 유지한다.
+        const gentleLeftTrimPx = Math.floor(fullCanvas.width * 0.08);
+        const proposedLeft = Math.max(0, Number(trim.left || 0) - desiredLeftMarginPx);
+        srcLeft = Math.max(0, Math.min(proposedLeft, gentleLeftTrimPx));
+        srcWidth = Math.max(1, fullCanvas.width - srcLeft);
       } else {
         const trimRight = Math.min(fullCanvas.width, trim.left + trim.width);
-        const maxSafeLeftTrimPx = Math.floor(fullCanvas.width * 0.015);
-        srcLeft = Math.max(0, Math.min(trim.left, maxSafeLeftTrimPx));
+        const maxSafeLeftTrimPx = Math.floor(fullCanvas.width * 0.12);
+        const proposedLeft = Math.max(0, Number(trim.left || 0) - desiredLeftMarginPx);
+        srcLeft = Math.max(0, Math.min(proposedLeft, maxSafeLeftTrimPx));
         srcWidth = Math.max(1, trimRight - srcLeft);
       }
     }
