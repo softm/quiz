@@ -1239,7 +1239,7 @@
   const STORAGE_UI_KEY = "quiz_ui_v3";
   const ANSWER_PARSE_VERSION = 2;
   const PDF_MAP_VERSION = 7;
-  const CROP_CACHE_VERSION = 23;
+  const CROP_CACHE_VERSION = 24;
   const PRESET_PAGE_ANCHORS = {
     "2022년 제19회 농산물품질관리사 1차": [1,6,10,14,18,22,26,33,39,47,51,57,64,70,76,81,87,94],
     "2023년 제20회 농산물품질관리사 1차": [1,5,10,15,19,23,26,34,40,48,51,57,64,70,76,83,90,97],
@@ -1320,6 +1320,7 @@
     questionChoiceAnchorCache: {},
     questionCropRangeCache: {},
     pageOcrQuestionStartCache: {},
+    pageTextLayerCache: {},
     locateQuestionCache: {},
     gradeMarkerImageCache: {},
     delayedPdfLoadingTimer: null,
@@ -2284,6 +2285,7 @@
     state.questionChoiceAnchorCache = {};
     state.questionCropRangeCache = {};
     state.pageOcrQuestionStartCache = {};
+    state.pageTextLayerCache = {};
     state.locateQuestionCache = {};
     navigatePdfToQuestion(state.focusQ || 1);
     ensureAutoPdfMap();
@@ -2350,6 +2352,7 @@
     state.pdfNav.questionPageMap = mapped.pageMap;
     state.pdfNav.questionTopRatioMap = mapped.ratioMap;
     state.questionCropRangeCache = {};
+    state.pageTextLayerCache = {};
     state.locateQuestionCache = {};
     state.pdfNav.source = getCurrentPdfSourceKey();
     state.pdfNav.version = PDF_MAP_VERSION;
@@ -2656,13 +2659,27 @@
     }
   }
 
+  async function getQuestionPageTextLayer(pageNo){
+    const key = String(pageNo);
+    if (state.pageTextLayerCache[key]) return state.pageTextLayerCache[key];
+    const pdf = await ensurePdfDocument();
+    const page = await pdf.getPage(pageNo);
+    const viewport = page.getViewport({ scale: 1 });
+    const textContent = await page.getTextContent();
+    const layer = {
+      pageW: Math.max(1, viewport.width),
+      pageH: Math.max(1, viewport.height),
+      items: Array.isArray(textContent.items) ? textContent.items : []
+    };
+    state.pageTextLayerCache[key] = layer;
+    return layer;
+  }
+
   async function getQuestionRatiosForPage(pageNo){
     const key = String(pageNo);
     if (state.pageQuestionRatioCache[key]) return state.pageQuestionRatioCache[key];
-    const pdf = await ensurePdfDocument();
-    const page = await pdf.getPage(pageNo);
-    const textContent = await page.getTextContent();
-    const detected = extractQuestionStartsFromItems(textContent.items || []);
+    const layer = await getQuestionPageTextLayer(pageNo);
+    const detected = extractQuestionStartsFromItems(layer.items || []);
     const merged = new Map(detected.ratioByQuestion || []);
     const direct = await getDirectQuestionRatiosForPage(pageNo);
     for (const [q, ratio] of direct.entries()){
@@ -2752,15 +2769,12 @@
   async function getDirectQuestionRatiosForPage(pageNo){
     const key = String(pageNo);
     if (state.pageQuestionDirectRatioCache[key]) return state.pageQuestionDirectRatioCache[key];
-    const pdf = await ensurePdfDocument();
-    const page = await pdf.getPage(pageNo);
-    const viewport = page.getViewport({ scale: 1 });
-    const pageW = Math.max(1, viewport.width);
-    const pageH = Math.max(1, viewport.height);
-    const textContent = await page.getTextContent();
+    const layer = await getQuestionPageTextLayer(pageNo);
+    const pageW = layer.pageW;
+    const pageH = layer.pageH;
     const map = new Map();
 
-    for (const item of (textContent.items || [])){
+    for (const item of (layer.items || [])){
       const s = String(item.str || "").trim();
       if (!s) continue;
       const m = s.match(/^\(?\s*(\d{1,3})\s*(?:[.]|번)(?:\s|$)/);
@@ -2787,16 +2801,12 @@
   async function getRowQuestionStartRatiosForPage(pageNo){
     const key = String(pageNo);
     if (state.pageQuestionRowStartCache[key]) return state.pageQuestionRowStartCache[key];
-
-    const pdf = await ensurePdfDocument();
-    const page = await pdf.getPage(pageNo);
-    const viewport = page.getViewport({ scale: 1 });
-    const pageW = Math.max(1, viewport.width);
-    const pageH = Math.max(1, viewport.height);
-    const textContent = await page.getTextContent();
+    const layer = await getQuestionPageTextLayer(pageNo);
+    const pageW = layer.pageW;
+    const pageH = layer.pageH;
 
     const rows = [];
-    for (const it of (textContent.items || [])){
+    for (const it of (layer.items || [])){
       const s = String(it.str || "").trim();
       if (!s) continue;
       const x = Number(it.transform && it.transform[4]);
@@ -2837,16 +2847,12 @@
   async function getReliableQuestionStartsForPage(pageNo){
     const key = String(pageNo);
     if (state.pageReliableQuestionStartCache[key]) return state.pageReliableQuestionStartCache[key];
-
-    const pdf = await ensurePdfDocument();
-    const page = await pdf.getPage(pageNo);
-    const viewport = page.getViewport({ scale: 1 });
-    const pageW = Math.max(1, viewport.width);
-    const pageH = Math.max(1, viewport.height);
-    const textContent = await page.getTextContent();
+    const layer = await getQuestionPageTextLayer(pageNo);
+    const pageW = layer.pageW;
+    const pageH = layer.pageH;
 
     const rows = [];
-    for (const it of (textContent.items || [])){
+    for (const it of (layer.items || [])){
       const s = String(it.str || "").trim();
       if (!s) continue;
       const x = Number(it.transform && it.transform[4]);
@@ -2888,17 +2894,13 @@
   async function getQuestionStartAnchorsForPage(pageNo){
     const key = String(pageNo);
     if (state.pageQuestionStartAnchorCache[key]) return state.pageQuestionStartAnchorCache[key];
-
-    const pdf = await ensurePdfDocument();
-    const page = await pdf.getPage(pageNo);
-    const viewport = page.getViewport({ scale: 1 });
-    const pageW = Math.max(1, viewport.width);
-    const pageH = Math.max(1, viewport.height);
-    const textContent = await page.getTextContent();
+    const layer = await getQuestionPageTextLayer(pageNo);
+    const pageW = layer.pageW;
+    const pageH = layer.pageH;
 
     const rows = [];
     const itemAnchors = new Map();
-    for (const it of (textContent.items || [])){
+    for (const it of (layer.items || [])){
       const s = String(it.str || "").trim();
       if (!s) continue;
       const x = Number(it.transform && it.transform[4]);
@@ -3087,8 +3089,9 @@
     return out[0];
   }
 
-  async function getQuestionStartRatioForPage(pageNo, q){
+  async function getQuestionStartRatioForPage(pageNo, q, options = null){
     if (!Number.isFinite(pageNo) || !Number.isFinite(q)) return null;
+    const allowOcr = !!(options && options.allowOcr === true);
     try{
       const exact = await getExactQuestionLabelRatioForPage(pageNo, q);
       if (Number.isFinite(exact)) return Math.max(0, Math.min(1, Number(exact)));
@@ -3117,12 +3120,14 @@
         return Math.max(0, Math.min(1, Number(located.ratio)));
       }
     }catch(_){}
-    try{
-      const ocrMap = await getOcrQuestionStartRatiosForPage(pageNo);
-      if (ocrMap && Number.isFinite(ocrMap[q])) {
-        return Math.max(0, Math.min(1, Number(ocrMap[q])));
-      }
-    }catch(_){}
+    if (allowOcr) {
+      try{
+        const ocrMap = await getOcrQuestionStartRatiosForPage(pageNo);
+        if (ocrMap && Number.isFinite(ocrMap[q])) {
+          return Math.max(0, Math.min(1, Number(ocrMap[q])));
+        }
+      }catch(_){}
+    }
     return null;
   }
 
@@ -3131,13 +3136,10 @@
     if (state.pageQuestionLabelTokenCache[key]) return state.pageQuestionLabelTokenCache[key];
     const map = new Map();
     try{
-      const pdf = await ensurePdfDocument();
-      const page = await pdf.getPage(pageNo);
-      const viewport = page.getViewport({ scale: 1 });
-      const pageW = Math.max(1, viewport.width);
-      const pageH = Math.max(1, viewport.height);
-      const textContent = await page.getTextContent();
-      for (const item of (textContent.items || [])){
+      const layer = await getQuestionPageTextLayer(pageNo);
+      const pageW = layer.pageW;
+      const pageH = layer.pageH;
+      for (const item of (layer.items || [])){
         const s = String(item.str || "").replace(/\s+/g, "");
         if (!s) continue;
         const m = s.match(/^\(?(\d{1,3})(?:\.|번)\)?$/);
@@ -3172,12 +3174,9 @@
       if (Number.isFinite(tokenRatio)) found = Number(tokenRatio);
     }catch(_){}
     try{
-      const pdf = await ensurePdfDocument();
-      const page = await pdf.getPage(pageNo);
-      const viewport = page.getViewport({ scale: 1 });
-      const pageW = Math.max(1, viewport.width);
-      const pageH = Math.max(1, viewport.height);
-      const textContent = await page.getTextContent();
+      const layer = await getQuestionPageTextLayer(pageNo);
+      const pageW = layer.pageW;
+      const pageH = layer.pageH;
       const target = String(Math.floor(q));
       const rows = [];
 
@@ -3193,7 +3192,7 @@
         row.parts.push({ x, s });
       };
 
-      for (const item of (textContent.items || [])){
+      for (const item of (layer.items || [])){
         const raw = String(item.str || "").trim();
         if (!raw) continue;
         const compact = raw.replace(/\s+/g, "");
@@ -4663,23 +4662,17 @@
       endRatio = Math.min(endRatio, optEnd);
     }
 
-    const pdf = await ensurePdfDocument();
-    const page = await pdf.getPage(pageNo);
-    const viewport = page.getViewport({ scale: 1 });
-    const pageW = Math.max(1, viewport.width);
-    const pageH = Math.max(1, viewport.height);
-    const textContent = await page.getTextContent();
+    const layer = await getQuestionPageTextLayer(pageNo);
+    const pageW = layer.pageW;
+    const pageH = layer.pageH;
     const anchors = [];
 
-    for (const item of (textContent.items || [])){
+    for (const item of (layer.items || [])){
       const rawToken = String(item.str || "").trim();
       const choice = parseChoiceNumberToken(rawToken);
       if (!choice) continue;
-      const tx = (window.pdfjsLib && window.pdfjsLib.Util && item.transform)
-        ? window.pdfjsLib.Util.transform(viewport.transform, item.transform)
-        : null;
-      const x = Number(tx ? tx[4] : (item.transform && item.transform[4]));
-      const y = Number(tx ? tx[5] : (item.transform && item.transform[5]));
+      const x = Number(item.transform && item.transform[4]);
+      const y = Number(item.transform && item.transform[5]);
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
       const iw = Math.max(8, Math.abs(Number(item.width) || 0));
       const ih = Math.max(8, Math.abs(Number(item.height) || 0));
@@ -4893,9 +4886,8 @@
       const ratiosByPage = {};
 
       for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++){
-        const page = await pdf.getPage(pageNo);
-        const textContent = await page.getTextContent();
-        const detected = extractQuestionStartsFromItems(textContent.items || []);
+        const layer = await getQuestionPageTextLayer(pageNo);
+        const detected = extractQuestionStartsFromItems(layer.items || []);
         startsByPage[pageNo] = detected.starts;
         ratiosByPage[pageNo] = detected.ratioByQuestion;
       }
@@ -4923,6 +4915,7 @@
       state.pdfNav.questionPageMap = normalized;
       state.pdfNav.questionTopRatioMap = ratioMap;
       state.questionCropRangeCache = {};
+      state.pageTextLayerCache = {};
       state.locateQuestionCache = {};
       state.pdfNav.source = getCurrentPdfSourceKey();
       state.pdfNav.version = PDF_MAP_VERSION;
@@ -4935,6 +4928,7 @@
       state.pdfNav.questionPageMap = null;
       state.pdfNav.questionTopRatioMap = null;
       state.questionCropRangeCache = {};
+      state.pageTextLayerCache = {};
       state.locateQuestionCache = {};
       if (!silent) alert("PDF 자동 매핑에 실패했습니다.");
       updatePdfInfo();
