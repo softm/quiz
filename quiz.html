@@ -1239,7 +1239,7 @@
   const STORAGE_UI_KEY = "quiz_ui_v3";
   const ANSWER_PARSE_VERSION = 2;
   const PDF_MAP_VERSION = 7;
-  const CROP_CACHE_VERSION = 22;
+  const CROP_CACHE_VERSION = 23;
   const PRESET_PAGE_ANCHORS = {
     "2022년 제19회 농산물품질관리사 1차": [1,6,10,14,18,22,26,33,39,47,51,57,64,70,76,81,87,94],
     "2023년 제20회 농산물품질관리사 1차": [1,5,10,15,19,23,26,34,40,48,51,57,64,70,76,83,90,97],
@@ -1320,6 +1320,7 @@
     questionChoiceAnchorCache: {},
     questionCropRangeCache: {},
     pageOcrQuestionStartCache: {},
+    locateQuestionCache: {},
     gradeMarkerImageCache: {},
     delayedPdfLoadingTimer: null,
     delayedPdfLoadingToken: 0,
@@ -1558,6 +1559,17 @@
       state.delayedPdfLoadingTimer = null;
     }
     setPdfLoading(false);
+  }
+
+  function warmupQuestionLocateCache(centerQ){
+    const q = Math.max(1, Math.min(100, Math.floor(Number(centerQ) || 1)));
+    setTimeout(async () => {
+      try{
+        await locateQuestionInPdf(q);
+        if (q > 1) await locateQuestionInPdf(q - 1);
+        if (q < 100) await locateQuestionInPdf(q + 1);
+      }catch(_){}
+    }, 0);
   }
 
   function initAdFit(slotId, unit, width, height) {
@@ -2272,6 +2284,7 @@
     state.questionChoiceAnchorCache = {};
     state.questionCropRangeCache = {};
     state.pageOcrQuestionStartCache = {};
+    state.locateQuestionCache = {};
     navigatePdfToQuestion(state.focusQ || 1);
     ensureAutoPdfMap();
     await loadAnswerKeyFromJson();
@@ -2337,6 +2350,7 @@
     state.pdfNav.questionPageMap = mapped.pageMap;
     state.pdfNav.questionTopRatioMap = mapped.ratioMap;
     state.questionCropRangeCache = {};
+    state.locateQuestionCache = {};
     state.pdfNav.source = getCurrentPdfSourceKey();
     state.pdfNav.version = PDF_MAP_VERSION;
     updatePdfInfo();
@@ -2663,6 +2677,10 @@
   }
 
   async function locateQuestionInPdf(q){
+    const cacheKey = `${getCurrentPdfSourceKey()}|${PDF_MAP_VERSION}|q:${Math.max(1, Math.min(100, Math.floor(Number(q) || 1)))}`;
+    if (state.locateQuestionCache && state.locateQuestionCache[cacheKey]) {
+      return state.locateQuestionCache[cacheKey];
+    }
     const pdf = await ensurePdfDocument();
     const total = pdf.numPages || 1;
     const hasQuestionOnPage = async (pageNo, targetQ) => {
@@ -2710,7 +2728,9 @@
       const mappedPage = Math.max(1, Math.min(total, Number(mapped.pageMap[q]) || getPdfPageByQuestion(q)));
       const p = await resolveBetterPage(mappedPage, q);
       const r = await refineRatioOnPage(p, mapped.ratioMap[q]);
-      return { page: p, ratio: r, exact: true };
+      const result = { page: p, ratio: r, exact: true };
+      state.locateQuestionCache[cacheKey] = result;
+      return result;
     }
     // 기본 페이지맵을 사용하되, 페이지 내부 비율은 실제 텍스트 검출로 보정한다.
     const pageMap = state.pdfNav.questionPageMap;
@@ -2719,10 +2739,14 @@
       const mappedPage = Math.max(1, Math.min(total, Math.floor(pageMap[q])));
       const p = await resolveBetterPage(mappedPage, q);
       const r = await refineRatioOnPage(p, ratioMap[q]);
-      return { page: p, ratio: r, exact: true };
+      const result = { page: p, ratio: r, exact: true };
+      state.locateQuestionCache[cacheKey] = result;
+      return result;
     }
     const predicted = Math.max(1, Math.min(total, getPdfPageByQuestion(q)));
-    return { page: predicted, ratio: 0.12, exact: false };
+    const result = { page: predicted, ratio: 0.12, exact: false };
+    state.locateQuestionCache[cacheKey] = result;
+    return result;
   }
 
   async function getDirectQuestionRatiosForPage(pageNo){
@@ -3077,18 +3101,6 @@
       }
     }catch(_){}
     try{
-      const ocrMap = await getOcrQuestionStartRatiosForPage(pageNo);
-      if (ocrMap && Number.isFinite(ocrMap[q])) {
-        return Math.max(0, Math.min(1, Number(ocrMap[q])));
-      }
-    }catch(_){}
-    try{
-      const located = await locateQuestionInPdf(q);
-      if (located && located.page === pageNo && Number.isFinite(located.ratio)) {
-        return Math.max(0, Math.min(1, Number(located.ratio)));
-      }
-    }catch(_){}
-    try{
       const pageRatios = await getQuestionRatiosForPage(pageNo);
       if (pageRatios && Number.isFinite(pageRatios.get(q))) {
         return Math.max(0, Math.min(1, Number(pageRatios.get(q))));
@@ -3099,6 +3111,18 @@
     if (Array.isArray(pageMap) && Array.isArray(ratioMap) && pageMap[q] === pageNo && Number.isFinite(ratioMap[q])) {
       return Math.max(0, Math.min(1, Number(ratioMap[q])));
     }
+    try{
+      const located = await locateQuestionInPdf(q);
+      if (located && located.page === pageNo && Number.isFinite(located.ratio)) {
+        return Math.max(0, Math.min(1, Number(located.ratio)));
+      }
+    }catch(_){}
+    try{
+      const ocrMap = await getOcrQuestionStartRatiosForPage(pageNo);
+      if (ocrMap && Number.isFinite(ocrMap[q])) {
+        return Math.max(0, Math.min(1, Number(ocrMap[q])));
+      }
+    }catch(_){}
     return null;
   }
 
@@ -4408,6 +4432,7 @@
   }
 
   function navigatePdfToQuestion(q){
+    warmupQuestionLocateCache(q);
     if (state.viewMode === "single") {
       const loadingToken = beginDelayedPdfLoading("PDF 로딩 중...");
       locateQuestionInPdf(q).then((located) => {
@@ -4898,6 +4923,7 @@
       state.pdfNav.questionPageMap = normalized;
       state.pdfNav.questionTopRatioMap = ratioMap;
       state.questionCropRangeCache = {};
+      state.locateQuestionCache = {};
       state.pdfNav.source = getCurrentPdfSourceKey();
       state.pdfNav.version = PDF_MAP_VERSION;
       updatePdfInfo();
@@ -4909,6 +4935,7 @@
       state.pdfNav.questionPageMap = null;
       state.pdfNav.questionTopRatioMap = null;
       state.questionCropRangeCache = {};
+      state.locateQuestionCache = {};
       if (!silent) alert("PDF 자동 매핑에 실패했습니다.");
       updatePdfInfo();
     }
