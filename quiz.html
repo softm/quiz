@@ -3905,6 +3905,9 @@
       }
     }
 
+    // 오래 걸린 비동기 계산 이후, 최신 렌더 요청인지 다시 확인한다.
+    if (token !== state.renderToken) return;
+
     const destWidth = fullCanvas.width;
     const destHeight = state.viewMode === "single"
       ? Math.max(1, Math.round(srcHeight * (destWidth / srcWidth)))
@@ -3920,9 +3923,18 @@
       srcLeft, srcTop, srcWidth, srcHeight,
       0, 0, pdfCanvas.width, pdfCanvas.height
     );
-    if (state.viewMode === "single" && Number.isFinite(q) && Number.isFinite(state.answers[q])) {
-      const anchors = await getChoiceAnchorsForQuestion(safePage, q);
-      const sel = anchors.find(a => a.choice === state.answers[q]);
+    const selectedChoice = normalizeChoiceValue(state.answers[q]);
+    if (state.viewMode === "single" && Number.isFinite(q) && Number.isFinite(selectedChoice)) {
+      const visibleStartRatio = Math.max(0, Math.min(1, srcTop / Math.max(1, fullCanvas.height)));
+      const visibleEndRatio = Math.max(visibleStartRatio + 0.02, Math.min(1, (srcTop + srcHeight) / Math.max(1, fullCanvas.height)));
+      if (token !== state.renderToken) return;
+      const sel = await resolveSelectedChoiceAnchorWithRecovery(
+        safePage,
+        q,
+        selectedChoice,
+        { startRatio: visibleStartRatio, endRatio: visibleEndRatio }
+      );
+      if (token !== state.renderToken) return;
       if (sel) {
         const sx = srcWidth / pdfCanvas.width;
         const sy = srcHeight / pdfCanvas.height;
@@ -3937,26 +3949,41 @@
         const cx = dx + (dw * 0.5);
         const cy = dy + (dh * 0.5);
         const r = Math.max(13, Math.min(24, Math.max(dw, dh) * 0.65));
-        pdfCtx.save();
-        pdfCtx.lineWidth = 3;
-        pdfCtx.strokeStyle = "#0a66d6";
-        pdfCtx.fillStyle = "rgba(10,102,214,0.22)";
-        pdfCtx.beginPath();
-        pdfCtx.arc(cx, cy, r, 0, Math.PI * 2);
-        pdfCtx.fill();
-        pdfCtx.stroke();
-        pdfCtx.restore();
+        if (cx < -r || cx > (pdfCanvas.width + r) || cy < -r || cy > (pdfCanvas.height + r)) {
+          // 탐지점이 컷 영역 밖이면 현재 화면 내에서라도 선택 마커가 보이도록 클램프한다.
+          const ccx = Math.max(r + 6, Math.min(pdfCanvas.width - r - 6, cx));
+          const ccy = Math.max(r + 6, Math.min(pdfCanvas.height - r - 6, cy));
+          pdfCtx.save();
+          pdfCtx.lineWidth = 3;
+          pdfCtx.strokeStyle = "#0a66d6";
+          pdfCtx.fillStyle = "rgba(10,102,214,0.22)";
+          pdfCtx.beginPath();
+          pdfCtx.arc(ccx, ccy, r, 0, Math.PI * 2);
+          pdfCtx.fill();
+          pdfCtx.stroke();
+          pdfCtx.restore();
+        } else {
+          pdfCtx.save();
+          pdfCtx.lineWidth = 3;
+          pdfCtx.strokeStyle = "#0a66d6";
+          pdfCtx.fillStyle = "rgba(10,102,214,0.22)";
+          pdfCtx.beginPath();
+          pdfCtx.arc(cx, cy, r, 0, Math.PI * 2);
+          pdfCtx.fill();
+          pdfCtx.stroke();
+          pdfCtx.restore();
+        }
       }
     }
     if (state.viewMode === "single" && Number.isFinite(q)) {
       const gradeState = getViewerGradeState(q);
       if (gradeState) {
-        const markAnchor = await resolveQuestionAnchorForMark(safePage, q);
-        drawQuestionGradeMarker(gradeState, markAnchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
         const numberAnchor = await resolveQuestionNumberAnchorForMark(safePage, q);
+        if (token !== state.renderToken) return;
         drawQuestionNumberMarker(gradeState, numberAnchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
       }
     }
+    if (token !== state.renderToken) return;
     state.lastRenderMeta = {
       page: safePage,
       q: Number.isFinite(q) ? q : null,
@@ -4215,7 +4242,7 @@
 
   function getViewerGradeState(q){
     if (!Number.isFinite(q)) return null;
-    const chosen = state.answers[q];
+    const chosen = normalizeChoiceValue(state.answers[q]);
     const correct = getCorrectAnswer(q);
     if (chosen == null || !Number.isFinite(correct)) return null;
     const card = getCard(q);
@@ -4227,7 +4254,7 @@
 
   async function resolveQuestionAnchorForMark(pageNo, q){
     if (!Number.isFinite(pageNo) || !Number.isFinite(q)) return null;
-    const chosen = state.answers[q];
+    const chosen = normalizeChoiceValue(state.answers[q]);
     if (Number.isFinite(chosen)) {
       try{
         const anchors = await getChoiceAnchorsForQuestion(pageNo, q);
@@ -4399,14 +4426,23 @@
 
   async function drawAllModeSelectedMarker(pageNo, q){
     if (!Number.isFinite(pageNo) || !Number.isFinite(q)) return false;
-    const selected = state.answers[q];
+    const selected = normalizeChoiceValue(state.answers[q]);
     if (!Number.isFinite(selected)) return false;
     const canvas = state.allPageCanvases[pageNo];
     const meta = state.allPageCanvasMeta[pageNo];
     if (!canvas || !meta) return false;
 
-    const anchors = await getChoiceAnchorsForQuestion(pageNo, q);
-    const sel = Array.isArray(anchors) ? anchors.find((a) => a.choice === selected) : null;
+    let hint = null;
+    try{
+      const range = await getQuestionCropRange(q, pageNo);
+      if (range && Number.isFinite(range.focusStart) && Number.isFinite(range.focusEnd)) {
+        hint = { startRatio: Number(range.focusStart), endRatio: Number(range.focusEnd) };
+      } else if (range && Number.isFinite(range.start) && Number.isFinite(range.end)) {
+        hint = { startRatio: Number(range.start), endRatio: Number(range.end) };
+      }
+    }catch(_){}
+
+    const sel = await resolveSelectedChoiceAnchorWithRecovery(pageNo, q, selected, hint);
     if (!sel) return false;
 
     const sx = meta.srcWidth / meta.destWidth;
@@ -4489,13 +4525,12 @@
       restoreAllPageCanvas(p);
     }
     for (let q = 1; q <= 100; q++){
-      const selected = state.answers[q];
+      const selected = normalizeChoiceValue(state.answers[q]);
       if (!Number.isFinite(selected)) continue;
       const pageNo = getAllModePageForQuestion(q, totalPages);
       await drawAllModeSelectedMarker(pageNo, q);
       const gradeState = getViewerGradeState(q);
       if (gradeState) {
-        await drawAllModeGradeMarker(pageNo, q, gradeState);
         await drawAllModeQuestionNumberMarker(pageNo, q, gradeState);
       }
     }
@@ -4719,15 +4754,47 @@
     return null;
   }
 
+  function normalizeChoiceValue(value){
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    const c = Math.trunc(n);
+    return (c >= 1 && c <= 4) ? c : null;
+  }
+
   function parseChoiceNumberToken(token){
     const t = String(token || "").trim();
     if (!t) return null;
-    const circled = { "①": 1, "②": 2, "③": 3, "④": 4 };
+    const normalized = t.normalize("NFKC");
+    const circled = {
+      "①": 1, "②": 2, "③": 3, "④": 4,
+      "❶": 1, "❷": 2, "❸": 3, "❹": 4,
+      "➀": 1, "➁": 2, "➂": 3, "➃": 4,
+      "➊": 1, "➋": 2, "➌": 3, "➍": 4,
+      "⓵": 1, "⓶": 2, "⓷": 3, "⓸": 4,
+      "㈠": 1, "㈡": 2, "㈢": 3, "㈣": 4,
+      "㊀": 1, "㊁": 2, "㊂": 3, "㊃": 4,
+      "㉠": 1, "㉡": 2, "㉢": 3, "㉣": 4
+    };
     if (circled[t]) return circled[t];
-    let m = t.match(/^([①②③④])/);
+    if (circled[normalized]) return circled[normalized];
+    let m = t.match(/^([①②③④❶❷❸❹➀➁➂➃➊➋➌➍⓵⓶⓷⓸㈠㈡㈢㈣㊀㊁㊂㊃㉠㉡㉢㉣])/);
+    if (m && circled[m[1]]) return circled[m[1]];
+    m = normalized.match(/^([①②③④❶❷❸❹➀➁➂➃➊➋➌➍⓵⓶⓷⓸㈠㈡㈢㈣㊀㊁㊂㊃㉠㉡㉢㉣])/);
     if (m && circled[m[1]]) return circled[m[1]];
     m = t.match(/^([1-4])\s*[.)]/);
     if (m) return Number(m[1]);
+    m = normalized.match(/^\(([1-4])\)$/);
+    if (m) return Number(m[1]);
+    m = normalized.match(/^\[([1-4])\]$/);
+    if (m) return Number(m[1]);
+    m = normalized.match(/^([1-4])\s*[.)]$/);
+    if (m) return Number(m[1]);
+    return null;
+  }
+
+  function parseWeakChoiceDigitToken(token){
+    const t = String(token || "").trim().normalize("NFKC");
+    if (/^[1-4]$/.test(t)) return Number(t);
     return null;
   }
 
@@ -4751,17 +4818,51 @@
     if (!hasOptions && state.questionChoiceAnchorCache[cacheKey]) return state.questionChoiceAnchorCache[cacheKey];
 
     const pageRatios = await getQuestionRatiosForPage(pageNo);
-    if (!pageRatios || !pageRatios.has(q)) {
-      state.questionChoiceAnchorCache[cacheKey] = [];
-      return [];
+    let startRatioBase = (pageRatios && pageRatios.has(q)) ? pageRatios.get(q) : null;
+    if (!Number.isFinite(startRatioBase)) {
+      const pageMap = state.pdfNav.questionPageMap;
+      const ratioMap = state.pdfNav.questionTopRatioMap;
+      if (Array.isArray(pageMap) && Array.isArray(ratioMap) && pageMap[q] === pageNo && Number.isFinite(ratioMap[q])) {
+        startRatioBase = Number(ratioMap[q]);
+      }
     }
-    const startRatioBase = pageRatios.get(q);
+    if (!Number.isFinite(startRatioBase)) {
+      try{
+        const range = await getQuestionCropRange(q, pageNo);
+        if (range && Number.isFinite(range.start)) {
+          startRatioBase = Number(range.start);
+        } else if (range && Number.isFinite(range.focusStart)) {
+          startRatioBase = Number(range.focusStart);
+        }
+      }catch(_){}
+    }
+    const currentRenderMeta = state.lastRenderMeta;
+    const canUseRenderHint = (
+      !hasOptions &&
+      currentRenderMeta &&
+      currentRenderMeta.viewMode === "single" &&
+      currentRenderMeta.page === pageNo &&
+      currentRenderMeta.q === q &&
+      Number.isFinite(currentRenderMeta.cropStartPx) &&
+      Number.isFinite(currentRenderMeta.cropHeightPx) &&
+      Number.isFinite(currentRenderMeta.fullHeightPx) &&
+      currentRenderMeta.fullHeightPx > 0
+    );
+    const renderHintStart = canUseRenderHint
+      ? Math.max(0, Math.min(1, Number(currentRenderMeta.cropStartPx) / Number(currentRenderMeta.fullHeightPx)))
+      : null;
+    const renderHintEnd = canUseRenderHint
+      ? Math.max(0.02, Math.min(1, (Number(currentRenderMeta.cropStartPx) + Number(currentRenderMeta.cropHeightPx)) / Number(currentRenderMeta.fullHeightPx)))
+      : null;
+
     const optStart = (hasOptions && Number.isFinite(options.startRatio)) ? Number(options.startRatio) : null;
     const startRatio = Number.isFinite(optStart)
       ? Math.max(0, Math.min(1, optStart))
-      : startRatioBase;
+      : (Number.isFinite(renderHintStart)
+          ? renderHintStart
+          : (Number.isFinite(startRatioBase) ? Math.max(0, Math.min(1, startRatioBase)) : 0));
     let endRatio = 1;
-    if (pageRatios.size > 0){
+    if (pageRatios && pageRatios.size > 0){
       const sorted = Array.from(pageRatios.entries()).sort((a, b) => a[0] - b[0]);
       for (const [k, v] of sorted){
         if (k > q && Number.isFinite(v) && v > startRatio + 0.01) {
@@ -4770,20 +4871,35 @@
         }
       }
     }
+    if (endRatio >= 0.999) {
+      const pageMap = state.pdfNav.questionPageMap;
+      const ratioMap = state.pdfNav.questionTopRatioMap;
+      if (Array.isArray(pageMap) && Array.isArray(ratioMap) && q < 100 && pageMap[q + 1] === pageNo && Number.isFinite(ratioMap[q + 1])) {
+        endRatio = Math.max(startRatio + 0.02, Math.min(1, Number(ratioMap[q + 1]) - 0.004));
+      }
+    }
+    if (endRatio >= 0.999 && Number.isFinite(startRatioBase)) {
+      endRatio = Math.max(startRatio + 0.02, Math.min(1, startRatio + 0.46));
+    }
     if (hasOptions && Number.isFinite(options.endRatio)) {
       const optEnd = Math.max(startRatio + 0.02, Math.min(1, Number(options.endRatio)));
       endRatio = Math.min(endRatio, optEnd);
+    }
+    if (Number.isFinite(renderHintEnd)) {
+      endRatio = Math.min(endRatio, Math.max(startRatio + 0.02, renderHintEnd));
     }
 
     const layer = await getQuestionPageTextLayer(pageNo);
     const pageW = layer.pageW;
     const pageH = layer.pageH;
     const anchors = [];
+    const weakAnchors = [];
 
     for (const item of (layer.items || [])){
       const rawToken = String(item.str || "").trim();
       const choice = parseChoiceNumberToken(rawToken);
-      if (!choice) continue;
+      const weakChoice = !choice ? parseWeakChoiceDigitToken(rawToken) : null;
+      if (!choice && !weakChoice) continue;
       const x = Number(item.transform && item.transform[4]);
       const y = Number(item.transform && item.transform[5]);
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
@@ -4791,19 +4907,26 @@
       const ih = Math.max(8, Math.abs(Number(item.height) || 0));
       const top = Math.max(0, Math.min(pageH - ih, pageH - y - ih));
       const topRatio = top / pageH;
-      if (topRatio < startRatio + 0.028) continue;
+      const startGuard = hasOptions ? 0.002 : 0.014;
+      if (topRatio < startRatio + startGuard) continue;
       const compact = rawToken.replace(/\s+/g, "");
       const numericToken = /^\(?[1-4][.)]/.test(compact);
       if (numericToken && (x / pageW) < 0.16 && topRatio < startRatio + 0.09) continue;
       if (topRatio < startRatio - 0.01 || topRatio > endRatio + 0.01) continue;
 
-      anchors.push({
-        choice,
+      const row = {
+        choice: choice || weakChoice,
         xRatio: Math.max(0, Math.min(1, x / pageW)),
         yRatio: Math.max(0, Math.min(1, top / pageH)),
         wRatio: Math.max(0.004, Math.min(0.2, iw / pageW)),
         hRatio: Math.max(0.006, Math.min(0.15, ih / pageH))
-      });
+      };
+      if (choice) {
+        anchors.push(row);
+      } else {
+        // 약한 토큰(단독 숫자)은 후보로만 보관한다.
+        weakAnchors.push(row);
+      }
     }
 
     const pickChoices = (list, targetYRatio = null) => {
@@ -4822,6 +4945,19 @@
       return picked;
     };
 
+    // 옵션으로 start/end가 주어지면(단일문항 렌더), 해당 구간 중심 후보를 초기값으로 사용한다.
+    // 단, 여기서 조기 반환하지 않고 아래 누락 보강(weak anchors)까지 반드시 수행한다.
+    let hintedResult = null;
+    if (hasOptions && Number.isFinite(startRatio) && Number.isFinite(endRatio)) {
+      const lo = Math.max(0, startRatio - 0.004);
+      const hi = Math.min(1, endRatio + 0.01);
+      const band = anchors.filter((a) => a.yRatio >= lo && a.yRatio <= hi);
+      const scoped = band.length ? band : anchors;
+      const center = (lo + hi) * 0.5;
+      const hinted = pickChoices(scoped, center);
+      if (hinted.length) hintedResult = hinted;
+    }
+
     // 1차: 좌측 그룹 우선(문항 번호 오인식 완화)
     let refined = anchors;
     if (anchors.length){
@@ -4829,10 +4965,32 @@
       const xCut = Math.min(0.38, minX + 0.22);
       refined = anchors.filter(a => a.xRatio <= xCut);
     }
-    let result = pickChoices(refined);
+    let result = hintedResult && hintedResult.length ? hintedResult : pickChoices(refined);
     // 2차: 선지 누락 시 전체 앵커로 재탐색(세로 배열/다단 배치 대응)
     if (result.length < 4) {
       result = pickChoices(anchors);
+    }
+    // 2.5차: ③④ 누락 등 강한 토큰 부족 시, 약한 토큰(단독 숫자)을 위치 제약으로 보강한다.
+    if (result.length < 4 && weakAnchors.length) {
+      const existingChoices = new Set(result.map((a) => a.choice));
+      const xSeeds = result.length ? result.map((a) => a.xRatio) : anchors.map((a) => a.xRatio);
+      const yMin = (result.length ? Math.min(...result.map((a) => a.yRatio)) : Math.min(...anchors.map((a) => a.yRatio), 0));
+      const yMax = (result.length ? Math.max(...result.map((a) => a.yRatio)) : Math.max(...anchors.map((a) => a.yRatio), 1));
+      const combined = result.slice();
+
+      for (let c = 1; c <= 4; c++){
+        if (existingChoices.has(c)) continue;
+        let rows = weakAnchors.filter((a) => a.choice === c);
+        if (xSeeds.length) {
+          rows = rows.filter((a) => xSeeds.some((x0) => Math.abs(a.xRatio - x0) <= 0.09));
+        }
+        rows = rows.filter((a) => a.yRatio >= (yMin - 0.02) && a.yRatio <= (yMax + 0.22));
+        rows.sort((a, b) => a.yRatio - b.yRatio || a.xRatio - b.xRatio);
+        if (rows.length) combined.push(rows[0]);
+      }
+      if (combined.length >= result.length) {
+        result = pickChoices(combined);
+      }
     }
     // 3차: 문항번호 숫자 토큰이 섞여 y축이 크게 벌어질 때,
     // 가장 밀집된 y대역을 선택지 행으로 보고 재선정한다.
@@ -4862,8 +5020,156 @@
         }
       }
     }
-    if (!hasOptions) state.questionChoiceAnchorCache[cacheKey] = result;
+    if (!hasOptions) {
+      if (Array.isArray(result) && result.length) state.questionChoiceAnchorCache[cacheKey] = result;
+      else delete state.questionChoiceAnchorCache[cacheKey];
+    }
     return result;
+  }
+
+  function resolveSelectedChoiceAnchor(anchors, selected){
+    if (!Array.isArray(anchors) || !Number.isFinite(selected)) return null;
+    // 선택지 마커는 오직 "같은 번호(choice)" 앵커에만 표시한다.
+    // 기하학적 추정 매핑은 번호 오인 시 오마킹을 유발하므로 사용하지 않는다.
+    const direct = anchors.find((a) =>
+      a && a.choice === selected
+      && Number.isFinite(a.xRatio) && Number.isFinite(a.yRatio)
+      && Number.isFinite(a.wRatio) && Number.isFinite(a.hRatio)
+    );
+    return direct || null;
+  }
+
+  async function resolveChoiceAnchorByQuestionBand(pageNo, q, selected, hintStart = null, hintEnd = null){
+    if (!Number.isFinite(pageNo) || !Number.isFinite(q) || !Number.isFinite(selected)) return null;
+    let qStart = null;
+    let qEnd = null;
+    if (Number.isFinite(hintStart) && Number.isFinite(hintEnd)) {
+      qStart = Math.max(0, Math.min(1, Number(hintStart)));
+      qEnd = Math.max(qStart + 0.02, Math.min(1, Number(hintEnd)));
+    } else {
+      qStart = await getQuestionStartRatioForPage(pageNo, q);
+      if (!Number.isFinite(qStart)) {
+        const range = await getQuestionCropRange(q, pageNo);
+        if (range && Number.isFinite(range.start)) qStart = Number(range.start);
+      }
+      if (!Number.isFinite(qStart)) return null;
+      qStart = Math.max(0, Math.min(1, qStart));
+      qEnd = 1;
+      if (q < 100) {
+        const nextStart = await getQuestionStartRatioForPage(pageNo, q + 1);
+        if (Number.isFinite(nextStart) && nextStart > qStart + 0.03) {
+          qEnd = Math.max(qStart + 0.06, Math.min(1, nextStart - 0.004));
+        }
+      }
+      if (!Number.isFinite(qEnd) || qEnd <= qStart + 0.02) {
+        qEnd = Math.min(1, qStart + 0.34);
+      }
+    }
+
+    const layer = await getQuestionPageTextLayer(pageNo);
+    const pageW = layer.pageW;
+    const pageH = layer.pageH;
+    const candidates = [];
+    for (const item of (layer.items || [])) {
+      const raw = String(item.str || "").trim();
+      const strong = parseChoiceNumberToken(raw);
+      const weak = !strong ? parseWeakChoiceDigitToken(raw) : null;
+      const choice = strong || weak;
+      if (choice !== selected) continue;
+      const x = Number(item.transform && item.transform[4]);
+      const y = Number(item.transform && item.transform[5]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      const iw = Math.max(8, Math.abs(Number(item.width) || 0));
+      const ih = Math.max(8, Math.abs(Number(item.height) || 0));
+      const top = Math.max(0, Math.min(pageH - ih, pageH - y - ih));
+      const topRatio = top / pageH;
+      if (topRatio < qStart + 0.002 || topRatio > qEnd + 0.01) continue;
+      // 단독 숫자(약한 토큰)는 문항번호 근처 혼입 방지를 위해 x열 제약을 추가한다.
+      const xRatio = x / pageW;
+      if (!strong && xRatio > 0.82) continue;
+      candidates.push({
+        choice,
+        xRatio: Math.max(0, Math.min(1, xRatio)),
+        yRatio: Math.max(0, Math.min(1, topRatio)),
+        wRatio: Math.max(0.004, Math.min(0.2, iw / pageW)),
+        hRatio: Math.max(0.006, Math.min(0.15, ih / pageH)),
+        strong: !!strong
+      });
+    }
+    if (!candidates.length) return null;
+    const center = (qStart + qEnd) * 0.5;
+    candidates.sort((a, b) => {
+      if (a.strong !== b.strong) return a.strong ? -1 : 1;
+      const da = Math.abs(a.yRatio - center);
+      const db = Math.abs(b.yRatio - center);
+      if (da !== db) return da - db;
+      return a.yRatio - b.yRatio || a.xRatio - b.xRatio;
+    });
+    return candidates[0];
+  }
+
+  async function resolveSelectedChoiceAnchorWithRecovery(pageNo, q, selected, hint = null){
+    if (!Number.isFinite(pageNo) || !Number.isFinite(q) || !Number.isFinite(selected)) return null;
+    const hintStart = (hint && Number.isFinite(hint.startRatio)) ? Math.max(0, Math.min(1, Number(hint.startRatio))) : null;
+    const hintEnd = (hint && Number.isFinite(hint.endRatio)) ? Math.max(0, Math.min(1, Number(hint.endRatio))) : null;
+    const inHintRange = (anchor) => {
+      if (!anchor || !Number.isFinite(anchor.yRatio)) return false;
+      if (!Number.isFinite(hintStart) || !Number.isFinite(hintEnd)) return true;
+      const y = Number(anchor.yRatio);
+      return y >= (hintStart - 0.004) && y <= (hintEnd + 0.02);
+    };
+    const attempts = [];
+    if (Number.isFinite(hintStart) && Number.isFinite(hintEnd)) {
+      const s = hintStart;
+      const e = Math.max(s + 0.02, hintEnd);
+      attempts.push({ startRatio: s, endRatio: e });
+      // 문항 상단으로는 넓히지 않고(이전 문항 혼입 방지), 하단만 점진 확장한다.
+      attempts.push({ startRatio: s, endRatio: Math.min(1, e + 0.16) });
+      attempts.push({ startRatio: s, endRatio: Math.min(1, e + 0.30) });
+    }
+    // 단일문항 힌트가 있는 경우 전페이지 탐색(null)을 하지 않는다.
+    // (다른 문항 선택지 앵커 혼입 방지)
+    if (!(Number.isFinite(hintStart) && Number.isFinite(hintEnd))) {
+      attempts.push(null);
+    }
+
+    let recovered = null;
+    for (const opt of attempts){
+      const anchors = opt
+        ? await getChoiceAnchorsForQuestion(pageNo, q, opt)
+        : await getChoiceAnchorsForQuestion(pageNo, q);
+      const direct = Array.isArray(anchors) && anchors.some((a) => a && a.choice === selected);
+      const sel = resolveSelectedChoiceAnchor(anchors, selected);
+      if (direct && sel && inHintRange(sel)) return sel;
+      if (!recovered && sel && inHintRange(sel)) recovered = sel;
+    }
+
+    if (!recovered) {
+      try{
+        const bandSel = await resolveChoiceAnchorByQuestionBand(pageNo, q, selected, hintStart, hintEnd);
+        if (bandSel && inHintRange(bandSel)) return bandSel;
+      }catch(_){}
+    }
+    if (!recovered && Number.isFinite(hintStart) && Number.isFinite(hintEnd)) {
+      return null;
+    }
+    if (recovered && (selected === 3 || selected === 4)) {
+      let qStart = await getQuestionStartRatioForPage(pageNo, q);
+      if (!Number.isFinite(qStart)) {
+        const pageMap = state.pdfNav.questionPageMap;
+        const ratioMap = state.pdfNav.questionTopRatioMap;
+        if (Array.isArray(pageMap) && Array.isArray(ratioMap) && pageMap[q] === pageNo && Number.isFinite(ratioMap[q])) {
+          qStart = Number(ratioMap[q]);
+        }
+      }
+      const minRowY = Number.isFinite(qStart) ? (qStart + 0.11) : 0.36;
+      if (recovered.yRatio < minRowY) {
+        const adjusted = { ...recovered, yRatio: Math.min(0.98, minRowY) };
+        if (inHintRange(adjusted)) return adjusted;
+        return recovered;
+      }
+    }
+    return recovered;
   }
 
   function extractQuestionStartsFromItems(items){
@@ -5065,6 +5371,10 @@
       const arr = JSON.parse(raw);
       if (!Array.isArray(arr) || arr.length < 101) { saveHint.textContent = "저장 상태: 형식 오류"; return; }
       state.answers = arr.slice(0,101);
+      for (let q = 1; q <= 100; q++){
+        const n = normalizeChoiceValue(state.answers[q]);
+        state.answers[q] = Number.isFinite(n) ? n : null;
+      }
 
       for(let q=1; q<=100; q++){
         const a = state.answers[q];
@@ -5147,7 +5457,7 @@
   function applyFilter(){
     for(let q=1; q<=100; q++){
       const card = getCard(q);
-      const chosen = state.answers[q];
+      const chosen = normalizeChoiceValue(state.answers[q]);
       const correct = getCorrectAnswer(q);
 
       let show = true;
@@ -5380,7 +5690,7 @@
 
   function updateMobileChoiceButtons(){
     const q = state.focusQ;
-    const selected = Number.isFinite(q) ? state.answers[q] : null;
+    const selected = Number.isFinite(q) ? normalizeChoiceValue(state.answers[q]) : null;
     for (let c = 1; c <= 4; c++){
       const btn = document.getElementById(`mobileChoice${c}`);
       if (!btn) continue;
@@ -5406,7 +5716,31 @@
     const xFull = meta.cropLeftPx + (xOnCanvas * sx);
     const yFull = meta.cropStartPx + (yOnCanvas * sy);
 
-    const anchors = await getChoiceAnchorsForQuestion(meta.page, q);
+    const visibleStartRatio = Math.max(0, Math.min(1, Number(meta.cropStartPx || 0) / Math.max(1, Number(meta.fullHeightPx || 1))));
+    const visibleEndRatio = Math.max(
+      visibleStartRatio + 0.02,
+      Math.min(1, (Number(meta.cropStartPx || 0) + Number(meta.cropHeightPx || 0)) / Math.max(1, Number(meta.fullHeightPx || 1)))
+    );
+    let anchors = await getChoiceAnchorsForQuestion(meta.page, q, {
+      startRatio: visibleStartRatio,
+      endRatio: visibleEndRatio
+    });
+    if (!Array.isArray(anchors)) anchors = [];
+    if (anchors.length < 4) {
+      const byChoice = new Map();
+      for (const a of anchors) {
+        if (!a || !Number.isFinite(a.choice)) continue;
+        if (!byChoice.has(a.choice)) byChoice.set(a.choice, a);
+      }
+      for (let c = 1; c <= 4; c++){
+        if (byChoice.has(c)) continue;
+        try{
+          const recovered = await resolveChoiceAnchorByQuestionBand(meta.page, q, c, visibleStartRatio, visibleEndRatio);
+          if (recovered) byChoice.set(c, recovered);
+        }catch(_){}
+      }
+      anchors = Array.from(byChoice.values()).sort((a, b) => a.choice - b.choice);
+    }
     if (anchors.length){
       const points = anchors.map((a) => {
         const ax = a.xRatio * meta.fullWidthPx;
@@ -5424,6 +5758,42 @@
       const xs = points.map((p) => p.cx);
       const ySpread = ys.length ? (Math.max(...ys) - Math.min(...ys)) : 0;
       const xSpread = xs.length ? (Math.max(...xs) - Math.min(...xs)) : 0;
+      // 라벨 오인식이 있더라도 클릭 선택은 좌표 배치로 최종 결정한다.
+      if (points.length >= 3) {
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
+        if (xSpread > 90 && ySpread > 20) {
+          // 2열 배치(①② / ③④)
+          const midX = (minX + maxX) * 0.5;
+          const midY = (minY + maxY) * 0.5;
+          const col = xFull < midX ? 0 : 1;
+          const row = yFull < midY ? 0 : 1;
+          const choice = (row * 2) + col + 1;
+          chooseByKeyboard(choice);
+          pdfStatus.textContent = `${q}번 ${choice} 선택`;
+          return;
+        }
+        if (ySpread <= Math.max(22, xSpread * 0.22)) {
+          // 가로 1열 배치(①②③④)
+          const sorted = [...points].sort((a, b) => a.cx - b.cx);
+          const idx = sorted.findIndex((p, i) => i === sorted.length - 1 || xFull < ((p.cx + sorted[i + 1].cx) * 0.5));
+          const choice = Math.max(1, Math.min(4, (idx >= 0 ? idx : (sorted.length - 1)) + 1));
+          chooseByKeyboard(choice);
+          pdfStatus.textContent = `${q}번 ${choice} 선택`;
+          return;
+        }
+        if (xSpread <= Math.max(70, ySpread * 0.35)) {
+          // 세로 1열 배치(①②③④)
+          const sorted = [...points].sort((a, b) => a.cy - b.cy);
+          const idx = sorted.findIndex((p, i) => i === sorted.length - 1 || yFull < ((p.cy + sorted[i + 1].cy) * 0.5));
+          const choice = Math.max(1, Math.min(4, (idx >= 0 ? idx : (sorted.length - 1)) + 1));
+          chooseByKeyboard(choice);
+          pdfStatus.textContent = `${q}번 ${choice} 선택`;
+          return;
+        }
+      }
       const horizontalLayout = ySpread <= Math.max(22, xSpread * 0.22);
       if (horizontalLayout && points.length >= 3) {
         const avgH = points.reduce((s, p) => s + p.ah, 0) / points.length;
@@ -5465,12 +5835,17 @@
       }
     }
 
-    // 앵커 검출이 약한 회차를 위한 보조 fallback
+    // 앵커 검출 실패 시 보조 fallback
     const nx = (e.clientX - rect.left) / rect.width;
     const ny = (e.clientY - rect.top) / rect.height;
-    if (nx >= 0.03 && nx <= 0.72 && ny >= 0.34 && ny <= 0.98) {
-      const picked = Math.floor(((ny - 0.34) / (0.98 - 0.34)) * 4) + 1;
-      const choice = Math.max(1, Math.min(4, picked));
+    if (nx >= 0.03 && nx <= 0.92 && ny >= 0.22 && ny <= 0.96) {
+      // 2열(①②/③④) 배치를 우선 가정해 클릭 체감 정확도를 높인다.
+      const col = nx < 0.5 ? 0 : 1;
+      const row = ny < 0.56 ? 0 : 1;
+      let choice = (row * 2) + col + 1;
+      // 매우 위쪽 클릭은 1/2, 매우 아래쪽 클릭은 3/4로 보정
+      if (ny < 0.40) choice = col === 0 ? 1 : 2;
+      if (ny > 0.66) choice = col === 0 ? 3 : 4;
       chooseByKeyboard(choice);
       pdfStatus.textContent = `${q}번 ${choice} 선택`;
     }
@@ -5480,7 +5855,7 @@
   function gradeQuestion(q){
     const card = getCard(q);
     if (!card) return;
-    const chosen = state.answers[q];
+    const chosen = normalizeChoiceValue(state.answers[q]);
     const correct = getCorrectAnswer(q);
     const mark = card.querySelector('[data-role="mark"]');
 
@@ -5573,7 +5948,7 @@
   function refreshCard(q){
     const card = getCard(q);
     if (!card) return;
-    const chosen = state.answers[q];
+    const chosen = normalizeChoiceValue(state.answers[q]);
     const correct = getCorrectAnswer(q);
     card.classList.toggle("bookmarked", !!state.bookmarks[q]);
 
@@ -5620,8 +5995,9 @@
         mark.textContent = "잠금";
         mark.classList.add("lock");
       } else {
-        mark.textContent = state.answers[q] == null ? "미응답" : "미채점";
-        if (state.answers[q] == null) mark.classList.add("blank");
+        const chosen = normalizeChoiceValue(state.answers[q]);
+        mark.textContent = chosen == null ? "미응답" : "미채점";
+        if (chosen == null) mark.classList.add("blank");
       }
 
       card.querySelectorAll(".choice").forEach(el => {
@@ -5657,7 +6033,7 @@
           }
         }
       }
-      const a = state.answers[q];
+      const a = normalizeChoiceValue(state.answers[q]);
       if (a == null) { blanks++; continue; }
       if (Number.isFinite(corr) && a === corr) correct++;
 
@@ -5694,7 +6070,7 @@
     ];
 
     for(let q=1; q<=100; q++){
-      const a = state.answers[q];
+      const a = normalizeChoiceValue(state.answers[q]);
       const correct = getCorrectAnswer(q);
 
       const sec = sections.find(s => q>=s.from && q<=s.to);
