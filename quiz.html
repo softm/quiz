@@ -1475,7 +1475,8 @@
     const targetMode = isMobileLandscapeFullscreenTarget();
     if (!targetMode){
       landscapeFullscreenDismissed = false;
-      if (isAppFullscreen() && !orientationToggleLandscapeActive){
+      orientationToggleLandscapeActive = false;
+      if (isAppFullscreen() && !orientationToggleInFlight){
         exitAppFullscreen().catch(() => {});
       }
       return;
@@ -1506,13 +1507,19 @@
         orientationToggleLandscapeActive = false;
         try{
           if (orientationApi) {
-            await screen.orientation.lock("portrait-primary");
+            await screen.orientation.lock("portrait-primary").catch(async () => {
+              await screen.orientation.lock("portrait");
+            });
           } else if (screen.orientation && typeof screen.orientation.unlock === "function") {
             screen.orientation.unlock();
           }
         }catch(_){}
         if (isAppFullscreen()) {
-          exitAppFullscreen().catch(() => {});
+          await exitAppFullscreen().catch(() => {});
+        }
+        await sleep(80);
+        if (window.matchMedia("(orientation: landscape)").matches && screen.orientation && typeof screen.orientation.unlock === "function") {
+          try { screen.orientation.unlock(); } catch(_){}
         }
         return;
       }
