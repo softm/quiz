@@ -3581,8 +3581,8 @@
         const nextBase = labelNextBoundary;
         if (Number.isFinite(nextBase)) {
           const endGap = Number.isFinite(strictNextLabelBoundary)
-            ? (mobileViewport ? 0.020 : 0.016)
-            : (mobileViewport ? 0.055 : 0.045);
+            ? (mobileViewport ? 0.012 : 0.016)
+            : (mobileViewport ? 0.030 : 0.045);
           const forcedEnd = Math.min(0.995, nextBase - endGap);
           safeEnd = Math.min(safeEnd, forcedEnd);
           finalNextBoundaryUsed = nextBase;
@@ -3661,16 +3661,16 @@
 
       // 경계 적용: 선택지 하단보다 이르면 무시
       if (Number.isFinite(nextStartBoundaryRatio)) {
-        const endGapRatio = mobileViewport ? 0.022 : (lowConfidenceRange ? 0.018 : 0.015);
+        const endGapRatio = mobileViewport ? 0.012 : (lowConfidenceRange ? 0.018 : 0.015);
         const capEnd = Math.min(0.995, Number(nextStartBoundaryRatio) - endGapRatio);
         if (capEnd > safeStart + 0.03) hardEndCapRatio = capEnd;
       } else if (Number.isFinite(mappedNextSamePage)) {
         // 실측 경계 탐지가 실패해도, 같은 페이지 q+1 맵 경계는 하드 상한으로 사용
-        const mapGapRatio = mobileViewport ? 0.022 : 0.015;
+        const mapGapRatio = mobileViewport ? 0.012 : 0.015;
         const mapCap = Math.min(0.995, Number(mappedNextSamePage) - mapGapRatio);
         if (mapCap > safeStart + 0.03) hardEndCapRatio = mapCap;
       } else if (Number.isFinite(rangeNextBoundary)) {
-        const rangeGapRatio = mobileViewport ? 0.022 : 0.015;
+        const rangeGapRatio = mobileViewport ? 0.012 : 0.015;
         const rangeCap = Math.min(0.995, Number(rangeNextBoundary) - rangeGapRatio);
         if (rangeCap > safeStart + 0.03) hardEndCapRatio = rangeCap;
       }
@@ -3696,7 +3696,7 @@
         }
         safeEnd = Math.min(safeEnd, hardEndCapRatio);
       }
-      const minSpan = mobileViewport ? 0.24 : 0.20;
+      const minSpan = mobileViewport ? 0.30 : 0.20;
       const hasStrictNextLabel = Number.isFinite(strictNextLabelBoundary);
       if (!hasStrictNextLabel && (safeEnd - safeStart) < minSpan) {
         const widened = Math.min(0.995, safeStart + minSpan);
@@ -3726,7 +3726,7 @@
         safeEnd = Math.min(1, Math.max(safeEnd, 0.58));
       }
       // 안전장치: 컷 범위가 비정상적으로 좁아지면 focus 범위로 복구
-      const hardMinSpan = mobileViewport ? 0.18 : 0.14;
+      const hardMinSpan = mobileViewport ? 0.24 : 0.14;
       if (!Number.isFinite(safeStart) || !Number.isFinite(safeEnd) || (safeEnd - safeStart) < hardMinSpan) {
         const fbStart = Number.isFinite(range.focusStart) ? Number(range.focusStart) : Math.max(0, safeStart - 0.02);
         const fbEnd = Number.isFinite(range.focusEnd)
@@ -3741,7 +3741,7 @@
       }
       // 라벨 기반 최종 경계 강제: q+1 문항번호 라벨이 보이면 항상 그 직전에서 컷.
       if (!hasEndOverride && Number.isFinite(strictNextLabelBoundary)) {
-        const labelGap = mobileViewport ? 0.020 : 0.016;
+          const labelGap = mobileViewport ? 0.012 : 0.016;
         const labelCap = Math.min(0.995, Number(strictNextLabelBoundary) - labelGap);
         safeEnd = Math.min(safeEnd, labelCap);
       }
@@ -3758,7 +3758,7 @@
         try{
           const absoluteNextStart = await getNearestNextQuestionStartRatioForPage(safePage, q, safeStart);
           if (Number.isFinite(absoluteNextStart)) {
-            const absoluteGap = mobileViewport ? 0.018 : 0.014;
+            const absoluteGap = mobileViewport ? 0.010 : 0.014;
             const absoluteCap = Math.min(0.995, Number(absoluteNextStart) - absoluteGap);
             // 오탐 경계(선택지 하단보다 이른 값)는 무시한다.
             if (absoluteCap >= minContentEnd) {
@@ -3784,7 +3784,7 @@
           );
         if (Number.isFinite(finalNextBoundary)) {
           finalNextBoundaryUsed = finalNextBoundary;
-          const finalGap = mobileViewport ? 0.024 : 0.022;
+          const finalGap = mobileViewport ? 0.012 : 0.022;
           const finalCap = Math.min(0.995, finalNextBoundary - finalGap);
           if (finalCap >= minContentEnd) {
             safeEnd = Math.min(safeEnd, finalCap);
