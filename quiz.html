@@ -4062,6 +4062,8 @@
           cropped.height = destHeight;
           cropped.style.width = canvas.style.width;
           cropped.style.height = `${Math.ceil(destHeight / outputScale)}px`;
+          cropped.style.cursor = "pointer";
+          cropped.addEventListener("click", onAllPdfCanvasClick);
           const cctx = cropped.getContext("2d");
           cctx.drawImage(
             canvas,
@@ -4083,6 +4085,8 @@
         }
 
         pdfAllPages.appendChild(canvas);
+        canvas.style.cursor = "pointer";
+        canvas.addEventListener("click", onAllPdfCanvasClick);
         state.allPageCanvases[p] = canvas;
         state.allPageBaseCanvases[p] = cloneCanvas(canvas);
         state.allPageCanvasMeta[p] = {
@@ -5700,6 +5704,43 @@
     }
   }
 
+  function setFocusQuestionSilently(q){
+    if (!Number.isFinite(q) || q < 1 || q > 100) return;
+    state.focusQ = q;
+    mobileQNow.textContent = `${q}번`;
+    if (currentQInfo) currentQInfo.textContent = `${q}번`;
+    updateMobileChoiceButtons();
+    updateBookmarkUi(q);
+    for (let i = 1; i <= 100; i++){
+      const card = getCard(i);
+      if (card) card.classList.toggle("focus", i === q);
+    }
+  }
+
+  async function resolveQuestionByYRatioOnPage(pageNo, yRatio){
+    if (!Number.isFinite(pageNo) || !Number.isFinite(yRatio)) return null;
+    const y = Math.max(0, Math.min(1, Number(yRatio)));
+    const starts = [];
+    for (let q = 1; q <= 100; q++){
+      const mappedPage = getPdfPageByQuestion(q);
+      if (mappedPage !== pageNo) continue;
+      const s = await getQuestionStartRatioForPage(pageNo, q);
+      if (!Number.isFinite(s)) continue;
+      starts.push({ q, start: Math.max(0, Math.min(1, Number(s))) });
+    }
+    if (!starts.length) return null;
+    starts.sort((a, b) => a.start - b.start || a.q - b.q);
+    for (let i = 0; i < starts.length; i++){
+      const cur = starts[i];
+      const next = starts[i + 1];
+      const lower = cur.start - 0.006;
+      const upper = next ? (next.start - 0.004) : 1;
+      if (y >= lower && y <= upper) return cur.q;
+    }
+    if (y < starts[0].start) return starts[0].q;
+    return starts[starts.length - 1].q;
+  }
+
   async function onPdfCanvasClick(e){
     if (state.viewMode !== "single") return;
     const q = state.focusQ;
@@ -5849,6 +5890,93 @@
       chooseByKeyboard(choice);
       pdfStatus.textContent = `${q}번 ${choice} 선택`;
     }
+  }
+
+  async function onAllPdfCanvasClick(e){
+    if (state.viewMode !== "all") return;
+    const canvas = e.currentTarget;
+    if (!canvas) return;
+    const pageNo = Number(canvas.dataset.page);
+    if (!Number.isFinite(pageNo)) return;
+    const meta = state.allPageCanvasMeta[pageNo];
+    if (!meta) return;
+
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const xOnCanvas = ((e.clientX - rect.left) / rect.width) * canvas.width;
+    const yOnCanvas = ((e.clientY - rect.top) / rect.height) * canvas.height;
+    const sx = meta.srcWidth / Math.max(1, meta.destWidth);
+    const sy = meta.fullHeight / Math.max(1, meta.destHeight);
+    const xFull = meta.srcLeft + (xOnCanvas * sx);
+    const yFull = yOnCanvas * sy;
+    const yRatio = yFull / Math.max(1, meta.fullHeight);
+
+    const q = await resolveQuestionByYRatioOnPage(pageNo, yRatio);
+    if (!Number.isFinite(q)) return;
+
+    let range = null;
+    try{ range = await getQuestionCropRange(q, pageNo); }catch(_){}
+    const startRatio = Number.isFinite(range?.focusStart) ? Number(range.focusStart) : (Number.isFinite(range?.start) ? Number(range.start) : Math.max(0, yRatio - 0.12));
+    const endRatio = Number.isFinite(range?.focusEnd) ? Number(range.focusEnd) : (Number.isFinite(range?.end) ? Number(range.end) : Math.min(1, startRatio + 0.32));
+
+    let anchors = await getChoiceAnchorsForQuestion(pageNo, q, { startRatio, endRatio });
+    if (!Array.isArray(anchors)) anchors = [];
+    if (anchors.length < 4) {
+      const byChoice = new Map();
+      for (const a of anchors){
+        if (!a || !Number.isFinite(a.choice)) continue;
+        if (!byChoice.has(a.choice)) byChoice.set(a.choice, a);
+      }
+      for (let c = 1; c <= 4; c++){
+        if (byChoice.has(c)) continue;
+        try{
+          const recovered = await resolveChoiceAnchorByQuestionBand(pageNo, q, c, startRatio, endRatio);
+          if (recovered) byChoice.set(c, recovered);
+        }catch(_){}
+      }
+      anchors = Array.from(byChoice.values()).sort((a, b) => a.choice - b.choice);
+    }
+
+    let picked = null;
+    if (anchors.length){
+      const points = anchors.map((a) => {
+        const ax = a.xRatio * meta.fullWidth;
+        const ay = a.yRatio * meta.fullHeight;
+        const aw = Math.max(10, a.wRatio * meta.fullWidth);
+        const ah = Math.max(12, a.hRatio * meta.fullHeight);
+        return { ax, ay, aw, ah, cx: ax + (aw * 0.5), cy: ay + (ah * 0.5) };
+      });
+      const xs = points.map((p) => p.cx);
+      const ys = points.map((p) => p.cy);
+      const xSpread = xs.length ? (Math.max(...xs) - Math.min(...xs)) : 0;
+      const ySpread = ys.length ? (Math.max(...ys) - Math.min(...ys)) : 0;
+      if (points.length >= 3 && xSpread > 90 && ySpread > 20) {
+        const midX = (Math.min(...xs) + Math.max(...xs)) * 0.5;
+        const midY = (Math.min(...ys) + Math.max(...ys)) * 0.5;
+        const col = xFull < midX ? 0 : 1;
+        const row = yFull < midY ? 0 : 1;
+        picked = (row * 2) + col + 1;
+      } else if (points.length >= 3 && ySpread <= Math.max(22, xSpread * 0.22)) {
+        const sorted = [...points].sort((a, b) => a.cx - b.cx);
+        const idx = sorted.findIndex((p, i) => i === sorted.length - 1 || xFull < ((p.cx + sorted[i + 1].cx) * 0.5));
+        picked = Math.max(1, Math.min(4, (idx >= 0 ? idx : (sorted.length - 1)) + 1));
+      } else if (points.length >= 3) {
+        const sorted = [...points].sort((a, b) => a.cy - b.cy);
+        const idx = sorted.findIndex((p, i) => i === sorted.length - 1 || yFull < ((p.cy + sorted[i + 1].cy) * 0.5));
+        picked = Math.max(1, Math.min(4, (idx >= 0 ? idx : (sorted.length - 1)) + 1));
+      }
+    }
+
+    if (!Number.isFinite(picked)) {
+      const nx = (e.clientX - rect.left) / rect.width;
+      const ny = (e.clientY - rect.top) / rect.height;
+      const col = nx < 0.5 ? 0 : 1;
+      const row = ny < 0.56 ? 0 : 1;
+      picked = (row * 2) + col + 1;
+    }
+    const choice = Math.max(1, Math.min(4, Math.trunc(picked)));
+    setFocusQuestionSilently(q);
+    chooseByKeyboard(choice);
   }
 
   // ====== 채점 ======
