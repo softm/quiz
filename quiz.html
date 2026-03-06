@@ -20,7 +20,16 @@
       --stat-bg:rgba(15,23,48,.7); --sub-bg:rgba(15,23,48,.55); --choice-bg:rgba(10,15,34,.55); --note-bg:rgba(15,23,48,.55);
       --textarea-bg:rgba(10,15,34,.55);
     }
-    *{box-sizing:border-box}
+    *{
+      box-sizing:border-box;
+      -webkit-tap-highlight-color: transparent;
+      tap-highlight-color: transparent;
+    }
+    a, button, label, .choice, .qcard, .mobileDock button, .viewerNav, .bookmarkBtn{
+      -webkit-tap-highlight-color: transparent;
+      tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
     body{
       margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans KR",sans-serif;
       background:linear-gradient(180deg,var(--bg-start), var(--bg)); color:var(--text);
@@ -517,9 +526,18 @@
     .choice.selected{
       outline:2px solid rgba(10,102,214,.85);
       border-color:rgba(10,102,214,.72);
-      background:rgba(10,102,214,.16);
+      background:rgba(10,102,214,.05);
       box-shadow:0 0 0 1px rgba(10,102,214,.2) inset, 0 1px 4px rgba(10,102,214,.22);
       font-weight:800;
+    }
+    .choice:active{
+      background:var(--choice-bg) !important;
+    }
+    .choice.selected:active{
+      background:rgba(10,102,214,.05) !important;
+    }
+    .qcard:active{
+      background:var(--card) !important;
     }
     .choice.correct{outline:2px solid rgba(39,209,127,.8)}
     .choice.wrong{outline:2px solid rgba(255,77,109,.85)}
@@ -1068,9 +1086,15 @@
     body.theme-dark .choice.selected{
       outline:2px solid rgba(139,192,255,.9);
       border-color:rgba(139,192,255,.8);
-      background:rgba(139,192,255,.2);
+      background:rgba(139,192,255,.08);
       box-shadow:0 0 0 1px rgba(139,192,255,.28) inset, 0 1px 5px rgba(0,0,0,.35);
       color:#e8f3ff;
+    }
+    body.theme-dark .choice:active{
+      background:var(--choice-bg) !important;
+    }
+    body.theme-dark .choice.selected:active{
+      background:rgba(139,192,255,.08) !important;
     }
   </style>
 </head>
@@ -1344,6 +1368,7 @@
     allPageBaseCanvases: [],
     allPageCanvasMeta: {},
     allModeLastMarked: null,
+    allModeLastViewerWidth: 0,
     allNavToken: 0,
     singlePageRenderCache: new Map(),
     pageQuestionRatioCache: {},
@@ -4107,6 +4132,7 @@
       }
       state.allPagesRenderKey = key;
     }
+    state.allModeLastViewerWidth = Math.round(pdfViewer.clientWidth || viewWidth || 0);
 
     const targetQ = Number.isFinite(q) ? q : (state.focusQ || 1);
     
@@ -5647,8 +5673,13 @@
     }
     updateViewerTopBadge();
     if (state.viewMode !== "single") {
-      state.allPagesRenderKey = null;
-      navigatePdfToQuestion(state.focusQ || 1);
+      const currentViewerWidth = Math.round(pdfViewer.clientWidth || 0);
+      const lastViewerWidth = Math.round(state.allModeLastViewerWidth || 0);
+      const widthChanged = !lastViewerWidth || Math.abs(currentViewerWidth - lastViewerWidth) >= 8;
+      if (widthChanged) {
+        state.allPagesRenderKey = null;
+        navigatePdfToQuestion(state.focusQ || 1);
+      }
     }
   });
   pdfViewer.addEventListener("scroll", () => updateViewerTopBadge());
