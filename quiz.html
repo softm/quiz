@@ -124,6 +124,9 @@
       width:18px;
       height:18px;
     }
+    .viewer > #btnBookmark{
+      display:none !important;
+    }
     .pdfControlRow > .controls{
       margin-left:auto;
       justify-content:flex-end;
@@ -270,6 +273,71 @@
     .viewerTopBadge.disabled{
       opacity:.45;
       filter:saturate(.7);
+    }
+    .toastStack{
+      position:fixed;
+      top:14px;
+      right:14px;
+      z-index:120;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      pointer-events:none;
+    }
+    .toastMsg{
+      min-width:220px;
+      max-width:min(360px, calc(100vw - 28px));
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.96);
+      color:var(--text);
+      box-shadow:0 10px 24px rgba(0,0,0,.16);
+      font-size:12px;
+      font-weight:700;
+      opacity:0;
+      transform:translateY(-6px);
+      transition:opacity .18s ease, transform .18s ease;
+    }
+    .toastMsg.show{
+      opacity:1;
+      transform:translateY(0);
+    }
+    .snackbar{
+      position:fixed;
+      left:50%;
+      top:50%;
+      z-index:119;
+      transform:translate(-50%, calc(-50% + 10px));
+      min-width:240px;
+      max-width:min(420px, calc(100vw - 24px));
+      padding:12px 14px;
+      border-radius:999px;
+      border:1px solid rgba(32,40,66,.08);
+      background:rgba(52,64,92,.92);
+      color:#f7f9ff;
+      box-shadow:0 10px 28px rgba(0,0,0,.22);
+      font-size:12px;
+      font-weight:700;
+      text-align:center;
+      opacity:0;
+      pointer-events:none;
+      transition:opacity .18s ease, transform .18s ease;
+    }
+    .snackbar.show{
+      opacity:1;
+      transform:translate(-50%, -50%);
+    }
+    body.theme-dark .toastMsg{
+      background:rgba(17,26,51,.96);
+      border-color:rgba(255,255,255,.1);
+      box-shadow:0 12px 28px rgba(0,0,0,.32);
+    }
+    body.theme-dark .snackbar{
+      border-color:rgba(255,255,255,.1);
+      background:rgba(244,247,255,.94);
+      color:#233049;
+      box-shadow:0 12px 30px rgba(0,0,0,.34);
     }
     body.theme-dark .viewerTopBadge{
       background:rgba(24,33,60,.9);
@@ -475,6 +543,37 @@
     .sub .v{font-size:14px; font-weight:800; margin-top:4px}
 
     .filterBar{display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 10px;}
+    .filterBar button:disabled{
+      opacity:.45;
+      cursor:not-allowed;
+      filter:saturate(.75);
+    }
+    .sheetTitleBar{
+      padding:6px 10px;
+      min-height:38px;
+      display:flex;
+      align-items:center;
+    }
+    .sheetTitleBar strong{
+      font-size:13px;
+      font-weight:800;
+    }
+    .sheetControlBar{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) auto;
+      align-items:center;
+      gap:8px;
+    }
+    .sheetControlBar .filterBar{
+      margin:0;
+      min-width:0;
+    }
+    .sheetControlBar .controls{
+      margin-left:auto;
+      display:flex;
+      flex-wrap:nowrap;
+      gap:8px;
+    }
     body.info-collapsed .sheet .stats,
     body.info-collapsed .sheet .subStats{
       display:none;
@@ -820,6 +919,13 @@
       .grid{grid-template-columns: repeat(3, minmax(0,1fr));}
       .qnum{font-size:11px}
       .mark{font-size:10px}
+      .sheetControlBar{
+        grid-template-columns:1fr;
+      }
+      .sheetControlBar .controls{
+        width:100%;
+        justify-content:flex-end;
+      }
       .mobileDock{
         gap:3px;
         padding:6px;
@@ -839,10 +945,8 @@
         overflow:visible;
       }
       .pdfTitleBar{
-        position:fixed;
-        left:0;
-        right:0;
-        top:var(--mobile-header-h, 58px);
+        position:relative;
+        top:auto;
         z-index:25;
         background:var(--panel);
         border-top:none;
@@ -851,8 +955,26 @@
         border-radius:0;
         box-shadow:none;
       }
+      .pdfControlRow{
+        align-items:center;
+        gap:8px;
+      }
+      .pdfControlRow > .controls{
+        display:flex;
+        flex-wrap:nowrap;
+        align-items:center;
+        gap:6px;
+        min-width:0;
+        width:auto;
+        overflow-x:auto;
+        -webkit-overflow-scrolling:touch;
+        scrollbar-width:none;
+      }
+      .pdfControlRow > .controls::-webkit-scrollbar{
+        display:none;
+      }
       .viewer{
-        padding-top:calc(var(--mobile-toolbar-h, 56px) + 8px);
+        padding-top:8px;
         padding-left:0;
         padding-right:0;
       }
@@ -988,6 +1110,12 @@
         display:grid;
         grid-template-columns:minmax(0,1fr) auto;
         align-items:center;
+      }
+      aside.panel > .sheetTitleBar{
+        display:flex;
+      }
+      aside.panel > .sheetControlBar{
+        grid-template-columns:minmax(0,1fr) auto;
       }
       aside.panel > .title > div:first-child{
         min-width:0;
@@ -1179,14 +1307,20 @@
   </section>
 
   <aside class="panel">
-    <div class="title">
-      <div>
-        <strong>답안지 (1~100)</strong>
-        <div class="tiny" id="saveHint"></div>
-        <div class="tiny" id="modeHint"></div>
+    <div class="title sheetTitleBar">
+      <strong>답안지 (1~100)</strong>
+      <div class="tiny" id="saveHint"></div>
+      <div class="tiny" id="modeHint"></div>
+    </div>
+    <div class="title sheetControlBar">
+      <div class="filterBar">
+        <button id="fAll" class="active">전체</button>
+        <button id="fWrong">오답만</button>
+        <button id="fBlank">미응답만</button>
+        <button id="fBookmark">북마크만</button>
       </div>
       <div class="controls">
-        <button id="btnInfoToggle" class="ghost iconBtn" title="정보 더보기/숨기기" aria-label="정보 더보기/숨기기">ⓘ</button>
+        <button id="btnInfoToggle" class="ghost iconBtn" title="정보 더보기" aria-label="정보 더보기">ⓘ</button>
         <button id="btnClearSaved" class="ghost">저장 초기화</button>
       </div>
     </div>
@@ -1203,12 +1337,6 @@
         <div class="sub"><div class="k">26~50</div><div class="v" id="sec2">0 / 25</div></div>
         <div class="sub"><div class="k">51~75</div><div class="v" id="sec3">0 / 25</div></div>
         <div class="sub"><div class="k">76~100</div><div class="v" id="sec4">0 / 25</div></div>
-      </div>
-
-      <div class="filterBar">
-        <button id="fAll" class="active">전체</button>
-        <button id="fWrong">오답만</button>
-        <button id="fBlank">미응답만</button>
       </div>
 
       <div class="grid" id="grid"></div>
@@ -1250,6 +1378,9 @@
   <button id="mobileChoice4">4</button>
   <button id="mobileSheetOpen" class="ghost">답안지</button>
 </div>
+
+<div class="toastStack" id="toastStack" aria-live="polite" aria-atomic="true"></div>
+<div class="snackbar" id="snackbar" aria-live="polite" aria-atomic="true"></div>
 
 <div class="sheetOverlay" id="sheetOverlay">
   <div class="sheetPanel">
@@ -1429,6 +1560,8 @@
   const pdfViewer = document.getElementById("pdfViewer");
   const pdfLoadingOverlay = document.getElementById("pdfLoadingOverlay");
   const pdfLoadingText = document.getElementById("pdfLoadingText");
+  const toastStack = document.getElementById("toastStack");
+  const snackbar = document.getElementById("snackbar");
   const pdfStatus = document.getElementById("pdfStatus");
   const pdfInfo = document.getElementById("pdfInfo");
   const answerKeyInfo = document.getElementById("answerKeyInfo");
@@ -1458,10 +1591,12 @@
   const fAll = document.getElementById("fAll");
   const fWrong = document.getElementById("fWrong");
   const fBlank = document.getElementById("fBlank");
+  const fBookmark = document.getElementById("fBookmark");
 
   const noteArea = document.getElementById("noteArea");
   const copyHint = document.getElementById("copyHint");
   const btnBookmark = document.getElementById("btnBookmark");
+  const btnBookmarkHomeParent = btnBookmark ? btnBookmark.parentElement : null;
   const btnViewerTop = document.getElementById("btnViewerTop");
   const appHeader = document.querySelector("header");
   const pdfTitleBarEl = document.querySelector(".pdfTitleBar");
@@ -1621,6 +1756,18 @@
     document.head.appendChild(script);
   }
 
+  let snackbarTimer = 0;
+  function showToastAndSnackbar(message){
+    if (snackbar){
+      snackbar.textContent = message;
+      snackbar.classList.add("show");
+      if (snackbarTimer) clearTimeout(snackbarTimer);
+      snackbarTimer = setTimeout(() => {
+        snackbar.classList.remove("show");
+      }, 2400);
+    }
+  }
+
   function setPdfLoading(show, text){
     if (!pdfLoadingOverlay || !pdfLoadingText) return;
     if (show) {
@@ -1685,7 +1832,7 @@
     const rectH = Math.ceil(appHeader.getBoundingClientRect().height || 0);
     const offsetH = Math.ceil(appHeader.offsetHeight || 0);
     const rawH = portraitMobile ? (rectH || 58) : (rectH || offsetH || 58);
-    const h = Math.min(96, Math.max(48, rawH));
+    const h = Math.max(48, rawH);
     document.documentElement.style.setProperty("--mobile-header-h", `${h}px`);
     const barH = pdfTitleBarEl ? Math.max(0, Math.ceil(pdfTitleBarEl.getBoundingClientRect().height || pdfTitleBarEl.offsetHeight || 0)) : 0;
     document.documentElement.style.setProperty("--mobile-toolbar-h", `${barH}px`);
@@ -1693,10 +1840,24 @@
     document.documentElement.style.setProperty("--mobile-dock-h", `${dockH}px`);
   }
 
+  let stickyOffsetsRaf = 0;
+  function queueStickyOffsetsUpdate(frameCount = 2){
+    if (stickyOffsetsRaf) cancelAnimationFrame(stickyOffsetsRaf);
+    const remaining = Math.max(1, Math.floor(frameCount));
+    const tick = (left) => {
+      updateStickyOffsets();
+      if (left <= 1) {
+        stickyOffsetsRaf = 0;
+        return;
+      }
+      stickyOffsetsRaf = requestAnimationFrame(() => tick(left - 1));
+    };
+    stickyOffsetsRaf = requestAnimationFrame(() => tick(remaining));
+  }
+
   function scheduleInitialStickyOffsets(){
     const run = () => {
-      updateStickyOffsets();
-      requestAnimationFrame(() => updateStickyOffsets());
+      queueStickyOffsetsUpdate(3);
     };
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", run, { once: true });
@@ -1710,8 +1871,15 @@
     const to = `./category.html?category=${encodeURIComponent(CATEGORY_NAME)}`;
     window.location.href = to;
   });
-  document.getElementById("btnReset").addEventListener("click", resetAll);
-  document.getElementById("btnGrade").addEventListener("click", () => { gradeAll(true); makeWrongNote(); });
+  document.getElementById("btnReset").addEventListener("click", () => {
+    resetAll();
+    showToastAndSnackbar("문제풀이가 초기화 되었습니다.");
+  });
+  document.getElementById("btnGrade").addEventListener("click", () => {
+    gradeAll(true);
+    makeWrongNote();
+    showToastAndSnackbar("채점 되었습니다.");
+  });
   btnTheme.addEventListener("click", () => setTheme(state.theme === "dark" ? "basic" : "dark"));
   btnOrientation.addEventListener("click", () => {
     toggleMobileScreenOrientation().finally(() => {
@@ -1767,17 +1935,20 @@
     if (autoGradeEl.checked) gradeAll(false);
     else clearMarksOnly();
     applyFilter();
+    showToastAndSnackbar(autoGradeEl.checked ? "자동채점이 활성화 되었습니다." : "자동채점이 비활성화 되었습니다.");
   });
 
   showCorrectEl.addEventListener("change", () => {
     saveUi();
     refreshAllCards();
     applyFilter();
+    showToastAndSnackbar(showCorrectEl.checked ? "정답표시가 활성화 되었습니다." : "정답표시가 비활성화 되었습니다.");
   });
 
   fAll.addEventListener("click", () => setFilter("all"));
   fWrong.addEventListener("click", () => setFilter("wrong"));
   fBlank.addEventListener("click", () => setFilter("blank"));
+  fBookmark.addEventListener("click", () => setFilter("bookmark"));
 
   document.getElementById("mobilePrev").addEventListener("click", () => moveFocus(-1));
   document.getElementById("mobileNext").addEventListener("click", () => moveFocus(1));
@@ -1827,17 +1998,19 @@
   loadSaved();
   loadBookmarks();
   refreshAllCards();
+  updateFilterButtons();
   updateStats();
   applyFilter();
   // 이전에 "오답만" 필터가 저장되어 있고 답안이 비어있으면 카드가 0개로 보일 수 있음.
-  if (firstVisibleQuestion() == null) {
-    setFilter("all");
-  }
+    if (firstVisibleQuestion() == null) {
+      setFilter("all");
+    }
   focusCard(state.focusQ, false);
   syncMobileSheet();
   syncMobileBookmarkPlacement();
   syncLandscapeDock();
   syncLandscapeFullscreen(false);
+  queueStickyOffsetsUpdate(3);
   updateViewerTopBadge();
   initPdf();
   document.addEventListener("pointerdown", onFirstUserGesture, { passive: true });
@@ -1861,9 +2034,16 @@
     enforceMobileReadingMode();
     syncLandscapeDock();
     syncLandscapeFullscreen(false);
-    updateStickyOffsets();
+    queueStickyOffsetsUpdate(3);
     updateViewerTopBadge();
   });
+  if (typeof ResizeObserver === "function"){
+    const stickyObserver = new ResizeObserver(() => queueStickyOffsetsUpdate(3));
+    if (appHeader) stickyObserver.observe(appHeader);
+    if (pdfTitleBarEl) stickyObserver.observe(pdfTitleBarEl);
+    if (mobileDock) stickyObserver.observe(mobileDock);
+    if (pdfControlButtons) stickyObserver.observe(pdfControlButtons);
+  }
 
   // ====== 저장/로드(UI) ======
   function saveUi(){
@@ -1891,10 +2071,9 @@
         const ui = JSON.parse(raw);
         if (typeof ui.autoGrade === "boolean") autoGradeEl.checked = ui.autoGrade;
         if (typeof ui.showCorrect === "boolean") showCorrectEl.checked = ui.showCorrect;
-        if (ui.filter === "all" || ui.filter === "wrong" || ui.filter === "blank") state.filter = ui.filter;
+        if (ui.filter === "all" || ui.filter === "wrong" || ui.filter === "blank" || ui.filter === "bookmark") state.filter = ui.filter;
         if (ui.theme === "basic" || ui.theme === "dark") state.theme = ui.theme;
-        // 진입 기본 모드는 항상 전체문제 보기로 유지한다.
-        state.viewMode = "all";
+        if (ui.viewMode === "single" || ui.viewMode === "all") state.viewMode = ui.viewMode;
         const mobileSaved = Number(ui.pdfZoomMobile);
         const desktopSaved = Number(ui.pdfZoomDesktop);
         state.pdfZoomMobile = Number.isFinite(mobileSaved) ? Math.max(0.7, Math.min(1.8, mobileSaved)) : 1;
@@ -2082,13 +2261,15 @@
 
   function toggleViewMode(){
     state.viewMode = state.viewMode === "single" ? "all" : "single";
-    state.scrollTopOnModeChange = true;
+    state.scrollTopOnModeChange = false;
     if (isMobileLandscapeFullscreenTarget()) {
       allowAutoLandscapeFullscreen = true;
       landscapeFullscreenDismissed = false;
       syncLandscapeFullscreen(true);
     }
     updateViewModeUi();
+    syncMobileBookmarkPlacement();
+    queueStickyOffsetsUpdate(4);
     saveUi();
     navigatePdfToQuestion(state.focusQ || 1);
   }
@@ -2096,8 +2277,9 @@
   function applyInfoPanelState(){
     document.body.classList.toggle("info-collapsed", !state.infoExpanded);
     if (btnInfoToggle) {
-      btnInfoToggle.textContent = state.infoExpanded ? "▦" : "ⓘ";
-      btnInfoToggle.title = state.infoExpanded ? "정보 숨기기" : "정보 더보기";
+      btnInfoToggle.textContent = state.infoExpanded ? "⌃" : "ⓘ";
+      btnInfoToggle.title = state.infoExpanded ? "정보 접기" : "정보 더보기";
+      btnInfoToggle.setAttribute("aria-label", btnInfoToggle.title);
     }
   }
 
@@ -4278,6 +4460,11 @@
       requestAnimationFrame(updateViewerTopBadge);
       return;
     }
+    const portraitMobile = window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches;
+    if (portraitMobile) {
+      requestAnimationFrame(updateViewerTopBadge);
+      return;
+    }
     const viewerRectTop = pdfViewer.getBoundingClientRect().top + window.scrollY;
     window.scrollTo({ top: Math.max(0, viewerRectTop + safeTop - getViewerScrollAnchorOffset()), behavior: "auto" });
     requestAnimationFrame(updateViewerTopBadge);
@@ -4599,6 +4786,16 @@
         await drawAllModeQuestionNumberMarker(pageNo, q, gradeState);
       }
     }
+  }
+
+  function refreshAllModeMarkersWithoutScroll(){
+    if (state.viewMode !== "all") return;
+    if (!Array.isArray(state.allPageCanvases) || !state.allPageCanvases.length) return;
+    const totalPages = state.allPageCanvases.reduce((max, canvas, idx) => {
+      return canvas ? Math.max(max, idx) : max;
+    }, 0);
+    if (!totalPages) return;
+    redrawAllModeMarkers(totalPages).catch(() => {});
   }
 
   function updateViewerTopBadge(){
@@ -5496,6 +5693,29 @@
       mobileBookmarkBtn.title = on ? `${target}번 북마크 해제` : `${target}번 북마크`;
     }
   }
+
+  function isWrongFilterAvailable(){
+    if (autoGradeEl.checked) return true;
+    for (let q = 1; q <= 100; q++){
+      const card = getCard(q);
+      const mark = card ? card.querySelector('[data-role="mark"]') : null;
+      if (mark && (mark.classList.contains("ok") || mark.classList.contains("bad"))) return true;
+    }
+    return false;
+  }
+
+  function updateFilterButtons(){
+    const wrongEnabled = isWrongFilterAvailable();
+    fWrong.disabled = !wrongEnabled;
+    if (!wrongEnabled && state.filter === "wrong") {
+      state.filter = "all";
+    }
+    fAll.classList.toggle("active", state.filter === "all");
+    fWrong.classList.toggle("active", state.filter === "wrong");
+    fBlank.classList.toggle("active", state.filter === "blank");
+    fBookmark.classList.toggle("active", state.filter === "bookmark");
+  }
+
   function toggleBookmark(q){
     const target = Number(q);
     if (!Number.isFinite(target) || target < 1 || target > 100) return;
@@ -5504,19 +5724,20 @@
     if (card) card.classList.toggle("bookmarked", !!state.bookmarks[target]);
     saveBookmarks();
     updateBookmarkUi(target);
+    updateFilterButtons();
+    applyFilter();
   }
   function pad2(n){ return String(n).padStart(2,'0'); }
 
   // ====== 필터 ======
   function setFilter(mode){
+    if (mode === "wrong" && !isWrongFilterAvailable()) return;
     state.filter = mode;
-    fAll.classList.toggle("active", mode==="all");
-    fWrong.classList.toggle("active", mode==="wrong");
-    fBlank.classList.toggle("active", mode==="blank");
+    updateFilterButtons();
     saveUi();
     applyFilter();
     const first = firstVisibleQuestion();
-    if (first != null) focusCard(first, true);
+    if (first != null) focusCard(first, false);
   }
 
   function applyFilter(){
@@ -5529,6 +5750,7 @@
 
       if (state.filter === "blank") show = (chosen == null);
       else if (state.filter === "wrong") show = (chosen != null && Number.isFinite(correct) && chosen !== correct);
+      else if (state.filter === "bookmark") show = !!state.bookmarks[q];
 
       card.classList.toggle("hidden", !show);
     }
@@ -5641,6 +5863,8 @@
     state.focusQ = q;
     if (state.viewMode === "single") {
       navigatePdfToQuestion(q);
+    } else if (state.viewMode === "all") {
+      refreshAllModeMarkersWithoutScroll();
     }
     mobileQNow.textContent = `${q}번`;
     if (currentQInfo) currentQInfo.textContent = `${q}번`;
@@ -5676,8 +5900,22 @@
   }
 
   function syncMobileBookmarkPlacement(){
-    if (!mobileBookmarkBtn || !pdfControlButtons) return;
     const mobileTopBookmarkMode = window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches;
+    if (btnBookmark && pdfControlButtons) {
+      if (mobileTopBookmarkMode) {
+        if (btnBookmarkHomeParent && btnBookmark.parentElement !== btnBookmarkHomeParent) {
+          btnBookmarkHomeParent.insertBefore(btnBookmark, btnBookmarkHomeParent.firstElementChild);
+        }
+      } else if (btnBookmark.parentElement !== pdfControlButtons) {
+        const anchor = btnFontUp || pdfControlButtons.firstElementChild;
+        if (anchor && anchor.parentElement === pdfControlButtons) {
+          pdfControlButtons.insertBefore(btnBookmark, anchor);
+        } else {
+          pdfControlButtons.appendChild(btnBookmark);
+        }
+      }
+    }
+    if (!mobileBookmarkBtn || !pdfControlButtons) return;
     if (mobileTopBookmarkMode){
       if (mobileBookmarkBtn.parentElement !== pdfControlButtons){
         const anchor = btnFontUp || pdfControlButtons.firstElementChild;
@@ -5777,6 +6015,7 @@
       applyFilter();
       updateMobileChoiceButtons();
       if (state.viewMode === "single") navigatePdfToQuestion(q);
+      else if (state.viewMode === "all") refreshAllModeMarkersWithoutScroll();
     }
   }
 
@@ -6117,6 +6356,7 @@
   function gradeAll(forceShowMarks){
     if (forceShowMarks) {
       for(let q=1;q<=100;q++) gradeQuestion(q);
+      updateFilterButtons();
       updateStats();
       applyFilter();
       if (state.viewMode === "single" || state.viewMode === "all") navigatePdfToQuestion(state.focusQ || 1);
@@ -6124,6 +6364,7 @@
     }
     if (autoGradeEl.checked){
       for(let q=1;q<=100;q++) gradeQuestion(q);
+      updateFilterButtons();
       updateStats();
       applyFilter();
       if (state.viewMode === "single" || state.viewMode === "all") navigatePdfToQuestion(state.focusQ || 1);
@@ -6155,9 +6396,10 @@
     copyHint.textContent = "";
 
     refreshAllCards();
+    updateFilterButtons();
     updateStats();
     applyFilter();
-    focusCard(1, true);
+    focusCard(1, false);
   }
 
   // ====== 카드 업데이트 ======
@@ -6224,6 +6466,7 @@
         else el.classList.remove("correct");
       });
     }
+    updateFilterButtons();
     if (state.viewMode === "single" || state.viewMode === "all") navigatePdfToQuestion(state.focusQ || 1);
   }
 
