@@ -107,6 +107,23 @@
       gap:6px;
       min-width:0;
     }
+    .pdfLeadGroup .bookmarkBtn,
+    .pdfControlRow > .controls .bookmarkBtn{
+      position:static;
+      right:auto;
+      top:auto;
+      left:auto;
+      bottom:auto;
+      width:34px;
+      height:34px;
+      margin:0;
+      flex:0 0 auto;
+    }
+    .pdfLeadGroup .bookmarkBtn svg,
+    .pdfControlRow > .controls .bookmarkBtn svg{
+      width:18px;
+      height:18px;
+    }
     .pdfControlRow > .controls{
       margin-left:auto;
       justify-content:flex-end;
@@ -839,6 +856,9 @@
         padding-left:0;
         padding-right:0;
       }
+      .viewer #btnBookmark{
+        display:none !important;
+      }
       .viewerNav{
         display:none !important;
       }
@@ -848,6 +868,10 @@
         bottom:44px;
         width:34px;
         height:34px;
+      }
+      .pdfControlRow > .controls #mobileBookmark{
+        justify-self:flex-start;
+        align-self:center;
       }
       .viewer.single .bookmarkBtn svg{
         width:18px;
@@ -1441,6 +1465,8 @@
   const btnViewerTop = document.getElementById("btnViewerTop");
   const appHeader = document.querySelector("header");
   const pdfTitleBarEl = document.querySelector(".pdfTitleBar");
+  const pdfLeadGroup = document.querySelector(".pdfLeadGroup");
+  const pdfControlButtons = document.querySelector(".pdfControlRow > .controls");
   let pdfJsLoaderPromise = null;
   let tesseractLoaderPromise = null;
   let questionManifestPromise = null;
@@ -1449,6 +1475,7 @@
   const landscapeDockMount = document.getElementById("landscapeDockMount");
   const mobileQNow = document.getElementById("mobileQNow");
   const mobileBookmarkBtn = document.getElementById("mobileBookmark");
+  const mobileBookmarkHomeParent = mobileBookmarkBtn ? mobileBookmarkBtn.parentElement : null;
   const sheetOverlay = document.getElementById("sheetOverlay");
   const mobileSheetMount = document.getElementById("mobileSheetMount");
   const isLocalDevHost = location.hostname === "localhost";
@@ -1808,6 +1835,7 @@
   }
   focusCard(state.focusQ, false);
   syncMobileSheet();
+  syncMobileBookmarkPlacement();
   syncLandscapeDock();
   syncLandscapeFullscreen(false);
   updateViewerTopBadge();
@@ -5611,7 +5639,9 @@
   // ====== 포커스/단축키 ======
   function focusCard(q, scroll){
     state.focusQ = q;
-    navigatePdfToQuestion(q);
+    if (state.viewMode === "single") {
+      navigatePdfToQuestion(q);
+    }
     mobileQNow.textContent = `${q}번`;
     if (currentQInfo) currentQInfo.textContent = `${q}번`;
     updateMobileChoiceButtons();
@@ -5645,6 +5675,25 @@
     }
   }
 
+  function syncMobileBookmarkPlacement(){
+    if (!mobileBookmarkBtn || !pdfControlButtons) return;
+    const mobileTopBookmarkMode = window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches;
+    if (mobileTopBookmarkMode){
+      if (mobileBookmarkBtn.parentElement !== pdfControlButtons){
+        const anchor = btnFontUp || pdfControlButtons.firstElementChild;
+        if (anchor && anchor.parentElement === pdfControlButtons) {
+          pdfControlButtons.insertBefore(mobileBookmarkBtn, anchor);
+        } else {
+          pdfControlButtons.appendChild(mobileBookmarkBtn);
+        }
+      }
+      return;
+    }
+    if (mobileBookmarkHomeParent && mobileBookmarkBtn.parentElement !== mobileBookmarkHomeParent){
+      mobileBookmarkHomeParent.insertBefore(mobileBookmarkBtn, mobileBookmarkHomeParent.firstElementChild);
+    }
+  }
+
   function syncLandscapeDock(){
     if (!mobileDock) return;
     const mobileLandscapePanelMode = window.matchMedia("(max-width: 1100px) and (orientation: landscape) and (pointer: coarse)").matches;
@@ -5663,6 +5712,7 @@
 
   window.addEventListener("resize", () => {
     syncMobileSheet();
+    syncMobileBookmarkPlacement();
     syncLandscapeDock();
     updateOrientationButton();
     syncLandscapeFullscreen(false);
@@ -5726,7 +5776,7 @@
       updateStats();
       applyFilter();
       updateMobileChoiceButtons();
-      if (state.viewMode === "single" || state.viewMode === "all" || isMobileViewport()) navigatePdfToQuestion(q);
+      if (state.viewMode === "single") navigatePdfToQuestion(q);
     }
   }
 
