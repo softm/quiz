@@ -27,7 +27,7 @@ function parseAnswerPairs(text) {
     for (let i = 0; i < nums.length - 1; i += 2) {
       const q = nums[i];
       const a = nums[i + 1];
-      if (q >= 1 && q <= 100 && a >= 1 && a <= 5) out.push([q, a]);
+      if (q >= 1 && q <= 999 && a >= 1 && a <= 5) out.push([q, a]);
     }
   }
 
@@ -40,7 +40,7 @@ function parseAnswerPairs(text) {
     while (i < nums.length - 1) {
       const q = nums[i];
       const a = nums[i + 1];
-      if (Number.isFinite(q) && Number.isFinite(a) && q >= 1 && q <= 100 && a >= 1 && a <= 5) {
+      if (Number.isFinite(q) && Number.isFinite(a) && q >= 1 && q <= 999 && a >= 1 && a <= 5) {
         if (q > prevQ || prevQ === 0) {
           out.push([q, a]);
           prevQ = q;
@@ -55,17 +55,34 @@ function parseAnswerPairs(text) {
   return out;
 }
 
-function parseAnswerArrayFromPdf(pdfAbsPath) {
-  const raw = execFileSync("pdftotext", ["-layout", pdfAbsPath, "-"], { encoding: "utf8" });
-  const pairs = parseAnswerPairs(raw);
-  const answers = Array(101).fill(null);
-  for (const [q, a] of pairs) {
-    if (q >= 1 && q <= 100 && a >= 1 && a <= 5) answers[q] = a;
-  }
-  return answers;
+function inferQuestionStartNo(row) {
+  const start = Number(row?.questionStartNo || row?.answerStartNo || 0);
+  return Number.isInteger(start) && start > 0 ? start : 1;
 }
 
-function formatAnswersArray(answers, baseIndent = 2, perLine = 5) {
+function inferQuestionCount(row) {
+  const explicit = Number(row?.questionCount || row?.answerCount || 100);
+  const start = Number(row?.questionStartNo || 0);
+  const end = Number(row?.questionEndNo || 0);
+  if (Number.isInteger(start) && Number.isInteger(end) && start > 0 && end >= start) return end - start + 1;
+  return Number.isInteger(explicit) && explicit > 0 ? explicit : 100;
+}
+
+function parseAnswerArrayFromPdf(pdfAbsPath, row) {
+  const raw = execFileSync("pdftotext", ["-layout", pdfAbsPath, "-"], { encoding: "utf8" });
+  const pairs = parseAnswerPairs(raw);
+  const startNo = inferQuestionStartNo(row);
+  const count = inferQuestionCount(row);
+  const answers = Array(count).fill(null);
+  for (const [q, a] of pairs) {
+    const idx = q - startNo;
+    if (idx >= 0 && idx < count && a >= 1 && a <= 5) answers[idx] = a;
+  }
+  return { answers, startNo, endNo: startNo + count - 1 };
+}
+// SOFTM-정답: 정답 PDF 번호가 1이 아닌 경우 row의 시작번호 기준으로 로컬 정답 배열 생성 - 2026-05-30
+
+function formatAnswersArray(answers, baseIndent = 2, perLine = 10) { // SOFTM-FORMAT: 정답 배열 기본 줄바꿈 단위를 10개로 변경 - 2026-05-29
   const indent = " ".repeat(baseIndent);
   const valueIndent = " ".repeat(baseIndent + 2);
   const last = answers.length - 1;
@@ -116,19 +133,21 @@ function main() {
     }
 
     let answers;
+    let startNo;
+    let endNo;
     try {
-      answers = parseAnswerArrayFromPdf(answerPdfAbs);
+      ({ answers, startNo, endNo } = parseAnswerArrayFromPdf(answerPdfAbs, row));
     } catch (err) {
       console.warn(`[SKIP] ${questionNo} parse failed: ${err?.message || err}`);
       continue;
     }
 
-    const known = answers.filter((v, i) => i > 0 && Number.isFinite(v)).length;
+    const known = answers.filter((v) => Number.isFinite(v)).length;
     if (known === 0) {
       console.warn(`[SKIP] ${questionNo} zero answers parsed`);
       continue;
     }
-    const answersForJson = answers.slice(1, 101);
+    const answersForJson = answers;
 
     const outPath = answerPdfAbs.replace(/\.pdf$/i, ".json");
     if (!force && fs.existsSync(outPath)) {
@@ -143,7 +162,10 @@ function main() {
       `  "sourcePdf": ${JSON.stringify(answerPdfRel)},`,
       `  "generatedAt": ${JSON.stringify(new Date().toISOString())},`,
       `  "count": ${known},`,
-      `  "answers": ${formatAnswersArray(answersForJson, 2, 5)}`,
+      `  "answerStartNo": ${JSON.stringify(startNo)},`,
+      `  "answerEndNo": ${JSON.stringify(endNo)},`,
+      `  "answerIndexMode": "printed-pairs",`,
+      `  "answers": ${formatAnswersArray(answersForJson, 2, 10)}`, // SOFTM-FORMAT: 생성 JSON answers를 10개 단위로 저장 - 2026-05-29
       "}"
     ].join("\n");
     fs.writeFileSync(outPath, `${payloadText}\n`, "utf8");

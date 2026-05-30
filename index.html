@@ -52,6 +52,46 @@
       color: var(--muted);
       font-size: 13px;
     }
+    /* SOFTM-KNOU 시작: 기존/방통대 과목 통합 검색 UI 추가 - 2026-05-29 */
+    .searchPanel {
+      margin-top: 18px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .searchInput {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255,255,255,.82);
+      color: var(--ink);
+      font-size: 15px;
+      padding: 12px 14px;
+      outline: none;
+    }
+
+    .searchInput:focus {
+      border-color: var(--accent-1);
+      box-shadow: 0 0 0 3px rgba(41,108,115,.14);
+    }
+
+    .searchHelp {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .emptySearch {
+      display: none;
+      margin-top: 18px;
+      border: 1px dashed var(--line);
+      border-radius: 12px;
+      padding: 18px;
+      color: var(--muted);
+      background: rgba(255,255,255,.58);
+      font-size: 14px;
+    }
+    /* SOFTM-KNOU 끝 */
     .adWrap {
       margin-top: 16px;
       min-height: 100px;
@@ -106,6 +146,7 @@
     .banner[data-kind="qcm"]::after { background: var(--accent-1); }
     .banner[data-kind="greenhouse"]::after { background: var(--accent-2); }
     .banner[data-kind="organic"]::after { background: var(--accent-3); }
+    .banner[data-kind="knou"]::after { background: #5f6fb1; } /* SOFTM-KNOU: 방통대 카드 식별 색상 추가 - 2026-05-29 */
 
     .badge {
       display: inline-block;
@@ -148,9 +189,16 @@
 </head>
 <body>
   <main class="container">
-    <h1>자격증 문제은행</h1>
-    <p class="subtitle">카테고리별로 회차를 선택해서 문제 PDF와 최종정답 PDF 기반으로 풀이를 시작합니다.</p>
+    <h1>문제은행</h1>
+    <p class="subtitle">카테고리별로 회차를 선택해서 문제 PDF와 정답 파일 기반으로 풀이를 시작합니다.</p>
     <p class="meta" id="generatedAt">데이터 로딩 중...</p>
+    <!-- SOFTM-KNOU 시작: 전체 과목명 검색 입력 추가 - 2026-05-29 -->
+    <section class="searchPanel" aria-label="전체 과목 검색">
+      <input id="searchInput" class="searchInput" type="search" placeholder="과목명 검색 (예: 농산물, 글쓰기, 컴퓨터)" autocomplete="off" />
+      <p id="searchHelp" class="searchHelp">기존 문제은행과 방통대 교과목을 함께 검색합니다.</p>
+    </section>
+    <section id="emptySearch" class="emptySearch">검색 결과가 없습니다.</section>
+    <!-- SOFTM-KNOU 끝 -->
     <section class="adWrap" id="adfitIndexTop">광고 영역</section>
 
     <section class="grid" id="categoryGrid"></section>
@@ -192,54 +240,170 @@
       return res.json();
     }
 
+    /* SOFTM-KNOU 시작: 기존 manifest와 knou_ manifest를 병합 로딩 - 2026-05-29 */
+    async function fetchJsonOptional(path, fallback) {
+      try {
+        return await fetchJson(path);
+      } catch (_) {
+        return fallback;
+      }
+    }
+
     function normalizePdfPath(path) {
       const raw = String(path || "").trim();
       if (!raw) return "";
       return raw.replace(/^\.\//, "").replace(/^quiz\//, "");
     }
 
+    function hasAnswerSource(row) {
+      return Boolean(normalizePdfPath(row.answerPdf) || String(row.answerSourceId || "").trim());
+    }
+
+    function isPublishedQuestion(row) {
+      if (String(row?.correctJson || "").trim()) return true;
+      if (String(row?.answerSourceId || "").trim()) return true;
+      if (Object.prototype.hasOwnProperty.call(row || {}, "published")) {
+        return row?.published === true || String(row?.published) === "true";
+      }
+      return hasAnswerSource(row);
+    }
+    // SOFTM-OCR: 메인 노출 기준에서 OCR 품질을 제외하고 correct.json/정답 원본 기준으로 풀이 가능 회차 표시 - 2026-05-30
+
+    function collectDescendantCatNos(categories, catNo) {
+      const out = new Set([String(catNo)]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const category of categories) {
+          const parent = String(category.parentCatNo || "");
+          const current = String(category.catNo || "");
+          if (parent && out.has(parent) && !out.has(current)) {
+            out.add(current);
+            changed = true;
+          }
+        }
+      }
+      return out;
+    }
+    // SOFTM-GEN: correctJson 생성 여부를 퍼블리싱 기준으로 사용하고 하위 카테고리 집계를 지원 - 2026-05-29
+
+    function makeCategoryHref(item) {
+      const q = new URLSearchParams({
+        catNo: item.catNo,
+        category: item.catNm,
+      });
+      if (item.dataset === "knou") q.set("dataset", "knou");
+      return `./category.html?${q.toString()}`;
+    }
+
+    function makeSearchText(item) {
+      return [
+        item.datasetLabel,
+        item.gNm,
+        item.catNm,
+        item.registered,
+        item.ready,
+      ].join(" ").toLowerCase();
+    }
+
+    function renderCards(grid, emptySearch, items, query = "") {
+      const keyword = String(query || "").trim().toLowerCase();
+      let shown = 0;
+      grid.innerHTML = "";
+
+      for (const item of items) {
+        if (!item.ready) continue;
+        if (!keyword && item.parentCatNo) continue;
+        if (keyword && !makeSearchText(item).includes(keyword)) continue;
+
+        const card = document.createElement("a");
+        card.className = "banner";
+        card.dataset.kind = item.dataset === "knou" ? "knou" : (kindByCategory[item.catNm] || "qcm");
+        card.href = makeCategoryHref(item);
+        card.innerHTML = `
+          <span class="badge">${item.datasetLabel} · ${item.gNm || "카테고리"}</span>
+          <h2 class="title">${item.catNm}</h2>
+          <p class="count">등록 회차 ${item.registered}개 · 퍼블리싱 ${item.ready}개</p>
+          <p class="cta">회차 목록 보기 →</p>
+        `;
+
+        grid.appendChild(card);
+        shown += 1;
+      }
+
+      emptySearch.style.display = shown === 0 ? "block" : "none";
+    }
+
     async function load() {
       const grid = document.getElementById("categoryGrid");
       const generatedAt = document.getElementById("generatedAt");
+      const searchInput = document.getElementById("searchInput");
+      const searchHelp = document.getElementById("searchHelp");
+      const emptySearch = document.getElementById("emptySearch");
 
       try {
-        const [groups, categories, questions] = await Promise.all([
+        const [groups, categories, questions, knouGroups, knouCategories, knouQuestions] = await Promise.all([
           fetchJson("./json/group.json"),
           fetchJson("./json/category.json"),
           fetchJson("./json/question.json"),
+          fetchJsonOptional("./json/knou_group.json", []),
+          fetchJsonOptional("./json/knou_category.json", []),
+          fetchJsonOptional("./json/knou_question.json", []),
         ]);
 
         const sortedGroups = (groups || []).slice().sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0));
         const sortedCategories = (categories || []).slice().sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0));
         const questionList = Array.isArray(questions) ? questions : [];
+        const sortedKnouGroups = (knouGroups || []).slice().sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0));
+        const sortedKnouCategories = (knouCategories || []).slice().sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0));
+        const knouQuestionList = Array.isArray(knouQuestions) ? knouQuestions : [];
 
-        generatedAt.textContent = `그룹 ${sortedGroups.length}개 · 카테고리 ${sortedCategories.length}개`;
-
-        grid.innerHTML = "";
+        const items = [];
         for (const category of sortedCategories) {
-          const catNm = category.catNm;
-          const catNo = category.catNo;
-          const rows = questionList.filter((q) => String(q.catNo) === String(catNo));
-          const solved = rows.filter((q) => normalizePdfPath(q.questionPdf) && normalizePdfPath(q.answerPdf)).length;
-
-          const card = document.createElement("a");
-          card.className = "banner";
-          card.dataset.kind = kindByCategory[catNm] || "qcm";
-          card.href = `./category.html?catNo=${encodeURIComponent(catNo)}&category=${encodeURIComponent(catNm)}`;
-          card.innerHTML = `
-            <span class="badge">${category.gNm || "카테고리"}</span>
-            <h2 class="title">${catNm}</h2>
-            <p class="count">등록 회차 ${rows.length}개 · 문제+정답 세트 ${solved}개</p>
-            <p class="cta">회차 목록 보기 →</p>
-          `;
-
-          grid.appendChild(card);
+          const catNos = collectDescendantCatNos(sortedCategories, category.catNo);
+          const rows = questionList.filter((q) => catNos.has(String(q.catNo)));
+          items.push({
+            dataset: "default",
+            datasetLabel: "기존",
+            gNm: category.gNm || "",
+            catNm: category.catNm,
+            catNo: category.catNo,
+            parentCatNo: category.parentCatNo || "",
+            registered: rows.length,
+            ready: rows.filter((q) => normalizePdfPath(q.questionPdf) && isPublishedQuestion(q)).length,
+            seq: Number(category.seq || 0),
+          });
         }
+        for (const category of sortedKnouCategories) {
+          const rows = knouQuestionList.filter((q) => String(q.catNo) === String(category.catNo));
+          items.push({
+            dataset: "knou",
+            datasetLabel: "방통대",
+            gNm: category.gNm || "",
+            catNm: category.catNm,
+            catNo: category.catNo,
+            parentCatNo: category.parentCatNo || "",
+            registered: rows.length,
+            ready: rows.filter((q) => normalizePdfPath(q.questionPdf) && isPublishedQuestion(q)).length,
+            seq: Number(category.seq || 0),
+          });
+        }
+
+        generatedAt.textContent = `기존 그룹 ${sortedGroups.length}개 · 기존 카테고리 ${sortedCategories.length}개 · 방통대 학과 ${sortedKnouGroups.length}개 · 방통대 교과목 ${sortedKnouCategories.length}개`;
+        renderCards(grid, emptySearch, items);
+        searchInput.addEventListener("input", () => {
+          renderCards(grid, emptySearch, items, searchInput.value);
+          const count = grid.querySelectorAll(".banner").length;
+          searchHelp.textContent = searchInput.value.trim()
+            ? `검색 결과 ${count}개`
+            : "기존 문제은행과 방통대 교과목을 함께 검색합니다.";
+        });
       } catch (err) {
         generatedAt.textContent = "json 데이터(group/category/question)를 불러오지 못했습니다.";
         grid.innerHTML = "";
       }
     }
+    /* SOFTM-KNOU 끝 */
 
     initAdFit("adfitIndexTop", ADFIT_UNITS.indexTop, "728", "90");
     load();

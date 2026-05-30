@@ -1254,7 +1254,7 @@
 <header>
   <div class="left">
     <h1 id="pageTitle">문제풀이 + 정답확인</h1>
-    <span class="pill">단축키( 문제이동 : ←→ 답 : 1~4 )</span>
+    <span class="pill">단축키( 문제이동 : ←→ 답 : 1~5 )</span>
   </div>
   <div class="controls">
     <button id="btnOrientation" class="secondary iconBtn" title="화면 방향 전환" aria-label="화면 방향 전환">가</button>
@@ -1356,7 +1356,7 @@
       <div class="adWrap" id="adfitQuizSide">광고 영역</div>
 
       <div class="footerNote">
-        <div>• 단축키: <b>1~4</b> 선택, <b>←/→</b> 이동, <b>B</b> 북마크, <b>G</b> 채점, <b>R</b> 리셋</div>
+        <div>• 단축키: <b>1~5</b> 선택, <b>←/→</b> 이동, <b>B</b> 북마크, <b>G</b> 채점, <b>R</b> 리셋</div>
       </div>
     </div>
     <div class="landscapeDockMount" id="landscapeDockMount"></div>
@@ -1376,6 +1376,8 @@
   <button id="mobileChoice2">2</button>
   <button id="mobileChoice3">3</button>
   <button id="mobileChoice4">4</button>
+  <button id="mobileChoice5">5</button>
+  <!-- SOFTM-위치맵: 선택지 위치맵과 답 선택 UI가 1~5번 문항까지 대응하도록 모바일 버튼 추가 - 2026-05-30 -->
   <button id="mobileSheetOpen" class="ghost">답안지</button>
 </div>
 
@@ -1399,13 +1401,26 @@
   const DEFAULT_QUESTION_PDF_URL = "./2025년 제22회 농산물품질관리사 1차 시험문제지.pdf";
   const DEFAULT_ANSWER_PDF_URL = "./최종정답.pdf";
   const params = new URLSearchParams(window.location.search);
+  const DATASET = params.get("dataset") === "knou" ? "knou" : "default"; // SOFTM-KNOU: 기존/방통대 데이터셋 구분 추가 - 2026-05-29
+  const CATEGORY_NO = params.get("catNo") || ""; // SOFTM-KNOU: 카테고리 복귀 경로 유지를 위한 catNo 추가 - 2026-05-29
   const CATEGORY_NAME = params.get("category") || "농산물품질관리사";
   const EXAM_NAME = params.get("exam") || "기본 회차";
   const QUESTION_NO = params.get("questionNo") || "";
   const QUESTION_PDF_URL = params.get("question") || DEFAULT_QUESTION_PDF_URL;
   const ANSWER_PDF_URL = params.get("answer") || DEFAULT_ANSWER_PDF_URL;
+  const CORRECT_JSON_URL = params.get("correct") || ""; // SOFTM-GEN: 디렉토리별 correct.json 명시 로딩 경로 추가 - 2026-05-29
+  const ANSWER_SOURCE_ID = params.get("answerSourceId") || ""; // SOFTM-KNOU: 방통대 통합 정답표 sourceId 추가 - 2026-05-29
+  const ANSWER_SUBJECT = params.get("answerSubject") || CATEGORY_NAME; // SOFTM-KNOU: 통합 정답표 내 교과목명 추가 - 2026-05-29
+  const ANSWER_GRADE = params.get("grade") || ""; // SOFTM-KNOU: 동일 교과목명 중 학년 구분 추가 - 2026-05-29
+  const QUESTION_COUNT = normalizeBoundedInt(params.get("questionCount"), 100, 1, 100); // SOFTM-KNOU: 방통대 35/70문항 회차 대응 - 2026-05-29
+  const QUESTION_START_NO = normalizeOptionalInt(params.get("questionStartNo"), 1, 999); // SOFTM-KNOU: PDF 인쇄 문항 시작 번호가 1이 아닌 회차 대응 - 2026-05-29
+  const QUESTION_END_NO = normalizeOptionalInt(params.get("questionEndNo"), 1, 999); // SOFTM-KNOU: PDF 인쇄 문항 종료 번호가 앱 문항 수와 다른 회차 대응 - 2026-05-29
+  const CHOICE_COUNT = normalizeBoundedInt(params.get("choiceCount"), 4, 1, 5); // SOFTM-위치맵: 문제·문항 위치맵이 선택지 1~5 좌표를 다룰 수 있도록 선택지 수 상한 확장 - 2026-05-30
+  const ANCHOR_DEBUG = params.get("anchorDebug") === "1"; // SOFTM-ANCHOR: 저장 위치맵을 PDF 위에서 검증하는 디버그 오버레이 - 2026-05-30
   const encodedQuestionPdfUrl = encodeURI(QUESTION_PDF_URL);
   const encodedAnswerPdfUrl = encodeURI(ANSWER_PDF_URL);
+  const PDFJS_SCRIPT_URLS = ["vendor/pdf.min.js?v=202605301745", "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"]; // SOFTM-위치맵: 외부 CDN 지연 시 풀이 화면이 멈추지 않도록 로컬 PDF.js를 우선 사용 - 2026-05-30
+  const PDFJS_WORKER_URL = "vendor/pdf.worker.min.js?v=202605301745"; // SOFTM-위치맵: PDF.js worker도 로컬 파일을 기본값으로 사용 - 2026-05-30
   const ADFIT_UNITS = {
     quizSide: "DAN_REPLACE_QUIZ_SIDE",
   };
@@ -1416,9 +1431,11 @@
   const STORAGE_KEY = "quiz_answers_v3";
   const STORAGE_BOOKMARK_KEY = "quiz_bookmarks_v1";
   const STORAGE_UI_KEY = "quiz_ui_v3";
+  const STORAGE_PDF_PATTERN_KEY = "quiz_pdf_patterns_v1";
   const ANSWER_PARSE_VERSION = 2;
-  const PDF_MAP_VERSION = 7;
-  const CROP_CACHE_VERSION = 24;
+  const PDF_MAP_VERSION = 18; // SOFTM-위치맵: 문제번호 행/불완전 선택지 오탐 보정 후 최신 위치맵 JSON을 즉시 반영 - 2026-05-30
+  const PDF_PATTERN_VERSION = 2;
+  const CROP_CACHE_VERSION = 40; // SOFTM-위치맵: PDF 텍스트 행 기반 단일문항 하단 보장 캐시 무효화 - 2026-05-30
   const GRADE_MARKER_VERSION = 9;
   const PRESET_PAGE_ANCHORS = {
     "2022년 제19회 농산물품질관리사 1차": [1,6,10,14,18,22,26,33,39,47,51,57,64,70,76,81,87,94],
@@ -1426,6 +1443,103 @@
     "2024년 제21회 농산물품질관리사 1차": [1,5,9,14,18,23,26,33,40,45,51,58,64,71,76,82,90,97],
     "2025년 제22회 농산물품질관리사 1차": [1,5,10,14,19,23,26,35,41,47,51,57,66,72,76,81,89,95],
   };
+
+  /* SOFTM-KNOU 시작: 방통대 문항 수/다중정답 공통 유틸 추가 - 2026-05-29 */
+  function normalizeBoundedInt(value, fallback, min, max){
+    if (value == null || String(value).trim() === "") return fallback;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    const i = Math.trunc(n);
+    return Math.max(min, Math.min(max, i));
+  }
+
+  function normalizeOptionalInt(value, min, max){
+    if (value == null || String(value).trim() === "") return null;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    const i = Math.trunc(n);
+    return i >= min && i <= max ? i : null;
+  }
+
+  function createQuestionArray(fillValue = null){
+    return Array(QUESTION_COUNT + 1).fill(fillValue);
+  }
+
+  function isKnownAnswerValue(value){
+    if (value == null) return false;
+    if (Array.isArray(value)) return value.some((v) => Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= CHOICE_COUNT);
+    const n = Number(value);
+    return Number.isInteger(n) && n >= 1 && n <= CHOICE_COUNT;
+  }
+
+  function normalizeAnswerValue(value){
+    if (Array.isArray(value)) {
+      const values = [...new Set(value.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n >= 1 && n <= CHOICE_COUNT))];
+      return values.length ? values : null;
+    }
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 1 || n > CHOICE_COUNT) return null;
+    return n;
+  }
+
+  function answerValueMatches(answer, choice){
+    const selected = Number(choice);
+    if (!Number.isInteger(selected)) return false;
+    if (Array.isArray(answer)) return answer.includes(selected);
+    return Number(answer) === selected;
+  }
+
+  function formatAnswerValue(answer){
+    if (Array.isArray(answer)) return answer.join(",");
+    return Number.isFinite(Number(answer)) ? String(Number(answer)) : "";
+  }
+  /* SOFTM-KNOU 끝 */
+
+  /* SOFTM-KNOU 시작: PDF 인쇄 문항 번호와 화면 내부 문항 번호 분리 - 2026-05-29 */
+  function getConfiguredQuestionRange(){
+    const start = QUESTION_START_NO;
+    const end = QUESTION_END_NO;
+    if (Number.isFinite(start) && Number.isFinite(end) && end >= start) return { start, end, source: "query" };
+    if (Number.isFinite(start)) return { start, end: start + QUESTION_COUNT - 1, source: "query" };
+    if (Number.isFinite(end)) return { start: Math.max(1, end - QUESTION_COUNT + 1), end, source: "query" };
+    return null;
+  }
+
+  function getActiveQuestionStartNo(){
+    const navStart = Number(state?.pdfNav?.questionStartNo);
+    if (Number.isFinite(navStart) && navStart >= 1) return Math.floor(navStart);
+    const configured = getConfiguredQuestionRange();
+    return configured ? configured.start : 1;
+  }
+
+  function mapPrintedQuestionNoToLocal(labelNo, startNo = getActiveQuestionStartNo()){
+    const raw = Number(labelNo);
+    const start = Number(startNo);
+    if (!Number.isFinite(raw) || raw < 1 || !Number.isFinite(start) || start < 1) return null;
+    const q = Math.floor(raw) - Math.floor(start) + 1;
+    return q >= 1 && q <= QUESTION_COUNT ? q : null;
+  }
+
+  function localQuestionNoToPrinted(q){
+    const n = Number(q);
+    if (!Number.isFinite(n) || n < 1 || n > QUESTION_COUNT) return null;
+    const printedMap = state?.pdfNav?.printedQuestionNoMap;
+    if (Array.isArray(printedMap) && Number.isFinite(Number(printedMap[Math.floor(n)]))) {
+      return Number(printedMap[Math.floor(n)]);
+    }
+    return getActiveQuestionStartNo() + Math.floor(n) - 1;
+  }
+
+  function formatPrintedQuestionLabel(q){
+    const printed = localQuestionNoToPrinted(q);
+    return Number.isFinite(printed) ? String(printed) : String(q);
+  }
+
+  function formatPrintedChoiceLabel(q, choice){
+    return `${formatPrintedQuestionLabel(q)}-${choice}`;
+  }
+  // SOFTM-위치맵: 앱 내부 문항 번호와 PDF 인쇄 문제번호가 다를 수 있어 디버그/표시용 인쇄번호 변환을 분리 - 2026-05-30
+  /* SOFTM-KNOU 끝 */
   const SINGLE_CROP_OVERRIDES = {};
   const GRADE_MARKER_SVG = {
     ok: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">
@@ -1494,8 +1608,8 @@
 
   // ====== 상태 ======
   const state = {
-    answers: Array(101).fill(null),
-    bookmarks: Array(101).fill(false),
+    answers: createQuestionArray(null),
+    bookmarks: createQuestionArray(false),
     filter: "all",
     focusQ: 1,
     theme: "basic",
@@ -1516,6 +1630,8 @@
     answerKeyDynamic: null,
     answerKeyStatus: "idle",
     answerKeySource: "none",
+    answerStartNo: null,
+    answerEndNo: null,
     renderToken: 0,
     lastRenderMeta: null,
     allPagesRenderKey: null,
@@ -1537,6 +1653,7 @@
     questionCropRangeCache: {},
     pageOcrQuestionStartCache: {},
     pageTextLayerCache: {},
+    pageTextRowsCache: {},
     locateQuestionCache: {},
     gradeMarkerImageCache: {},
     delayedPdfLoadingTimer: null,
@@ -1548,7 +1665,19 @@
       mode: "basic",
       questionPageMap: null,
       questionTopRatioMap: null,
+      patternSource: null,
+      pageCount: null,
+      questionCount: null,
+      choiceCount: null,
+      questionStartNo: QUESTION_START_NO,
+      questionEndNo: QUESTION_END_NO,
+      printedQuestionNoMap: null,
+      choiceAnchorMap: null,
+      contentBands: null,
+      footerBand: null,
+      confidence: 0,
       source: null,
+      generatedAt: null, // SOFTM-위치맵: 저장된 위치맵의 생성 시각을 비교해 갱신 여부 판단 - 2026-05-30
       version: PDF_MAP_VERSION
     }
   };
@@ -1587,6 +1716,7 @@
   const sec2 = document.getElementById("sec2");
   const sec3 = document.getElementById("sec3");
   const sec4 = document.getElementById("sec4");
+  const sheetTitleText = document.querySelector(".sheetTitleBar strong"); // SOFTM-KNOU: 문항 수 라벨 동기화 대상 추가 - 2026-05-29
 
   const fAll = document.getElementById("fAll");
   const fWrong = document.getElementById("fWrong");
@@ -1605,6 +1735,7 @@
   let pdfJsLoaderPromise = null;
   let tesseractLoaderPromise = null;
   let questionManifestPromise = null;
+  let questionAnchorMapPromise = null;
   const mobileDock = document.getElementById("mobileDock");
   const mobileDockHomeParent = mobileDock ? mobileDock.parentElement : null;
   const landscapeDockMount = document.getElementById("landscapeDockMount");
@@ -1622,6 +1753,40 @@
   if (answerKeyInfo && !isLocalDevHost) {
     answerKeyInfo.style.display = "none";
   }
+
+  /* SOFTM-KNOU 시작: 방통대 회차별 문항 수에 맞춘 답안지/섹션 라벨 동기화 - 2026-05-29 */
+  function buildQuestionSections(){
+    const sections = [];
+    for (let start = 1; start <= QUESTION_COUNT; start += 25){
+      const end = Math.min(QUESTION_COUNT, start + 24);
+      sections.push({ name: `${start}~${end}`, from: start, to: end, ok: 0, total: 0, wrong: 0, blank: 0 });
+    }
+    return sections;
+  }
+
+  function syncQuestionCountLabels(){
+    if (sheetTitleText) sheetTitleText.textContent = `답안지 (1~${QUESTION_COUNT})`;
+    if (blankEl) blankEl.textContent = String(QUESTION_COUNT);
+    const sections = buildQuestionSections();
+    const sectionEls = [sec1, sec2, sec3, sec4];
+    for (let i = 0; i < sectionEls.length; i++){
+      const el = sectionEls[i];
+      if (!el) continue;
+      const wrap = el.closest(".sub");
+      const section = sections[i];
+      if (!section) {
+        if (wrap) wrap.style.display = "none";
+        continue;
+      }
+      if (wrap) {
+        wrap.style.display = "";
+        const label = wrap.querySelector(".k");
+        if (label) label.textContent = section.name;
+      }
+      el.textContent = `0 / ${section.to - section.from + 1}`;
+    }
+  }
+  /* SOFTM-KNOU 끝 */
 
   function isMobileLandscapeFullscreenTarget(){
     return window.matchMedia("(orientation: landscape) and (pointer: coarse)").matches;
@@ -1805,14 +1970,13 @@
   }
 
   function warmupQuestionLocateCache(centerQ){
-    const q = Math.max(1, Math.min(100, Math.floor(Number(centerQ) || 1)));
+    const q = Math.max(1, Math.min(QUESTION_COUNT, Math.floor(Number(centerQ) || 1)));
     setTimeout(async () => {
       try{
-        await locateQuestionInPdf(q);
         if (q > 1) await locateQuestionInPdf(q - 1);
-        if (q < 100) await locateQuestionInPdf(q + 1);
+        if (q < QUESTION_COUNT) await locateQuestionInPdf(q + 1);
       }catch(_){}
-    }, 0);
+    }, 120);
   }
 
   function initAdFit(slotId, unit, width, height) {
@@ -1868,8 +2032,10 @@
 
   // ====== 버튼 이벤트 ======
   document.getElementById("btnHome").addEventListener("click", () => {
-    const to = `./category.html?category=${encodeURIComponent(CATEGORY_NAME)}`;
-    window.location.href = to;
+    const q = new URLSearchParams({ category: CATEGORY_NAME });
+    if (CATEGORY_NO) q.set("catNo", CATEGORY_NO);
+    if (DATASET === "knou") q.set("dataset", "knou");
+    window.location.href = `./category.html?${q.toString()}`;
   });
   document.getElementById("btnReset").addEventListener("click", () => {
     resetAll();
@@ -1957,6 +2123,8 @@
   document.getElementById("mobileChoice2").addEventListener("click", () => chooseByKeyboard(2));
   document.getElementById("mobileChoice3").addEventListener("click", () => chooseByKeyboard(3));
   document.getElementById("mobileChoice4").addEventListener("click", () => chooseByKeyboard(4));
+  document.getElementById("mobileChoice5").addEventListener("click", () => chooseByKeyboard(5));
+  // SOFTM-위치맵: 선택지 5번이 있는 문제도 모바일에서 바로 선택할 수 있도록 이벤트 연결 - 2026-05-30
   document.getElementById("mobileSheetOpen").addEventListener("click", openMobileSheet);
   document.getElementById("mobileSheetClose").addEventListener("click", closeMobileSheet);
   sheetOverlay.addEventListener("click", (e) => {
@@ -1974,7 +2142,7 @@
     const tag = (document.activeElement && document.activeElement.tagName || "").toLowerCase();
     if (tag === "textarea" || tag === "input") return;
 
-    if (k >= "1" && k <= "4") { chooseByKeyboard(Number(k)); e.preventDefault(); return; }
+    if (/^[1-9]$/.test(k) && Number(k) >= 1 && Number(k) <= CHOICE_COUNT) { chooseByKeyboard(Number(k)); e.preventDefault(); return; }
     if (k === "ArrowRight") { moveFocus(1); e.preventDefault(); return; }
     if (k === "ArrowLeft")  { moveFocus(-1); e.preventDefault(); return; }
     if (k === "b" || k === "B") { toggleBookmark(state.focusQ); e.preventDefault(); return; }
@@ -1990,6 +2158,7 @@
   initAdFit("adfitQuizSide", ADFIT_UNITS.quizSide, "300", "250");
 
   loadUi();
+  syncQuestionCountLabels();
   preloadGradeMarkerImages();
   updateFontButtonLabels();
   updateOrientationButton();
@@ -2101,8 +2270,20 @@
           state.pdfNav.questionsPerPage = Number.isFinite(qpp) && qpp >= 1 ? Math.floor(qpp) : 1;
           state.pdfNav.mode = ui.pdfNav.mode === "auto" ? "auto" : "basic";
           state.pdfNav.source = typeof ui.pdfNav.source === "string" ? ui.pdfNav.source : null;
-          state.pdfNav.questionPageMap = Array.isArray(ui.pdfNav.questionPageMap) ? ui.pdfNav.questionPageMap.slice(0, 101) : null;
-          state.pdfNav.questionTopRatioMap = Array.isArray(ui.pdfNav.questionTopRatioMap) ? ui.pdfNav.questionTopRatioMap.slice(0, 101) : null;
+          state.pdfNav.questionPageMap = Array.isArray(ui.pdfNav.questionPageMap) ? ui.pdfNav.questionPageMap.slice(0, QUESTION_COUNT + 1) : null;
+          state.pdfNav.questionTopRatioMap = Array.isArray(ui.pdfNav.questionTopRatioMap) ? ui.pdfNav.questionTopRatioMap.slice(0, QUESTION_COUNT + 1) : null;
+          state.pdfNav.patternSource = typeof ui.pdfNav.patternSource === "string" ? ui.pdfNav.patternSource : null;
+          state.pdfNav.pageCount = Number.isFinite(Number(ui.pdfNav.pageCount)) ? Number(ui.pdfNav.pageCount) : null;
+          state.pdfNav.questionCount = Number.isFinite(Number(ui.pdfNav.questionCount)) ? Number(ui.pdfNav.questionCount) : null;
+          state.pdfNav.choiceCount = Number.isFinite(Number(ui.pdfNav.choiceCount)) ? Number(ui.pdfNav.choiceCount) : null;
+          state.pdfNav.questionStartNo = Number.isFinite(Number(ui.pdfNav.questionStartNo)) ? Number(ui.pdfNav.questionStartNo) : QUESTION_START_NO;
+          state.pdfNav.questionEndNo = Number.isFinite(Number(ui.pdfNav.questionEndNo)) ? Number(ui.pdfNav.questionEndNo) : QUESTION_END_NO;
+          state.pdfNav.printedQuestionNoMap = Array.isArray(ui.pdfNav.printedQuestionNoMap) ? ui.pdfNav.printedQuestionNoMap.slice(0, QUESTION_COUNT + 1) : null;
+          state.pdfNav.choiceAnchorMap = ui.pdfNav.choiceAnchorMap && typeof ui.pdfNav.choiceAnchorMap === "object" ? ui.pdfNav.choiceAnchorMap : null;
+          state.pdfNav.contentBands = Array.isArray(ui.pdfNav.contentBands) ? ui.pdfNav.contentBands : null;
+          state.pdfNav.footerBand = ui.pdfNav.footerBand && typeof ui.pdfNav.footerBand === "object" ? ui.pdfNav.footerBand : null;
+          state.pdfNav.confidence = Number.isFinite(Number(ui.pdfNav.confidence)) ? Number(ui.pdfNav.confidence) : 0;
+          state.pdfNav.generatedAt = typeof ui.pdfNav.generatedAt === "string" ? ui.pdfNav.generatedAt : null; // SOFTM-위치맵: 저장 위치맵 생성 시각 복원 - 2026-05-30
           state.pdfNav.version = Number(ui.pdfNav.version) || 1;
 
           const currentSource = getCurrentPdfSourceKey();
@@ -2112,7 +2293,19 @@
             state.pdfNav.mode = "basic";
             state.pdfNav.questionPageMap = null;
             state.pdfNav.questionTopRatioMap = null;
+            state.pdfNav.patternSource = null;
+            state.pdfNav.pageCount = null;
+            state.pdfNav.questionCount = null;
+            state.pdfNav.choiceCount = null;
+            state.pdfNav.questionStartNo = QUESTION_START_NO;
+            state.pdfNav.questionEndNo = QUESTION_END_NO;
+            state.pdfNav.printedQuestionNoMap = null;
+            state.pdfNav.choiceAnchorMap = null;
+            state.pdfNav.contentBands = null;
+            state.pdfNav.footerBand = null;
+            state.pdfNav.confidence = 0;
             state.pdfNav.source = null;
+            state.pdfNav.generatedAt = null; // SOFTM-위치맵: 버전/원본 불일치 시 이전 위치맵 생성 시각도 초기화 - 2026-05-30
             state.pdfNav.version = PDF_MAP_VERSION;
           }
         }
@@ -2289,38 +2482,57 @@
     saveUi();
   }
 
+  /* SOFTM-패턴 시작: pdfInfo 없는 레이아웃에서도 pdfStatus에 패턴 상태를 남기도록 보강 - 2026-05-29 */
   function updatePdfInfo(){
-    if (!pdfInfo) return;
     const nav = state.pdfNav;
     const onOff = "ON";
+    if (pdfStatus) {
+      pdfStatus.dataset.patternSource = nav.patternSource || "";
+      pdfStatus.dataset.patternConfidence = Number.isFinite(Number(nav.confidence)) ? String(Number(nav.confidence)) : "";
+    }
+    if (!pdfInfo) return;
     if (nav.mode === "auto" && Array.isArray(nav.questionPageMap)) {
-      pdfInfo.textContent = `왼쪽 문제 / 오른쪽 답 체크 · 페이지이동 ${onOff} (자동 매핑)`;
+      const confidence = Number(nav.confidence);
+      const score = Number.isFinite(confidence) && confidence > 0 ? ` ${Math.round(confidence * 100)}%` : "";
+      const sourceLabel = nav.patternSource === "realtime"
+        ? "실시간 패턴"
+        : (nav.patternSource === "anchor" ? "위치맵"
+          : (nav.patternSource === "cache" ? "패턴 캐시" : (nav.patternSource === "preset" ? "기본 패턴" : "자동 매핑")));
+      pdfInfo.textContent = `왼쪽 문제 / 오른쪽 답 체크 · 페이지이동 ${onOff} (${sourceLabel}${score})`;
       return;
     }
     pdfInfo.textContent = `왼쪽 문제 / 오른쪽 답 체크 · 페이지이동 ${onOff} (기본 매핑)`;
   }
+  /* SOFTM-패턴 끝 */
+  // SOFTM-위치맵: 문제·문항 위치맵이 적용된 경우 PDF 상태에 별도 출처로 표시 - 2026-05-30
 
   function updateAnswerKeyInfo(){
     if (!isLocalDevHost) return;
     if (!answerKeyInfo) return;
     answerKeyInfo.classList.remove("ready","fallback");
+    const answerRange = Number(state.answerStartNo) > 1
+      ? ` · ${state.answerStartNo}~${state.answerEndNo || (Number(state.answerStartNo) + QUESTION_COUNT - 1)}번`
+      : "";
     if (state.answerKeyStatus === "ready"){
       const count = Array.isArray(state.answerKeyDynamic)
-        ? state.answerKeyDynamic.filter((v, i) => i > 0 && Number.isFinite(v)).length
+        ? state.answerKeyDynamic.filter((v, i) => i > 0 && isKnownAnswerValue(v)).length
         : 0;
-      if (state.answerKeySource === "json") answerKeyInfo.textContent = `정답키: JSON(${count})`;
-      else answerKeyInfo.textContent = "정답키: PDF 동적";
+      if (state.answerKeySource === "knou") answerKeyInfo.textContent = `정답키: 방통대(${count}${answerRange})`;
+      if (state.answerKeySource === "json") answerKeyInfo.textContent = `정답키: JSON(${count}${answerRange})`;
+      else if (state.answerKeySource !== "knou") answerKeyInfo.textContent = `정답키: PDF 동적${answerRange}`;
       answerKeyInfo.classList.add("ready");
       return;
     }
     if (state.answerKeyStatus === "partial"){
       const count = Array.isArray(state.answerKeyDynamic)
-        ? state.answerKeyDynamic.filter((v, i) => i > 0 && Number.isFinite(v)).length
+        ? state.answerKeyDynamic.filter((v, i) => i > 0 && isKnownAnswerValue(v)).length
         : 0;
-      if (state.answerKeySource === "json") {
-        answerKeyInfo.textContent = `정답키: JSON 부분(${count})`;
+      if (state.answerKeySource === "knou") {
+        answerKeyInfo.textContent = `정답키: 방통대 부분(${count}${answerRange})`;
+      } else if (state.answerKeySource === "json") {
+        answerKeyInfo.textContent = `정답키: JSON 부분(${count}${answerRange})`;
       }
-      else answerKeyInfo.textContent = `정답키: PDF 부분(${count})`;
+      else answerKeyInfo.textContent = `정답키: PDF 부분(${count}${answerRange})`;
       answerKeyInfo.classList.add("fallback");
       return;
     }
@@ -2332,12 +2544,140 @@
     answerKeyInfo.classList.add("fallback");
   }
 
+  /* SOFTM-GEN 시작: 디렉토리별 correct.json에서 현재 회차 정답 로딩 - 2026-05-29 */
+  function buildLocalJsonCandidates(pathValue){
+    const rawPath = String(pathValue || "").split("#")[0].split("?")[0].trim();
+    const decodedPath = (() => {
+      try { return decodeURIComponent(rawPath); } catch(_) { return rawPath; }
+    })();
+    const normalizedPath = decodedPath.replace(/^\.\//, "").replace(/^quiz\//, "");
+    const candidates = [];
+    for (const raw of [normalizedPath, normalizedPath.normalize("NFC"), normalizedPath.normalize("NFD")]){
+      const rel = raw.replace(/^\.\//, "");
+      if (!rel) continue;
+      const encoded = `./${encodeURI(rel)}`;
+      const plain = `./${rel}`;
+      if (!candidates.includes(encoded)) candidates.push(encoded);
+      if (!candidates.includes(plain)) candidates.push(plain);
+    }
+    return candidates;
+  }
+
+  function pickCorrectJsonItem(data){
+    if (Array.isArray(data?.answers)) return data;
+    const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []);
+    if (!items.length) return null;
+    const byNo = QUESTION_NO ? items.find((row) => String(row?.questionNo || "") === String(QUESTION_NO)) : null;
+    if (byNo) return byNo;
+    const targetPdf = normalizePdfPathInput(QUESTION_PDF_URL).normalize("NFC");
+    const byPdf = items.find((row) => normalizePdfPathInput(row?.questionPdf || "").normalize("NFC") === targetPdf);
+    if (byPdf) return byPdf;
+    const normalizedExam = normalizeExamKey(EXAM_NAME);
+    return items.find((row) => normalizeExamKey(row?.questionNm || "") === normalizedExam) || null;
+  }
+
+  function knownAnswerCount(values){
+    return (values || []).filter((v) => isKnownAnswerValue(normalizeAnswerValue(v))).length;
+  }
+
+  function normalizeAnswerStartNo(meta = {}){
+    const candidates = [
+      meta.answerStartNo,
+      meta.questionStartNo,
+      state.answerStartNo,
+      QUESTION_START_NO,
+      state.pdfNav?.questionStartNo,
+      1
+    ];
+    for (const value of candidates){
+      const n = Number(value);
+      if (Number.isInteger(n) && n > 0) return n;
+    }
+    return 1;
+  }
+
+  function buildAnswerKeyArray(source, meta = {}){
+    if (!Array.isArray(source)) return null;
+    const dyn = Array(QUESTION_COUNT + 1).fill(null);
+    const answerStartNo = normalizeAnswerStartNo(meta);
+    const localZero = Array.from({ length: QUESTION_COUNT }, (_, idx) => source[idx]);
+    const localOne = Array.from({ length: QUESTION_COUNT }, (_, idx) => source[idx + 1]);
+    const printedZero = Array.from({ length: QUESTION_COUNT }, (_, idx) => source[answerStartNo + idx - 1]);
+    const printedOne = Array.from({ length: QUESTION_COUNT }, (_, idx) => source[answerStartNo + idx]);
+    const candidates = [
+      { mode: "local-zero", values: localZero, bias: source.length === QUESTION_COUNT ? 0.25 : 0 },
+      { mode: "local-one", values: localOne, bias: source.length >= QUESTION_COUNT + 1 && source[0] == null ? 0.18 : 0 },
+      { mode: "printed-zero", values: printedZero, bias: answerStartNo > 1 ? 0.12 : 0 },
+      { mode: "printed-one", values: printedOne, bias: answerStartNo > 1 && source[0] == null ? 0.08 : 0 }
+    ];
+    const picked = candidates
+      .map((row) => ({ ...row, count: knownAnswerCount(row.values), score: knownAnswerCount(row.values) + row.bias }))
+      .sort((a, b) => b.score - a.score)[0];
+    if (!picked || picked.count <= 0) return null;
+    for (let q = 1; q <= QUESTION_COUNT; q++){
+      dyn[q] = normalizeAnswerValue(picked.values[q - 1]);
+    }
+    return {
+      dyn,
+      count: picked.count,
+      answerStartNo,
+      answerEndNo: Number(meta.answerEndNo || meta.questionEndNo || (answerStartNo + QUESTION_COUNT - 1)),
+      mode: meta.answerIndexMode || picked.mode,
+    };
+  }
+
+  function applyAnswerKeyResult(result){
+    if (!result || !Array.isArray(result.dyn)) {
+      state.answerKeyDynamic = null;
+      state.answerKeyStatus = "unavailable";
+      state.answerStartNo = null;
+      state.answerEndNo = null;
+      return false;
+    }
+    state.answerKeyDynamic = result.dyn;
+    state.answerStartNo = result.answerStartNo || null;
+    state.answerEndNo = result.answerEndNo || null;
+    state.answerKeyStatus = result.count >= QUESTION_COUNT ? "ready" : (result.count > 0 ? "partial" : "unavailable");
+    return result.count > 0;
+  }
+  // SOFTM-정답: 정답표 번호가 1이 아닌 경우에도 가장 적합한 로컬/인쇄번호 매핑으로 채점 배열 생성 - 2026-05-30
+
+  async function loadAnswerKeyFromCorrectJson(){
+    if (!CORRECT_JSON_URL) return false;
+    state.answerKeySource = "json";
+    for (const candidate of buildLocalJsonCandidates(CORRECT_JSON_URL)){
+      try{
+        const res = await fetch(candidate, { cache: "no-store" });
+        if (!res.ok) continue;
+        const data = await res.json();
+        const picked = pickCorrectJsonItem(data);
+        const source = Array.isArray(picked?.answers) ? picked.answers : null;
+        if (!source) continue;
+        const result = buildAnswerKeyArray(source, picked);
+        if (!result) continue;
+        return applyAnswerKeyResult(result);
+      }catch(_){}
+    }
+    return false;
+  }
+  /* SOFTM-GEN 끝 */
+
   async function loadAnswerKeyFromJson(){
     state.answerKeyStatus = "loading";
     state.answerKeySource = "json";
     updateAnswerKeyInfo();
 
     try{
+      if (CORRECT_JSON_URL) {
+        const loaded = await loadAnswerKeyFromCorrectJson();
+        if (loaded) return true;
+      }
+      if (DATASET === "knou" && ANSWER_SOURCE_ID) {
+        let loaded = false;
+        try { loaded = await loadKnouAnswerKeyFromSource(); } catch(_) { loaded = false; }
+        if (loaded) return true;
+        state.answerKeySource = "json";
+      }
       const rawPdfPath = String(ANSWER_PDF_URL || "").split("#")[0].split("?")[0].trim();
       const decodedPdfPath = (() => {
         try { return decodeURIComponent(rawPdfPath); } catch(_) { return rawPdfPath; }
@@ -2376,17 +2716,8 @@
         state.answerKeyStatus = "unavailable";
         return false;
       }
-      const dyn = Array(101).fill(null);
-      const isOneBased = source.length >= 101;
-      for (let q = 1; q <= 100; q++){
-        const raw = isOneBased ? source[q] : source[q - 1];
-        const num = Number(raw);
-        if (Number.isFinite(num) && num >= 1 && num <= 5) dyn[q] = num;
-      }
-      const count = dyn.filter((v, i) => i > 0 && Number.isFinite(v)).length;
-      state.answerKeyDynamic = dyn;
-      state.answerKeyStatus = count >= 100 ? "ready" : (count > 0 ? "partial" : "unavailable");
-      return count > 0;
+      const result = buildAnswerKeyArray(source, data);
+      return applyAnswerKeyResult(result);
     }catch(_){
       state.answerKeyDynamic = null;
       state.answerKeyStatus = "unavailable";
@@ -2398,6 +2729,37 @@
       applyFilter();
     }
   }
+
+  /* SOFTM-KNOU 시작: 통합 정답표 JSON에서 교과목별 정답키 로딩 - 2026-05-29 */
+  function normalizeKnouSubjectKey(value){
+    return String(value || "")
+      .normalize("NFC")
+      .replace(/\s+/g, "")
+      .trim();
+  }
+
+  async function loadKnouAnswerKeyFromSource(){
+    state.answerKeySource = "knou";
+    const res = await fetch("./json/knou_answer_sources.json", { cache: "no-store" });
+    if (!res.ok) return false;
+    const sources = await res.json();
+    const list = Array.isArray(sources) ? sources : [];
+    const source = list.find((row) => String(row?.sourceId || "") === String(ANSWER_SOURCE_ID));
+    if (!source) return false;
+
+    const subjects = Array.isArray(source.subjects) ? source.subjects : [];
+    const targetSubject = normalizeKnouSubjectKey(ANSWER_SUBJECT || CATEGORY_NAME);
+    const targetGrade = String(ANSWER_GRADE || "").trim();
+    const candidates = subjects.filter((row) => normalizeKnouSubjectKey(row?.subject) === targetSubject);
+    const picked = (targetGrade
+      ? candidates.find((row) => String(row?.grade || "").trim() === targetGrade)
+      : null) || candidates[0];
+    if (!picked || !Array.isArray(picked.answers)) return false;
+
+    const result = buildAnswerKeyArray(picked.answers, picked);
+    return applyAnswerKeyResult(result);
+  }
+  /* SOFTM-KNOU 끝 */
 
   function getQuestionPdfBaseUrl(){
     return state.questionPdfBaseUrl || encodedQuestionPdfUrl.split("#")[0];
@@ -2460,18 +2822,76 @@
 
   async function loadQuestionManifest(){
     if (questionManifestPromise) return questionManifestPromise;
-    questionManifestPromise = fetch("./json/question.json", { cache: "no-store" })
+    const manifestPath = DATASET === "knou" ? "./json/knou_question.json" : "./json/question.json"; // SOFTM-KNOU: quiz fallback manifest도 dataset별로 선택 - 2026-05-29
+    questionManifestPromise = fetch(manifestPath, { cache: "no-store" })
       .then((res) => res.ok ? res.json() : [])
       .catch(() => []);
     return questionManifestPromise;
   }
 
+  async function findQuestionManifestRow(){
+    const list = await loadQuestionManifest();
+    if (!Array.isArray(list) || list.length === 0) return null;
+    const byNo = QUESTION_NO ? list.find((row) => String(row?.questionNo || "") === String(QUESTION_NO)) : null;
+    if (byNo) return byNo;
+    const targetPdf = normalizePdfPathInput(QUESTION_PDF_URL).normalize("NFC");
+    return list.find((row) => normalizePdfPathInput(row?.questionPdf || "").normalize("NFC") === targetPdf) || null;
+  }
+
+  async function fetchLocalJson(pathValue){
+    for (const candidate of buildLocalJsonCandidates(pathValue)){
+      try{
+        const res = await fetch(candidate, { cache: "no-store" });
+        if (res.ok) return await res.json();
+      }catch(_){}
+    }
+    return null;
+  }
+
+  function anchorMapToPdfPattern(anchorMap){
+    if (!anchorMap || typeof anchorMap !== "object") return null;
+    if (anchorMap.kind !== "question-anchor-map") return null;
+    const pageMap = Array.isArray(anchorMap.questionPageMap) ? anchorMap.questionPageMap.slice(0, QUESTION_COUNT + 1) : null;
+    const topMap = Array.isArray(anchorMap.questionTopRatioMap) ? anchorMap.questionTopRatioMap.slice(0, QUESTION_COUNT + 1) : null;
+    if (!pageMap || !topMap || pageMap.length < QUESTION_COUNT + 1 || topMap.length < QUESTION_COUNT + 1) return null;
+    return {
+      version: PDF_PATTERN_VERSION,
+      source: getCurrentPdfSourceKey(),
+      pageCount: Number(anchorMap.pageCount) || null,
+      questionCount: QUESTION_COUNT,
+      choiceCount: Number(anchorMap.choiceCount) || CHOICE_COUNT,
+      questionStartNo: Number(anchorMap.questionStartNo) || QUESTION_START_NO || 1,
+      questionEndNo: Number(anchorMap.questionEndNo) || QUESTION_END_NO || ((Number(anchorMap.questionStartNo) || QUESTION_START_NO || 1) + QUESTION_COUNT - 1),
+      printedQuestionNoMap: Array.isArray(anchorMap.printedQuestionNoMap) ? anchorMap.printedQuestionNoMap.slice(0, QUESTION_COUNT + 1) : null,
+      questionPageMap: pageMap,
+      questionTopRatioMap: topMap,
+      choiceAnchorMap: anchorMap.choiceAnchorMap && typeof anchorMap.choiceAnchorMap === "object" ? anchorMap.choiceAnchorMap : null,
+      contentBands: null,
+      footerBand: null,
+      confidence: Number(anchorMap.confidence || 0),
+      patternSource: "anchor",
+      generatedAt: anchorMap.generatedAt || new Date().toISOString(),
+    };
+  }
+
+  async function loadQuestionAnchorPattern(options = {}){
+    const force = options.force === true;
+    if (!force && questionAnchorMapPromise) return questionAnchorMapPromise;
+    questionAnchorMapPromise = (async () => {
+      const row = await findQuestionManifestRow();
+      const anchorPath = normalizePdfPathInput(row?.anchorMap || "");
+      if (!anchorPath) return null;
+      const data = await fetchLocalJson(anchorPath);
+      return anchorMapToPdfPattern(data);
+    })().catch(() => null);
+    return questionAnchorMapPromise;
+  }
+  // SOFTM-ANCHOR: manifest의 anchorMap JSON을 읽어 실시간 분석보다 먼저 적용할 PDF 위치맵으로 변환 - 2026-05-30
+
   async function findPdfPathFromManifest(kind){
     const list = await loadQuestionManifest();
     if (!Array.isArray(list) || list.length === 0) return "";
-    const byNo = QUESTION_NO
-      ? list.find((row) => String(row?.questionNo || "") === String(QUESTION_NO))
-      : null;
+    const byNo = await findQuestionManifestRow();
     const normalizedExam = normalizeExamKey(EXAM_NAME);
     const fallback = byNo || list.find((row) =>
       normalizeExamKey(row?.questionNm || "") === normalizedExam &&
@@ -2482,8 +2902,30 @@
     return normalizePdfPathInput(value);
   }
 
+  async function fetchPdfCandidateWithTimeout(url, options = {}, timeoutMs = 2500){
+    const hasAbort = typeof AbortController !== "undefined";
+    const controller = hasAbort ? new AbortController() : null;
+    let timer = null;
+    try{
+      const request = fetch(url, controller ? { ...options, signal: controller.signal } : options);
+      const timeout = new Promise((_, reject) => {
+        timer = window.setTimeout(() => {
+          try{ controller?.abort(); }catch(_){}
+          reject(new Error("PDF 후보 경로 확인 시간 초과"));
+        }, timeoutMs);
+      });
+      return await Promise.race([request, timeout]);
+    } finally {
+      if (timer) window.clearTimeout(timer);
+    }
+  }
+  // SOFTM-위치맵: AbortController가 없는 환경에서도 PDF 후보 경로 확인이 멈추지 않도록 Promise 타임아웃 적용 - 2026-05-30
+
   async function resolveExistingPdfUrl(pathValue, kind){
     const baseRaw = normalizePdfPathInput(String(pathValue || "").split("#")[0].split("?")[0]);
+    const localPdfPath = baseRaw.replace(/^quiz\//, "");
+    if (/^pdf\//.test(localPdfPath)) return localPdfPath;
+    // SOFTM-위치맵: 로컬 pdf 경로는 정규화 후보 탐색 전에 바로 사용해 경로 확인 단계 지연을 방지 - 2026-05-30
     const decodedRaw = tryDecodeURIComponent(baseRaw);
     const decodedTwice = tryDecodeURIComponent(decodedRaw);
     const candidates = [];
@@ -2508,13 +2950,13 @@
 
     for (const c of candidates){
       try{
-        const res = await fetch(c, { method: "HEAD", cache: "no-store" });
+        const res = await fetchPdfCandidateWithTimeout(c, { method: "HEAD", cache: "no-store" });
         if (res.ok) return c;
       }catch(_){}
     }
     for (const c of candidates){
       try{
-        const res = await fetch(c, { cache: "no-store" });
+        const res = await fetchPdfCandidateWithTimeout(c, { cache: "no-store" });
         if (res.ok) return c;
       }catch(_){}
     }
@@ -2530,7 +2972,7 @@
       ];
       for (const c of manifestCandidates){
         try{
-          const res = await fetch(c, { cache: "no-store" });
+          const res = await fetchPdfCandidateWithTimeout(c, { cache: "no-store" });
           if (res.ok) return c;
         }catch(_){}
       }
@@ -2549,6 +2991,8 @@
     state.answerKeyDynamic = null;
     state.answerKeyStatus = "idle";
     state.answerKeySource = "none";
+    state.answerStartNo = null;
+    state.answerEndNo = null;
     state.answerKeyVersion = ANSWER_PARSE_VERSION;
     state.allPagesRenderKey = null;
     state.allPageCanvases = [];
@@ -2564,10 +3008,14 @@
     state.questionCropRangeCache = {};
     state.pageOcrQuestionStartCache = {};
     state.pageTextLayerCache = {};
+    state.pageTextRowsCache = {};
     state.locateQuestionCache = {};
     navigatePdfToQuestion(state.focusQ || 1);
     ensureAutoPdfMap();
-    await loadAnswerKeyFromJson();
+    const loadedAnswerKey = await loadAnswerKeyFromJson();
+    if (!loadedAnswerKey && /\.pdf(?:$|[?#])/i.test(String(ANSWER_PDF_URL || ""))) {
+      await buildDynamicAnswerKeyFromPdf({ silent: true });
+    }
   }
 
   function getPdfPageByQuestion(q){
@@ -2577,7 +3025,7 @@
     }
     // 자동 매핑 전 임시 기본값: PDF 총 페이지 수를 기준으로 균등 분배
     if (state.pdfDoc && Number.isFinite(state.pdfDoc.numPages) && state.pdfDoc.numPages > 0) {
-      const qPerPage = 100 / state.pdfDoc.numPages;
+      const qPerPage = QUESTION_COUNT / state.pdfDoc.numPages;
       const page = 1 + Math.floor((q - 1) / Math.max(1, qPerPage));
       return Math.min(state.pdfDoc.numPages, Math.max(1, page));
     }
@@ -2585,8 +3033,8 @@
   }
 
   function buildMapFromAnchors(anchorList){
-    const pageMap = Array(101).fill(1);
-    const ratioMap = Array(101).fill(0.12);
+    const pageMap = Array(QUESTION_COUNT + 1).fill(1);
+    const ratioMap = Array(QUESTION_COUNT + 1).fill(0.12);
     if (!Array.isArray(anchorList) || anchorList.length === 0) {
       return { pageMap, ratioMap };
     }
@@ -2594,8 +3042,8 @@
     for (let i = 0; i < anchorList.length; i++){
       const pageNo = i + 1;
       const startQ = anchorList[i];
-      const nextStart = anchorList[i + 1] || 101;
-      const endQ = Math.min(100, nextStart - 1);
+      const nextStart = anchorList[i + 1] || (QUESTION_COUNT + 1);
+      const endQ = Math.min(QUESTION_COUNT, nextStart - 1);
       const count = Math.max(1, endQ - startQ + 1);
 
       for (let q = startQ; q <= endQ; q++){
@@ -2605,11 +3053,400 @@
       }
     }
 
-    for (let q = 2; q <= 100; q++){
+    for (let q = 2; q <= QUESTION_COUNT; q++){
       pageMap[q] = Math.max(pageMap[q], pageMap[q - 1]);
     }
     return { pageMap, ratioMap };
   }
+
+  /* SOFTM-패턴 시작: PDF 텍스트 레이어 기반 실시간 문제지 패턴 분석 공통화 - 2026-05-29 */
+  function getPdfPatternCacheKey(){
+    const rangeKey = `${QUESTION_START_NO || "auto"}-${QUESTION_END_NO || "auto"}`;
+    return `${getCurrentPdfSourceKey()}|map:${PDF_MAP_VERSION}|pattern:${PDF_PATTERN_VERSION}|q:${QUESTION_COUNT}|c:${CHOICE_COUNT}|r:${rangeKey}`;
+  }
+
+  function readPdfPatternCache(){
+    try{
+      const raw = localStorage.getItem(STORAGE_PDF_PATTERN_KEY);
+      const store = raw ? JSON.parse(raw) : {};
+      const entry = store[getPdfPatternCacheKey()];
+      return isUsablePdfPatternResult(entry, { allowLowConfidence: true }) ? entry : null;
+    }catch(_){
+      return null;
+    }
+  }
+
+  function writePdfPatternCache(pattern){
+    if (!isUsablePdfPatternResult(pattern, { allowLowConfidence: true })) return;
+    try{
+      const raw = localStorage.getItem(STORAGE_PDF_PATTERN_KEY);
+      const store = raw ? JSON.parse(raw) : {};
+      store[getPdfPatternCacheKey()] = pattern;
+      const keys = Object.keys(store).sort((a, b) => String(store[b]?.generatedAt || "").localeCompare(String(store[a]?.generatedAt || "")));
+      for (const key of keys.slice(10)) delete store[key];
+      localStorage.setItem(STORAGE_PDF_PATTERN_KEY, JSON.stringify(store));
+    }catch(_){}
+  }
+
+  function isUsablePdfPatternResult(pattern, options = {}){
+    if (!pattern || typeof pattern !== "object") return false;
+    if (pattern.version !== PDF_PATTERN_VERSION) return false;
+    if (String(pattern.source || "") !== getCurrentPdfSourceKey()) return false;
+    if (Number(pattern.questionCount) !== QUESTION_COUNT) return false;
+    const configured = getConfiguredQuestionRange();
+    if (configured && Number(pattern.questionStartNo) !== configured.start) return false;
+    if (!Array.isArray(pattern.questionPageMap) || !Array.isArray(pattern.questionTopRatioMap)) return false;
+    if (pattern.questionPageMap.length < QUESTION_COUNT + 1 || pattern.questionTopRatioMap.length < QUESTION_COUNT + 1) return false;
+    const confidence = Number(pattern.confidence);
+    const minConfidence = options.allowLowConfidence ? 0.18 : 0.32;
+    return Number.isFinite(confidence) && confidence >= minConfidence;
+  }
+
+  function clearPdfAnalysisCaches(){
+    state.questionCropRangeCache = {};
+    state.pageTextLayerCache = {};
+    state.locateQuestionCache = {};
+    state.pageQuestionRatioCache = {};
+    state.pageQuestionDirectRatioCache = {};
+    state.pageQuestionRowStartCache = {};
+    state.pageReliableQuestionStartCache = {};
+    state.exactQuestionLabelRatioCache = {};
+    state.pageQuestionLabelTokenCache = {};
+    state.pageQuestionStartAnchorCache = {};
+    state.questionChoiceAnchorCache = {};
+    state.pageTextRowsCache = {};
+  }
+
+  function isSamePdfPatternArray(current, next, tolerance = 0){
+    if (!Array.isArray(current) || !Array.isArray(next)) return false;
+    if (current.length < QUESTION_COUNT + 1 || next.length < QUESTION_COUNT + 1) return false;
+    for (let q = 1; q <= QUESTION_COUNT; q++){
+      const a = Number(current[q]);
+      const b = Number(next[q]);
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+      if (Math.abs(a - b) > tolerance) return false;
+    }
+    return true;
+  }
+
+  function shouldRefreshFromAnchorPattern(anchorPattern){
+    if (!isUsablePdfPatternResult(anchorPattern, { allowLowConfidence: true })) return false;
+    if (state.pdfNav.patternSource !== "anchor") return true;
+    const currentGeneratedAt = String(state.pdfNav.generatedAt || "");
+    const nextGeneratedAt = String(anchorPattern.generatedAt || "");
+    if (currentGeneratedAt && nextGeneratedAt && currentGeneratedAt !== nextGeneratedAt) return true;
+    if (!isSamePdfPatternArray(state.pdfNav.questionPageMap, anchorPattern.questionPageMap)) return true;
+    if (!isSamePdfPatternArray(state.pdfNav.questionTopRatioMap, anchorPattern.questionTopRatioMap, 0.0005)) return true;
+    return false;
+  }
+  // SOFTM-위치맵: 브라우저에 남은 예전 anchor pdfNav와 새 위치맵 JSON을 비교해 최신 좌표를 다시 적용 - 2026-05-30
+
+  function applyPdfPatternResult(pattern, sourceLabel){
+    state.pdfNav.enabled = true;
+    state.pdfNav.mode = "auto";
+    state.pdfNav.questionPageMap = pattern.questionPageMap.slice(0, QUESTION_COUNT + 1);
+    state.pdfNav.questionTopRatioMap = pattern.questionTopRatioMap.slice(0, QUESTION_COUNT + 1);
+    state.pdfNav.patternSource = sourceLabel || pattern.patternSource || "realtime";
+    state.pdfNav.pageCount = Number(pattern.pageCount) || null;
+    state.pdfNav.questionCount = Number(pattern.questionCount) || QUESTION_COUNT;
+    state.pdfNav.choiceCount = Number(pattern.choiceCount) || CHOICE_COUNT;
+    state.pdfNav.questionStartNo = Number(pattern.questionStartNo) || QUESTION_START_NO || 1;
+    state.pdfNav.questionEndNo = Number(pattern.questionEndNo) || QUESTION_END_NO || (state.pdfNav.questionStartNo + QUESTION_COUNT - 1);
+    state.pdfNav.printedQuestionNoMap = Array.isArray(pattern.printedQuestionNoMap) ? pattern.printedQuestionNoMap.slice(0, QUESTION_COUNT + 1) : null;
+    state.pdfNav.choiceAnchorMap = pattern.choiceAnchorMap && typeof pattern.choiceAnchorMap === "object" ? pattern.choiceAnchorMap : null;
+    state.pdfNav.contentBands = Array.isArray(pattern.contentBands) ? pattern.contentBands : null;
+    state.pdfNav.footerBand = pattern.footerBand || null;
+    state.pdfNav.confidence = Number.isFinite(Number(pattern.confidence)) ? Number(pattern.confidence) : 0;
+    state.pdfNav.source = getCurrentPdfSourceKey();
+    state.pdfNav.generatedAt = typeof pattern.generatedAt === "string" ? pattern.generatedAt : new Date().toISOString(); // SOFTM-위치맵: 적용된 패턴의 생성 시각을 저장해 stale 캐시를 판별 - 2026-05-30
+    state.pdfNav.version = PDF_MAP_VERSION;
+    clearPdfAnalysisCaches();
+    updatePdfInfo();
+    saveUi();
+  }
+
+  function makeRowsFromTextLayer(layer, yTolerance = 2.2){
+    const rows = [];
+    const pageW = Math.max(1, Number(layer?.pageW) || 1);
+    const pageH = Math.max(1, Number(layer?.pageH) || 1);
+    for (const item of (layer?.items || [])){
+      const s = String(item?.str || "").trim();
+      if (!s) continue;
+      const x = Number(item.transform && item.transform[4]);
+      const y = Number(item.transform && item.transform[5]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      let row = null;
+      for (const candidate of rows){
+        if (Math.abs(candidate.y - y) <= yTolerance) { row = candidate; break; }
+      }
+      if (!row) {
+        row = { y, parts: [] };
+        rows.push(row);
+      }
+      row.parts.push({ x, s, h: Math.max(8, Math.abs(Number(item.height) || 0)) });
+    }
+    for (const row of rows){
+      row.parts.sort((a, b) => a.x - b.x);
+      row.line = row.parts.map((p) => p.s).join(" ").replace(/\s+/g, " ").trim();
+      row.xRatio = Math.max(0, Math.min(1, (row.parts[0]?.x || 0) / pageW));
+      const h = Math.max(8, row.parts.reduce((max, p) => Math.max(max, Number(p.h) || 0), 0));
+      row.yRatio = Math.max(0, Math.min(1, (pageH - row.y - h) / pageH));
+    }
+    rows.sort((a, b) => a.yRatio - b.yRatio || a.xRatio - b.xRatio);
+    return { rows, pageW, pageH };
+  }
+
+  async function getQuestionPageRows(pageNo, yTolerance = 2.2){
+    const key = `${pageNo}:${yTolerance}`;
+    if (state.pageTextRowsCache[key]) return state.pageTextRowsCache[key];
+    const layer = await getQuestionPageTextLayer(pageNo);
+    const rowInfo = makeRowsFromTextLayer(layer, yTolerance);
+    state.pageTextRowsCache[key] = rowInfo;
+    return rowInfo;
+  }
+
+  function normalizePatternLine(value){
+    return String(value || "")
+      .normalize("NFC")
+      .replace(/[0-9]+/g, "#")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function parseQuestionRangeFromLine(value){
+    const text = String(value || "").normalize("NFC");
+    const m = text.match(/(\d{1,3})\s*[～~\-]\s*(\d{1,3})\s*번/);
+    if (!m) return null;
+    const start = Number(m[1]);
+    const end = Number(m[2]);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 1 || end < start) return null;
+    return { start, end };
+  }
+
+  function detectQuestionRangeFromRows(rows){
+    for (const row of (rows || [])){
+      const range = parseQuestionRangeFromLine(row.line);
+      if (range) return range;
+    }
+    return null;
+  }
+
+  function parseQuestionLabelFromLineStart(lineText){
+    const t = String(lineText || "").trim();
+    if (!t) return null;
+    let m = t.match(/^\(?\s*(\d{1,3})\s*(?:번|[.])(?:\s+|$)/);
+    if (m) return Number(m[1]);
+    m = t.match(/^제\s*(\d{1,3})\s*문\s*/);
+    if (m) return Number(m[1]);
+    m = t.match(/^문(?:항|제)?\s*(\d{1,3})\s*/);
+    if (m) return Number(m[1]);
+    return null;
+  }
+
+  function inferQuestionRangeFromPattern(rawAnchors, detectedRanges){
+    const configured = getConfiguredQuestionRange();
+    if (configured) return configured;
+    const exactRange = (detectedRanges || []).find((range) => range && (range.end - range.start + 1) === QUESTION_COUNT);
+    if (exactRange) return { ...exactRange, source: "header" };
+    const usableRange = (detectedRanges || []).find((range) => range && (range.end - range.start + 1) > 0);
+    if (usableRange) return { start: usableRange.start, end: usableRange.start + QUESTION_COUNT - 1, source: "header" };
+    const labels = [...new Set((rawAnchors || []).map((a) => Number(a.label)).filter((n) => Number.isFinite(n) && n >= 1))].sort((a, b) => a - b);
+    if (!labels.length) return { start: 1, end: QUESTION_COUNT, source: "default" };
+    const min = labels[0];
+    const max = labels[labels.length - 1];
+    if (min > 1 || max > QUESTION_COUNT || (max - min + 1) === QUESTION_COUNT) {
+      return { start: min, end: min + QUESTION_COUNT - 1, source: "labels" };
+    }
+    return { start: 1, end: QUESTION_COUNT, source: "labels" };
+  }
+
+  function detectPageBandsFromRows(rows){
+    const visibleRows = (rows || []).filter((row) => String(row.line || "").trim());
+    const bottomRows = visibleRows.filter((row) => row.yRatio >= 0.86 && !parseQuestionLabelFromLineStart(row.line));
+    const topRows = visibleRows.filter((row) => row.yRatio <= 0.06 && !parseQuestionLabelFromLineStart(row.line));
+    const footerStart = bottomRows.length ? Math.max(0.78, Math.min(...bottomRows.map((row) => row.yRatio)) - 0.006) : null;
+    const headerEnd = topRows.length ? Math.min(0.12, Math.max(...topRows.map((row) => row.yRatio)) + 0.025) : null;
+    const contentRows = visibleRows.filter((row) =>
+      (!Number.isFinite(headerEnd) || row.yRatio > headerEnd) &&
+      (!Number.isFinite(footerStart) || row.yRatio < footerStart)
+    );
+    const contentStart = contentRows.length ? Math.max(0, Math.min(...contentRows.map((row) => row.yRatio)) - 0.01) : 0;
+    const contentEnd = contentRows.length ? Math.min(1, Math.max(...contentRows.map((row) => row.yRatio)) + 0.03) : 1;
+    return { headerEnd, footerStart, contentStart, contentEnd };
+  }
+
+  function detectQuestionStartsFromRows(rows, bands, pageNo, questionStartNo = null){
+    const starts = new Set();
+    const ratioByQuestion = new Map();
+    const anchors = [];
+    const rawAnchors = [];
+    for (const row of (rows || [])){
+      if (Number.isFinite(bands?.headerEnd) && row.yRatio <= bands.headerEnd) continue;
+      if (Number.isFinite(bands?.footerStart) && row.yRatio >= bands.footerStart) continue;
+      if (row.xRatio > 0.78) continue;
+      const label = parseQuestionLabelFromLineStart(row.line);
+      if (!Number.isFinite(label) || label < 1) continue;
+      rawAnchors.push({ label, page: pageNo, ratio: row.yRatio, xRatio: row.xRatio, line: row.line });
+      const q = mapPrintedQuestionNoToLocal(label, questionStartNo || getActiveQuestionStartNo());
+      if (!Number.isFinite(q)) continue;
+      starts.add(q);
+      if (!ratioByQuestion.has(q) || row.yRatio < ratioByQuestion.get(q)) {
+        ratioByQuestion.set(q, row.yRatio);
+      }
+      anchors.push({ q, label, page: pageNo, ratio: row.yRatio, xRatio: row.xRatio, line: row.line });
+    }
+    return { starts, ratioByQuestion, anchors, rawAnchors };
+  }
+
+  function countOcrChoiceMarkerVariantsInLine(line){
+    const raw = String(line || "");
+    return (raw.match(/(?:^|[\s])(?:[0OQ@©®]\s*[).:]|Q@|QO|Qo|DO|OD|00|0Q|Q0|[@©®])(?=\s*\S)/g) || []).length;
+  }
+
+  function detectChoiceCountFromRows(rows, bands){
+    const choices = new Set();
+    let variantMarkers = 0;
+    for (const row of (rows || [])){
+      if (Number.isFinite(bands?.footerStart) && row.yRatio >= bands.footerStart) continue;
+      const line = String(row.line || "");
+      for (const ch of line.match(/[①②③④⑤]/g) || []){
+        const mapped = { "①":1, "②":2, "③":3, "④":4, "⑤":5 }[ch];
+        if (Number.isFinite(mapped)) choices.add(mapped);
+      }
+      variantMarkers += countOcrChoiceMarkerVariantsInLine(line);
+    }
+    if (choices.size) return choices.size;
+    return variantMarkers >= Math.max(3, CHOICE_COUNT) ? CHOICE_COUNT : 0;
+  }
+  // SOFTM-패턴: OCR이 ①②③④를 0)/Q@/©/® 등으로 깨뜨린 문제지도 선택지 존재 여부만은 패턴 분석에 반영 - 2026-05-30
+
+  function estimatePatternRatio(q, pageNo, ratioByPage, footerBands){
+    const byQ = ratioByPage[pageNo];
+    if (byQ && Number.isFinite(byQ.get(q))) return Math.max(0, Math.min(1, byQ.get(q)));
+    const entries = byQ ? Array.from(byQ.entries()).sort((a, b) => a[0] - b[0]) : [];
+    const prev = entries.filter(([k]) => k <= q).pop();
+    const next = entries.find(([k]) => k >= q);
+    if (prev && next && prev[0] !== next[0]) {
+      const t = (q - prev[0]) / Math.max(1, next[0] - prev[0]);
+      return Math.max(0.05, Math.min(0.96, prev[1] + (next[1] - prev[1]) * t));
+    }
+    if (prev) return Math.max(0.05, Math.min(0.96, prev[1] + 0.065 * Math.max(0, q - prev[0])));
+    if (next) return Math.max(0.05, Math.min(0.96, next[1] - 0.065 * Math.max(0, next[0] - q)));
+    const footerStart = Number(footerBands?.[pageNo]?.footerStart);
+    return Math.max(0.08, Math.min(Number.isFinite(footerStart) ? footerStart - 0.08 : 0.86, 0.12));
+  }
+
+  function buildPdfPatternMap(startsByPage, ratioByPage, footerBands, pageCount){
+    const pageMap = buildQuestionPageMapFromPageStarts(startsByPage, pageCount);
+    const ratioMap = Array(QUESTION_COUNT + 1).fill(0.12);
+    for (let q = 1; q <= QUESTION_COUNT; q++){
+      const pageNo = Math.max(1, Math.min(pageCount, Number(pageMap[q]) || 1));
+      ratioMap[q] = estimatePatternRatio(q, pageNo, ratioByPage, footerBands);
+    }
+    return { pageMap, ratioMap };
+  }
+
+  async function mergeOcrStartsIntoPattern(startsByPage, ratioByPage, pageCount, questionStartNo = null){
+    for (let pageNo = 1; pageNo <= pageCount; pageNo++){
+      try{
+        const ocrMap = await getOcrQuestionStartRatiosForPage(pageNo, questionStartNo);
+        if (!ocrMap || typeof ocrMap.entries !== "function") continue;
+        if (!startsByPage[pageNo]) startsByPage[pageNo] = new Set();
+        if (!ratioByPage[pageNo]) ratioByPage[pageNo] = new Map();
+        for (const [q, ratio] of ocrMap.entries()){
+          if (!Number.isFinite(q) || q < 1 || q > QUESTION_COUNT || !Number.isFinite(ratio)) continue;
+          startsByPage[pageNo].add(q);
+          if (!ratioByPage[pageNo].has(q)) ratioByPage[pageNo].set(q, ratio);
+        }
+      }catch(_){}
+    }
+  }
+
+  async function analyzePdfPattern(pdf, options = {}){
+    const pageCount = Math.max(1, Number(pdf?.numPages) || 1);
+    const startsByPage = {};
+    const ratioByPage = {};
+    const contentBands = Array(pageCount + 1).fill(null);
+    const footerBands = Array(pageCount + 1).fill(null);
+    const allAnchors = [];
+    const allRawAnchors = [];
+    const detectedRanges = [];
+    const choiceCounts = [];
+    let a4Pages = 0;
+
+    for (let pageNo = 1; pageNo <= pageCount; pageNo++){
+      const rowsInfo = await getQuestionPageRows(pageNo);
+      const bands = detectPageBandsFromRows(rowsInfo.rows);
+      const detected = detectQuestionStartsFromRows(rowsInfo.rows, bands, pageNo);
+      const range = detectQuestionRangeFromRows(rowsInfo.rows);
+      const choiceCount = detectChoiceCountFromRows(rowsInfo.rows, bands);
+      const isA4 = Math.abs((Number(rowsInfo.pageW) || 0) - 595) < 45 && Math.abs((Number(rowsInfo.pageH) || 0) - 842) < 55;
+
+      contentBands[pageNo] = { start: bands.contentStart, end: bands.contentEnd };
+      footerBands[pageNo] = { start: bands.footerStart, end: 1 };
+      allRawAnchors.push(...detected.rawAnchors);
+      if (range) detectedRanges.push(range);
+      if (choiceCount) choiceCounts.push(choiceCount);
+      if (isA4) a4Pages += 1;
+    }
+
+    const inferredRange = inferQuestionRangeFromPattern(allRawAnchors, detectedRanges);
+    const questionStartNo = Number(inferredRange.start) || 1;
+    const questionEndNo = questionStartNo + QUESTION_COUNT - 1;
+    for (let pageNo = 1; pageNo <= pageCount; pageNo++){
+      startsByPage[pageNo] = new Set();
+      ratioByPage[pageNo] = new Map();
+    }
+    for (const anchor of allRawAnchors){
+      const q = mapPrintedQuestionNoToLocal(anchor.label, questionStartNo);
+      if (!Number.isFinite(q)) continue;
+      startsByPage[anchor.page].add(q);
+      if (!ratioByPage[anchor.page].has(q) || anchor.ratio < ratioByPage[anchor.page].get(q)) {
+        ratioByPage[anchor.page].set(q, anchor.ratio);
+      }
+      allAnchors.push({ ...anchor, q });
+    }
+
+    const uniqueAnchors = new Set(allAnchors.map((a) => a.q));
+    if (uniqueAnchors.size < Math.max(4, Math.ceil(QUESTION_COUNT * 0.12)) && options.allowOcr === true) {
+      await mergeOcrStartsIntoPattern(startsByPage, ratioByPage, pageCount, questionStartNo);
+      for (let pageNo = 1; pageNo <= pageCount; pageNo++){
+        for (const q of (startsByPage[pageNo] || [])) uniqueAnchors.add(q);
+      }
+    }
+
+    const mapped = buildPdfPatternMap(startsByPage, ratioByPage, footerBands, pageCount);
+    const pagesWithAnchors = Object.values(startsByPage).filter((set) => set && set.size > 0).length;
+    const anchorCoverage = Math.min(1, uniqueAnchors.size / Math.max(1, QUESTION_COUNT));
+    const pageCoverage = Math.min(1, pagesWithAnchors / Math.max(1, pageCount));
+    const choiceCount = choiceCounts.length ? Math.max(...choiceCounts) : CHOICE_COUNT;
+    const choiceScore = Math.min(1, choiceCount / Math.max(1, CHOICE_COUNT));
+    const a4Score = pageCount ? a4Pages / pageCount : 0;
+    const confidence = Math.max(0, Math.min(1, anchorCoverage * 0.62 + pageCoverage * 0.22 + choiceScore * 0.10 + a4Score * 0.06));
+    const footerStarts = footerBands.map((row) => row && Number(row.start)).filter(Number.isFinite);
+    const footerStart = footerStarts.length ? footerStarts.sort((a, b) => a - b)[Math.floor(footerStarts.length / 2)] : null;
+
+    return {
+      version: PDF_PATTERN_VERSION,
+      source: getCurrentPdfSourceKey(),
+      generatedAt: new Date().toISOString(),
+      pageCount,
+      questionCount: QUESTION_COUNT,
+      choiceCount,
+      questionStartNo,
+      questionEndNo,
+      questionRangeSource: inferredRange.source || "auto",
+      isA4: a4Score >= 0.8,
+      anchorsDetected: uniqueAnchors.size,
+      pagesWithAnchors,
+      questionPageMap: mapped.pageMap,
+      questionTopRatioMap: mapped.ratioMap,
+      contentBands,
+      footerBand: { start: footerStart, end: 1, perPage: footerBands },
+      confidence
+    };
+  }
+  /* SOFTM-패턴 끝 */
 
   function applyPresetMapIfAvailable(){
     let anchors = PRESET_PAGE_ANCHORS[EXAM_NAME];
@@ -2629,10 +3466,19 @@
     state.pdfNav.mode = "auto";
     state.pdfNav.questionPageMap = mapped.pageMap;
     state.pdfNav.questionTopRatioMap = mapped.ratioMap;
-    state.questionCropRangeCache = {};
-    state.pageTextLayerCache = {};
-    state.locateQuestionCache = {};
+    state.pdfNav.patternSource = "preset";
+    state.pdfNav.pageCount = null;
+    state.pdfNav.questionCount = QUESTION_COUNT;
+    state.pdfNav.choiceCount = CHOICE_COUNT;
+    state.pdfNav.questionStartNo = QUESTION_START_NO || 1;
+    state.pdfNav.questionEndNo = QUESTION_END_NO || (state.pdfNav.questionStartNo + QUESTION_COUNT - 1);
+    state.pdfNav.printedQuestionNoMap = null;
+    state.pdfNav.contentBands = null;
+    state.pdfNav.footerBand = null;
+    state.pdfNav.confidence = 0.3;
+    clearPdfAnalysisCaches();
     state.pdfNav.source = getCurrentPdfSourceKey();
+    state.pdfNav.generatedAt = new Date().toISOString(); // SOFTM-위치맵: fallback 매핑도 저장 캐시 비교용 생성 시각을 기록 - 2026-05-30
     state.pdfNav.version = PDF_MAP_VERSION;
     updatePdfInfo();
     saveUi();
@@ -2679,10 +3525,7 @@
     if (state.pdfDocLoading) return state.pdfDocLoading;
 
     state.pdfDocLoading = (async () => {
-      const pdfjsLib = await loadPdfJsLib();
-      if (pdfjsLib.GlobalWorkerOptions) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-      }
+      const pdfjsLib = configurePdfJsWorker(await loadPdfJsLib());
       const loadingTask = pdfjsLib.getDocument(getQuestionPdfBaseUrl());
       const pdf = await loadingTask.promise;
       state.pdfDoc = pdf;
@@ -2701,10 +3544,7 @@
     if (state.answerPdfDocLoading) return state.answerPdfDocLoading;
 
     state.answerPdfDocLoading = (async () => {
-      const pdfjsLib = await loadPdfJsLib();
-      if (pdfjsLib.GlobalWorkerOptions) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-      }
+      const pdfjsLib = configurePdfJsWorker(await loadPdfJsLib());
       const loadingTask = pdfjsLib.getDocument(getAnswerPdfBaseUrl());
       const pdf = await loadingTask.promise;
       state.answerPdfDoc = pdf;
@@ -2729,7 +3569,10 @@
 
   function getCorrectAnswer(q){
     const dynamic = state.answerKeyDynamic;
-    if (Array.isArray(dynamic) && Number.isFinite(dynamic[q])) return dynamic[q];
+    if (Array.isArray(dynamic)) {
+      const answer = normalizeAnswerValue(dynamic[q]);
+      if (isKnownAnswerValue(answer)) return answer;
+    }
     return null;
   }
 
@@ -2756,7 +3599,7 @@
           const q = Number(m[1]);
           const a = Number(m[2]);
           if (!Number.isFinite(q) || !Number.isFinite(a)) continue;
-          if (q < 1 || q > 100 || a < 1 || a > 5) continue;
+          if (q < 1 || q > 999 || a < 1 || a > 5) continue;
           out.push([q, a]);
         }
       }
@@ -2769,7 +3612,7 @@
           const q = nums[i];
           const a = nums[i + 1];
           if (!Number.isFinite(q) || !Number.isFinite(a)) continue;
-          if (q < 1 || q > 100 || a < 1 || a > 5) continue;
+          if (q < 1 || q > 999 || a < 1 || a > 5) continue;
           out.push([q, a]);
           validPairs++;
         }
@@ -2783,7 +3626,7 @@
       const bottom = (lines[i + 1] || "").replace(/\s+/g, " ").trim();
       if (!top || !bottom) continue;
 
-      const qNums = (top.match(/\d{1,3}/g) || []).map((v) => Number(v)).filter((n) => n >= 1 && n <= 100);
+      const qNums = (top.match(/\d{1,3}/g) || []).map((v) => Number(v)).filter((n) => n >= 1 && n <= 999);
       const aNums = (bottom.match(/[1-5]/g) || []).map((v) => Number(v)).filter((n) => n >= 1 && n <= 5);
       if (qNums.length < 5 || aNums.length < 5) continue;
       if (Math.abs(qNums.length - aNums.length) > 2) continue;
@@ -2807,7 +3650,7 @@
         const q = Number(m[1]);
         const a = Number(m[2]);
         if (!Number.isFinite(q) || !Number.isFinite(a)) continue;
-        if (q < 1 || q > 100 || a < 1 || a > 5) continue;
+        if (q < 1 || q > 999 || a < 1 || a > 5) continue;
         out.push([q, a]);
       }
     }
@@ -2823,7 +3666,7 @@
     while (i < nums.length - 1){
       const q = Number(nums[i]);
       const a = Number(nums[i + 1]);
-      if (Number.isFinite(q) && Number.isFinite(a) && q >= 1 && q <= 100 && a >= 1 && a <= 5){
+      if (Number.isFinite(q) && Number.isFinite(a) && q >= 1 && q <= 999 && a >= 1 && a <= 5){
         // 일반적으로 문항은 증가한다. 잡음 토큰(날짜 등)을 건너뛰기 위한 가드.
         if (q > prevQ || prevQ === 0){
           out.push([q, a]);
@@ -2836,6 +3679,29 @@
     }
     return out;
   }
+
+  function mapPrintedAnswerPairsToLocalPairs(pairs){
+    const cleaned = (pairs || [])
+      .map(([q, a]) => [Number(q), normalizeChoiceValue(a)])
+      .filter(([q, a]) => Number.isInteger(q) && q > 0 && q <= 999 && Number.isInteger(a) && a >= 1 && a <= 5);
+    if (!cleaned.length) return { pairs: [], answerStartNo: normalizeAnswerStartNo({}) };
+    const labels = [...new Set(cleaned.map(([q]) => q))].sort((a, b) => a - b);
+    const preferred = normalizeAnswerStartNo({});
+    const starts = [...new Set([preferred, labels[0], ...labels])].filter((value) => Number.isInteger(value) && value > 0);
+    let best = { start: preferred, mapped: [] };
+    for (const start of starts){
+      const mapped = [];
+      for (const [printed, answer] of cleaned){
+        const local = printed - start + 1;
+        if (local >= 1 && local <= QUESTION_COUNT) mapped.push([local, answer]);
+      }
+      const score = mapped.length + (start === preferred ? 0.1 : 0);
+      const bestScore = best.mapped.length + (best.start === preferred ? 0.1 : 0);
+      if (score > bestScore) best = { start, mapped };
+    }
+    return { pairs: best.mapped, answerStartNo: best.start };
+  }
+  // SOFTM-정답: PDF 정답표의 번호가 36번처럼 시작해도 내부 문항 번호로 변환해 동적 채점 - 2026-05-30
 
   function buildLineLikeTextFromItems(items){
     const points = [];
@@ -2883,7 +3749,9 @@
         const rawByRows = buildLineLikeTextFromItems(items);
         const sources = [rawByItems, rawFlat, rawByRows];
         for (const sourceRaw of sources){
-          const pairs = parseAnswerPairsFromRawText(sourceRaw);
+          const mapped = mapPrintedAnswerPairsToLocalPairs(parseAnswerPairsFromRawText(sourceRaw));
+          const pairs = mapped.pairs;
+          if (pairs.length && mapped.answerStartNo) state.answerStartNo = mapped.answerStartNo;
           for (const [q, a] of pairs){
             if (!voteBag.has(q)) voteBag.set(q, new Map());
             const qVotes = voteBag.get(q);
@@ -2896,7 +3764,9 @@
           .map((it) => String(it?.str || "").trim())
           .filter((s) => /^\d{1,3}$/.test(s))
           .map((s) => Number(s));
-        const streamPairs = parseAnswerPairsFromNumberStream(streamNums);
+        const mappedStream = mapPrintedAnswerPairsToLocalPairs(parseAnswerPairsFromNumberStream(streamNums));
+        const streamPairs = mappedStream.pairs;
+        if (streamPairs.length && mappedStream.answerStartNo) state.answerStartNo = mappedStream.answerStartNo;
         for (const [q, a] of streamPairs){
           if (!voteBag.has(q)) voteBag.set(q, new Map());
           const qVotes = voteBag.get(q);
@@ -2905,7 +3775,7 @@
       }
 
       const merged = new Map();
-      for (let q = 1; q <= 100; q++){
+      for (let q = 1; q <= QUESTION_COUNT; q++){
         const qVotes = voteBag.get(q);
         if (!qVotes || qVotes.size === 0) continue;
         const ranked = Array.from(qVotes.entries()).sort((a, b) => b[1] - a[1]);
@@ -2919,10 +3789,11 @@
         }
       }
 
-      const dyn = Array(101).fill(null);
+      const dyn = Array(QUESTION_COUNT + 1).fill(null);
       for (const [q, a] of merged.entries()) dyn[q] = a;
       state.answerKeyDynamic = dyn;
-      state.answerKeyStatus = merged.size >= 70 ? "ready" : (merged.size > 0 ? "partial" : "unavailable");
+      state.answerEndNo = (Number(state.answerStartNo) || normalizeAnswerStartNo({})) + QUESTION_COUNT - 1;
+      state.answerKeyStatus = merged.size >= Math.min(QUESTION_COUNT, 70) ? "ready" : (merged.size > 0 ? "partial" : "unavailable");
     }catch(_){
       state.answerKeyDynamic = null;
       state.answerKeyStatus = "unavailable";
@@ -2972,7 +3843,7 @@
   }
 
   async function locateQuestionInPdf(q){
-    const cacheKey = `${getCurrentPdfSourceKey()}|${PDF_MAP_VERSION}|q:${Math.max(1, Math.min(100, Math.floor(Number(q) || 1)))}`;
+    const cacheKey = `${getCurrentPdfSourceKey()}|${PDF_MAP_VERSION}|q:${Math.max(1, Math.min(QUESTION_COUNT, Math.floor(Number(q) || 1)))}`;
     if (state.locateQuestionCache && state.locateQuestionCache[cacheKey]) {
       return state.locateQuestionCache[cacheKey];
     }
@@ -3017,16 +3888,6 @@
       return safeRatio;
     };
 
-    const presetAnchors = getPresetAnchorsForCurrentExam();
-    if (presetAnchors) {
-      const mapped = buildMapFromAnchors(presetAnchors);
-      const mappedPage = Math.max(1, Math.min(total, Number(mapped.pageMap[q]) || getPdfPageByQuestion(q)));
-      const p = await resolveBetterPage(mappedPage, q);
-      const r = await refineRatioOnPage(p, mapped.ratioMap[q]);
-      const result = { page: p, ratio: r, exact: true };
-      state.locateQuestionCache[cacheKey] = result;
-      return result;
-    }
     // 기본 페이지맵을 사용하되, 페이지 내부 비율은 실제 텍스트 검출로 보정한다.
     const pageMap = state.pdfNav.questionPageMap;
     const ratioMap = state.pdfNav.questionTopRatioMap;
@@ -3034,6 +3895,16 @@
       const mappedPage = Math.max(1, Math.min(total, Math.floor(pageMap[q])));
       const p = await resolveBetterPage(mappedPage, q);
       const r = await refineRatioOnPage(p, ratioMap[q]);
+      const result = { page: p, ratio: r, exact: true };
+      state.locateQuestionCache[cacheKey] = result;
+      return result;
+    }
+    const presetAnchors = getPresetAnchorsForCurrentExam();
+    if (presetAnchors) {
+      const mapped = buildMapFromAnchors(presetAnchors);
+      const mappedPage = Math.max(1, Math.min(total, Number(mapped.pageMap[q]) || getPdfPageByQuestion(q)));
+      const p = await resolveBetterPage(mappedPage, q);
+      const r = await refineRatioOnPage(p, mapped.ratioMap[q]);
       const result = { page: p, ratio: r, exact: true };
       state.locateQuestionCache[cacheKey] = result;
       return result;
@@ -3057,14 +3928,14 @@
       if (!s) continue;
       const m = s.match(/^\(?\s*(\d{1,3})\s*(?:[.]|번)(?:\s|$)/);
       if (!m) continue;
-      const q = Number(m[1]);
-      if (!Number.isFinite(q) || q < 1 || q > 100) continue;
+      const q = mapPrintedQuestionNoToLocal(Number(m[1]));
+      if (!Number.isFinite(q)) continue;
 
       const x = Number(item.transform && item.transform[4]);
       const y = Number(item.transform && item.transform[5]);
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
       const xRatio = x / pageW;
-      if (xRatio > 0.35) continue;
+      if (xRatio > 0.78) continue; // SOFTM-KNOU: 오른쪽 컬럼 문항번호도 탐지하도록 x범위 확장 - 2026-05-29
 
       const ih = Math.max(8, Math.abs(Number(item.height) || 0));
       const top = Math.max(0, Math.min(pageH - ih, pageH - y - ih));
@@ -3079,42 +3950,17 @@
   async function getRowQuestionStartRatiosForPage(pageNo){
     const key = String(pageNo);
     if (state.pageQuestionRowStartCache[key]) return state.pageQuestionRowStartCache[key];
-    const layer = await getQuestionPageTextLayer(pageNo);
-    const pageW = layer.pageW;
-    const pageH = layer.pageH;
-
-    const rows = [];
-    for (const it of (layer.items || [])){
-      const s = String(it.str || "").trim();
-      if (!s) continue;
-      const x = Number(it.transform && it.transform[4]);
-      const y = Number(it.transform && it.transform[5]);
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-      let row = null;
-      for (const r of rows){
-        if (Math.abs(r.y - y) <= 2.2) { row = r; break; }
-      }
-      if (!row){
-        row = { y, parts: [] };
-        rows.push(row);
-      }
-      row.parts.push({ x, s });
-    }
-
+    const { rows } = await getQuestionPageRows(pageNo);
     const byQ = new Map();
     for (const row of rows){
-      row.parts.sort((a, b) => a.x - b.x);
       if (!row.parts.length) continue;
-      const rowStartX = row.parts[0].x;
-      if ((rowStartX / pageW) > 0.38) continue;
-      const lineText = row.parts.map(p => p.s).join(" ").replace(/\s+/g, " ").trim();
+      if (row.xRatio > 0.78) continue; // SOFTM-KNOU: 2컬럼 방통대 문제지의 오른쪽 문항번호 탐지 허용 - 2026-05-29
+      const lineText = row.line;
       const m = lineText.match(/^\(?\s*(\d{1,3})\s*(?:[.]|번)(?:\s|$)/);
       if (!m) continue;
-      const q = Number(m[1]);
-      if (!Number.isFinite(q) || q < 1 || q > 100) continue;
-      const ih = 12;
-      const top = Math.max(0, Math.min(pageH - ih, pageH - row.y - ih));
-      const ratio = Math.max(0, Math.min(1, top / pageH));
+      const q = mapPrintedQuestionNoToLocal(Number(m[1]));
+      if (!Number.isFinite(q)) continue;
+      const ratio = Math.max(0, Math.min(1, Number(row.yRatio)));
       if (!byQ.has(q) || ratio < byQ.get(q)) byQ.set(q, ratio);
     }
 
@@ -3125,43 +3971,19 @@
   async function getReliableQuestionStartsForPage(pageNo){
     const key = String(pageNo);
     if (state.pageReliableQuestionStartCache[key]) return state.pageReliableQuestionStartCache[key];
-    const layer = await getQuestionPageTextLayer(pageNo);
-    const pageW = layer.pageW;
-    const pageH = layer.pageH;
-
-    const rows = [];
-    for (const it of (layer.items || [])){
-      const s = String(it.str || "").trim();
-      if (!s) continue;
-      const x = Number(it.transform && it.transform[4]);
-      const y = Number(it.transform && it.transform[5]);
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-      let row = null;
-      for (const r of rows){
-        if (Math.abs(r.y - y) <= 2.0) { row = r; break; }
-      }
-      if (!row){
-        row = { y, parts: [] };
-        rows.push(row);
-      }
-      row.parts.push({ x, s });
-    }
-
+    const { rows } = await getQuestionPageRows(pageNo, 2.0);
     const map = new Map();
     for (const row of rows){
-      row.parts.sort((a, b) => a.x - b.x);
       if (!row.parts.length) continue;
-      const startXRatio = row.parts[0].x / pageW;
-      if (startXRatio > 0.24) continue;
-      const line = row.parts.map(p => p.s).join(" ").replace(/\s+/g, " ").trim();
+      if (row.xRatio > 0.78) continue; // SOFTM-KNOU: 오른쪽 컬럼 시작 문항도 신뢰 앵커로 사용 - 2026-05-29
+      const line = row.line;
       const m = line.match(/^\(?\s*(\d{1,3})\s*(?:[.]|번)(?:\s|$)/);
       if (!m) continue;
-      const q = Number(m[1]);
-      if (!Number.isFinite(q) || q < 1 || q > 100) continue;
+      const q = mapPrintedQuestionNoToLocal(Number(m[1]));
+      if (!Number.isFinite(q)) continue;
       // 너무 짧은 토큰 라인(잡음) 배제
       if (line.length < 6) continue;
-      const top = Math.max(0, Math.min(pageH - 1, pageH - row.y - 12));
-      const ratio = Math.max(0, Math.min(1, top / pageH));
+      const ratio = Math.max(0, Math.min(1, Number(row.yRatio)));
       if (!map.has(q) || ratio < map.get(q)) map.set(q, ratio);
     }
 
@@ -3175,8 +3997,8 @@
     const layer = await getQuestionPageTextLayer(pageNo);
     const pageW = layer.pageW;
     const pageH = layer.pageH;
+    const { rows } = await getQuestionPageRows(pageNo, 2.0);
 
-    const rows = [];
     const itemAnchors = new Map();
     for (const it of (layer.items || [])){
       const s = String(it.str || "").trim();
@@ -3188,9 +4010,9 @@
       const token = s.replace(/\s+/g, "");
       const tm = token.match(/^\(?(\d{1,3})(?:[.]|번)\)?$/);
       if (tm) {
-        const q = Number(tm[1]);
+        const q = mapPrintedQuestionNoToLocal(Number(tm[1]));
         const xRatio = x / pageW;
-        if (Number.isFinite(q) && q >= 1 && q <= 100 && xRatio <= 0.2) {
+        if (Number.isFinite(q) && xRatio <= 0.78) { // SOFTM-KNOU: 오른쪽 컬럼 단독 라벨 토큰까지 앵커로 사용 - 2026-05-29
           const ih = Math.max(10, Math.abs(Number(it.height) || 0));
           const top = Math.max(0, Math.min(pageH - ih, pageH - y - ih));
           const yRatio = Math.max(0, Math.min(1, top / pageH));
@@ -3201,33 +4023,20 @@
         }
       }
 
-      let row = null;
-      for (const r of rows){
-        if (Math.abs(r.y - y) <= 2.0) { row = r; break; }
-      }
-      if (!row){
-        row = { y, parts: [] };
-        rows.push(row);
-      }
-      row.parts.push({ x, s });
     }
 
     const map = new Map(itemAnchors);
     for (const row of rows){
-      row.parts.sort((a, b) => a.x - b.x);
       if (!row.parts.length) continue;
-      const startX = row.parts[0].x;
-      const startXRatio = startX / pageW;
-      if (startXRatio > 0.26) continue;
-      const line = row.parts.map((p) => p.s).join(" ").replace(/\s+/g, " ").trim();
+      if (row.xRatio > 0.78) continue; // SOFTM-KNOU: 2컬럼 레이아웃의 오른쪽 문항 시작점 허용 - 2026-05-29
+      const line = row.line;
       const m = line.match(/^\(?\s*(\d{1,3})\s*(?:[.]|번)(?:\s|$)/);
       if (!m) continue;
-      const q = Number(m[1]);
-      if (!Number.isFinite(q) || q < 1 || q > 100) continue;
+      const q = mapPrintedQuestionNoToLocal(Number(m[1]));
+      if (!Number.isFinite(q)) continue;
       if (line.length < 6) continue;
-      const top = Math.max(0, Math.min(pageH - 1, pageH - row.y - 12));
-      const yRatio = Math.max(0, Math.min(1, top / pageH));
-      const xRatio = Math.max(0, Math.min(1, startXRatio));
+      const yRatio = Math.max(0, Math.min(1, Number(row.yRatio)));
+      const xRatio = Math.max(0, Math.min(1, Number(row.xRatio)));
       const prev = map.get(q);
       if (!prev || yRatio < prev.yRatio) map.set(q, { xRatio, yRatio });
     }
@@ -3259,7 +4068,7 @@
     const pageMap = state.pdfNav.questionPageMap;
     const ratioMap = state.pdfNav.questionTopRatioMap;
     if (Array.isArray(pageMap) && Array.isArray(ratioMap)) {
-      for (let k = q + 1; k <= 100; k++){
+      for (let k = q + 1; k <= QUESTION_COUNT; k++){
         if (pageMap[k] !== pageNo || !Number.isFinite(ratioMap[k])) continue;
         push(trusted, ratioMap[k]);
       }
@@ -3409,6 +4218,47 @@
     return null;
   }
 
+  async function getQuestionContentBottomRatioForCrop(pageNo, q, startRatio, nextBoundaryRatio = null){
+    if (!Number.isFinite(pageNo) || !Number.isFinite(q)) return null;
+    const start = Math.max(0, Math.min(1, Number.isFinite(startRatio) ? Number(startRatio) : 0));
+    const boundary = Number.isFinite(nextBoundaryRatio) && Number(nextBoundaryRatio) > start + 0.025
+      ? Math.max(0, Math.min(1, Number(nextBoundaryRatio)))
+      : 0.995;
+    try{
+      const { rows, pageH } = await getQuestionPageRows(pageNo, 2.2);
+      if (!Array.isArray(rows) || !rows.length) return null;
+      const footerStart = getFooterStartRatioForPage(pageNo);
+      const minY = Math.max(0, start - 0.008);
+      const maxY = Math.min(
+        0.995,
+        boundary - 0.002,
+        Number.isFinite(footerStart) ? Math.max(minY + 0.04, footerStart - 0.008) : 0.995
+      );
+      let bottom = null;
+      for (const row of rows){
+        const y = Number(row?.yRatio);
+        if (!Number.isFinite(y)) continue;
+        if (y < minY) continue;
+        if (y > maxY) break;
+        const label = parseQuestionNumberFromLineStart(row.line);
+        if (Number.isFinite(label)) {
+          if (label > q) break;
+          if (label < q) continue;
+        }
+        const rowHeight = Math.max(
+          8,
+          ...(Array.isArray(row.parts) ? row.parts.map((p) => Number(p.h) || 0) : [0])
+        );
+        const rowBottom = Math.min(0.995, y + (rowHeight / Math.max(1, Number(pageH) || 1)) + 0.012);
+        bottom = Number.isFinite(bottom) ? Math.max(bottom, rowBottom) : rowBottom;
+      }
+      return Number.isFinite(bottom) ? bottom : null;
+    }catch(_){
+      return null;
+    }
+  }
+  // SOFTM-위치맵: 단일문항 하단은 임의 여백이 아니라 PDF 파싱 행의 실제 마지막 위치로 보강 - 2026-05-30
+
   async function getQuestionLabelTokenRatiosForPage(pageNo){
     const key = String(pageNo);
     if (state.pageQuestionLabelTokenCache[key]) return state.pageQuestionLabelTokenCache[key];
@@ -3422,13 +4272,13 @@
         if (!s) continue;
         const m = s.match(/^\(?(\d{1,3})(?:\.|번)\)?$/);
         if (!m) continue;
-        const q = Number(m[1]);
-        if (!Number.isFinite(q) || q < 1 || q > 100) continue;
+        const q = mapPrintedQuestionNoToLocal(Number(m[1]));
+        if (!Number.isFinite(q)) continue;
         const x = Number(item.transform && item.transform[4]);
         const y = Number(item.transform && item.transform[5]);
         if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
         const xRatio = x / pageW;
-        if (xRatio > 0.20) continue;
+        if (xRatio > 0.78) continue; // SOFTM-KNOU: 오른쪽 컬럼 문항 라벨 토큰 탐지 허용 - 2026-05-29
         const ih = Math.max(10, Math.abs(Number(item.height) || 0));
         const top = Math.max(0, Math.min(pageH - ih, pageH - y - ih));
         const yRatio = Math.max(0, Math.min(1, top / pageH));
@@ -3452,59 +4302,27 @@
       if (Number.isFinite(tokenRatio)) found = Number(tokenRatio);
     }catch(_){}
     try{
-      const layer = await getQuestionPageTextLayer(pageNo);
-      const pageW = layer.pageW;
-      const pageH = layer.pageH;
-      const target = String(Math.floor(q));
-      const rows = [];
-
-      const pushRowPart = (x, y, s) => {
-        let row = null;
-        for (const r of rows){
-          if (Math.abs(r.y - y) <= 2.2) { row = r; break; }
-        }
-        if (!row){
-          row = { y, parts: [] };
-          rows.push(row);
-        }
-        row.parts.push({ x, s });
-      };
-
-      for (const item of (layer.items || [])){
-        const raw = String(item.str || "").trim();
-        if (!raw) continue;
-        const compact = raw.replace(/\s+/g, "");
-        // 다른 탐지 함수와 동일하게 PDF 원좌표(item.transform)를 사용해야
-        // y축 반전 오차가 생기지 않는다.
-        const x = Number(item.transform && item.transform[4]);
-        const y = Number(item.transform && item.transform[5]);
-        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-        pushRowPart(x, y, compact);
-      }
+      const { rows } = await getQuestionPageRows(pageNo);
+      const target = String(Math.floor(localQuestionNoToPrinted(q) || q)); // SOFTM-KNOU: 내부 번호 대신 PDF 인쇄 문항번호로 정확 라벨 탐지 - 2026-05-29
 
       // 분할 토큰(예: "16" + ".", "16" + "번")도 문항번호로 인식한다.
       for (const row of rows){
-        row.parts.sort((a, b) => a.x - b.x);
         if (!row.parts.length) continue;
-        const first = String(row.parts[0].s || "");
-        const second = String((row.parts[1] && row.parts[1].s) || "");
-        const third = String((row.parts[2] && row.parts[2].s) || "");
-        const lineCompact = row.parts.map((p) => String(p.s || "")).join("");
+        const first = String(row.parts[0].s || "").replace(/\s+/g, "");
+        const second = String((row.parts[1] && row.parts[1].s) || "").replace(/\s+/g, "");
+        const third = String((row.parts[2] && row.parts[2].s) || "").replace(/\s+/g, "");
+        const lineCompact = row.parts.map((p) => String(p.s || "").replace(/\s+/g, "")).join("");
         const startsWithLabel =
           new RegExp(`^\\(?${target}(?:\\.|번)\\)?`).test(lineCompact) ||
           (first === target && (second === "." || second === "번" || second === ")")) ||
           (first === "(" && second === target && (third === "." || third === "번" || third === ")"));
         if (!startsWithLabel) continue;
 
-        const x = Number(row.parts[0].x);
-        if (!Number.isFinite(x)) continue;
-        const xRatio = x / pageW;
-        if (xRatio > 0.24) continue;
+        if (row.xRatio > 0.78) continue; // SOFTM-KNOU: 정확 라벨 탐지에서도 오른쪽 컬럼 허용 - 2026-05-29
         // 일부 PDF는 문항번호 토큰이 짧게 분리되어 들어와 길이 필터를 완화한다.
         const lineText = row.parts.map((p) => String(p.s || "")).join(" ").trim();
         if (lineText.length < 2) continue;
-        const top = Math.max(0, Math.min(pageH - 1, pageH - Number(row.y) - 12));
-        const yRatio = Math.max(0, Math.min(1, top / pageH));
+        const yRatio = Math.max(0, Math.min(1, Number(row.yRatio)));
         if (found == null || yRatio < found) found = yRatio;
       }
     }catch(_){}
@@ -3516,6 +4334,15 @@
       return found;
     }
     return null;
+  }
+
+  function getFooterStartRatioForPage(pageNo){
+    const navFooter = state.pdfNav && state.pdfNav.footerBand;
+    const perPage = navFooter && Array.isArray(navFooter.perPage) ? navFooter.perPage : null;
+    const byPage = perPage && perPage[pageNo] && Number(perPage[pageNo].start);
+    if (Number.isFinite(byPage)) return Math.max(0, Math.min(1, byPage));
+    const common = navFooter && Number(navFooter.start);
+    return Number.isFinite(common) ? Math.max(0, Math.min(1, common)) : null;
   }
 
   async function getQuestionCropRange(q, page){
@@ -3534,7 +4361,7 @@
     startRaw = Math.max(0, Math.min(1, Number(startRaw)));
 
     let nextStartRaw = null;
-    if (q < 100) {
+    if (q < QUESTION_COUNT) {
       try{
         const strictNext = await getQuestionStartRatioForPage(page, q + 1);
         if (Number.isFinite(strictNext) && strictNext > startRaw + 0.03) {
@@ -3570,6 +4397,10 @@
       } else {
         focusEnd = Math.min(0.995, focusStart + (mobileViewport ? 0.34 : 0.30));
       }
+      const footerStart = getFooterStartRatioForPage(page);
+      if (Number.isFinite(footerStart)) {
+        focusEnd = Math.min(focusEnd, Math.max(focusStart + 0.08, footerStart - (mobileViewport ? 0.018 : 0.024)));
+      }
     }
 
     // 단일 문항 보장: q+1 경계가 있으면 절대 넘지 않는다.
@@ -3597,7 +4428,7 @@
       end: Math.max(0, Math.min(1, focusEnd)),
       focusStart: Math.max(0, Math.min(1, focusStart)),
       focusEnd: Math.max(0, Math.min(1, focusEnd)),
-      lowConfidence: false,
+      lowConfidence: Number(state.pdfNav?.confidence || 0) > 0 && Number(state.pdfNav.confidence) < 0.35,
       nextBoundary: Number.isFinite(nextStartRaw) ? nextStartRaw : null
     };
     state.questionCropRangeCache[cropCacheKey] = resolved;
@@ -3780,7 +4611,8 @@
       const pageMap = state.pdfNav.questionPageMap;
       const ratioMap = state.pdfNav.questionTopRatioMap;
       const mobileViewport = window.matchMedia("(max-width: 768px)").matches;
-      const mappedNextSamePage = (q < 100
+      const reliableAnchorBoundary = state.pdfNav.patternSource === "anchor" && Number(state.pdfNav.confidence || 0) >= 0.55; // SOFTM-위치맵: 저장 위치맵 경계는 텍스트 추정 실패 경계보다 작게 여백 적용 - 2026-05-30
+      const mappedNextSamePage = (q < QUESTION_COUNT
         && Array.isArray(pageMap)
         && Array.isArray(ratioMap)
         && pageMap[q + 1] === safePage
@@ -3792,10 +4624,10 @@
         ? await getQuestionStartRatioForPage(safePage, q - 1)
         : null;
       const strictStartLabelBoundary = await getExactQuestionLabelRatioForPage(safePage, q);
-      const strictNextSamePage = (q < 100)
+      const strictNextSamePage = (q < QUESTION_COUNT)
         ? await getQuestionStartRatioForPage(safePage, q + 1)
         : null;
-      const strictNextLabelBoundary = (q < 100)
+      const strictNextLabelBoundary = (q < QUESTION_COUNT)
         ? await getExactQuestionLabelRatioForPage(safePage, q + 1)
         : null;
       let finalNextBoundaryUsed = null;
@@ -3813,7 +4645,7 @@
         if (Number.isFinite(startBase)) {
           const topPad = mobileViewport ? 0.022 : 0.018;
           let forcedStart = Math.max(0, Math.min(1, startBase - topPad));
-          if (Number.isFinite(strictPrevSamePage)) {
+          if (Number.isFinite(strictPrevSamePage) && strictPrevSamePage < startBase) { // SOFTM-KNOU: 컬럼 전환 시 이전 문항이 아래에 있는 경우 시작점 밀림 방지 - 2026-05-29
             const prevGuard = Number(strictPrevSamePage) + 0.035;
             forcedStart = Math.max(forcedStart, prevGuard);
           }
@@ -3823,8 +4655,8 @@
         const nextBase = labelNextBoundary;
         if (Number.isFinite(nextBase)) {
           const endGap = Number.isFinite(strictNextLabelBoundary)
-            ? (mobileViewport ? 0.012 : 0.016)
-            : (mobileViewport ? 0.030 : 0.045);
+            ? (reliableAnchorBoundary ? (mobileViewport ? 0.008 : 0.009) : (mobileViewport ? 0.012 : 0.016))
+            : (reliableAnchorBoundary ? (mobileViewport ? 0.010 : 0.012) : (mobileViewport ? 0.030 : 0.045));
           const forcedEnd = Math.min(0.995, nextBase - endGap);
           safeEnd = Math.min(safeEnd, forcedEnd);
           finalNextBoundaryUsed = nextBase;
@@ -3837,13 +4669,14 @@
       // 선택지 하단은 최소 보장
       let minEndByChoice = null;
       let maxEndByChoice = null;
-      let choice4Bottom = null;
+      let lastChoiceBottom = null;
+      let choiceAnchorCount = 0;
       const earlyBoundaryHint = Number.isFinite(strictNextSamePage)
         ? strictNextSamePage
         : (Number.isFinite(rangeNextBoundary)
           ? rangeNextBoundary
           : (Number.isFinite(mappedNextSamePage) ? mappedNextSamePage : null));
-      if (!Number.isFinite(earlyBoundaryHint) && q < 100) {
+      if (!Number.isFinite(earlyBoundaryHint) && q < QUESTION_COUNT) {
         try{
           provisionalBoundary = await getNextQuestionBoundaryRatioForPage(safePage, q, safeStart, null);
         }catch(_){}
@@ -3855,9 +4688,9 @@
             ? Math.max(safeStart + 0.02, earlyBoundaryHint - 0.004)
             : (Number.isFinite(provisionalBoundary) ? Math.max(safeStart + 0.02, provisionalBoundary - 0.004) : null)
         });
-        // 초기 경계 힌트가 이르게 잡히면 ④가 누락되어 컷이 짧아질 수 있으므로
+        // 초기 경계 힌트가 이르게 잡히면 마지막 선택지가 누락되어 컷이 짧아질 수 있으므로
         // 제한 없는 범위에서 한 번 더 탐색해 선지 하단을 보정한다.
-        if (Array.isArray(anchors) && anchors.length < 4) {
+        if (Array.isArray(anchors) && anchors.length < CHOICE_COUNT) {
           try{
             const relaxedAnchors = await getChoiceAnchorsForQuestion(safePage, q, { startRatio: safeStart });
             if (Array.isArray(relaxedAnchors) && relaxedAnchors.length > anchors.length) {
@@ -3867,31 +4700,38 @@
         }
         if (Array.isArray(anchors) && anchors.length >= 2) {
           const activeAnchors = anchors;
+          choiceAnchorCount = activeAnchors.length;
           const ys = activeAnchors.map((a) => Number(a.yRatio)).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
           const ySpread = ys.length ? (ys[ys.length - 1] - ys[0]) : 0;
-          const verticalChoices = ySpread > 0.06;
+          const layoutHint = String(activeAnchors[0]?.layout || "").toLowerCase();
+          const verticalChoices = layoutHint === "vertical" || ySpread > 0.06;
+          const gridChoices = layoutHint === "grid" || (!verticalChoices && ySpread > 0.018);
           const maxChoiceBottom = Math.max(...activeAnchors.map((a) => a.yRatio + a.hRatio));
           if (Number.isFinite(maxChoiceBottom)) {
-            minEndByChoice = Math.max(safeStart + 0.16, Math.min(0.995, maxChoiceBottom + 0.05));
+            const choiceTextTailPad = verticalChoices
+              ? (mobileViewport ? 0.082 : 0.072)
+              : (gridChoices ? (mobileViewport ? 0.092 : 0.082) : (mobileViewport ? 0.078 : 0.068));
+            minEndByChoice = Math.max(safeStart + 0.16, Math.min(0.995, maxChoiceBottom + choiceTextTailPad));
             // 경계 탐지 실패 시 선택지 배치(가로/세로)에 맞춰 상한 여유를 차등 적용
             // 경계 미검출 fallback 상한: 세로 배열은 하단이 길어 다음 문항 혼입이 쉬워 더 타이트하게.
-            const tailPad = verticalChoices ? 0.014 : 0.012;
+            const tailPad = verticalChoices ? 0.036 : (gridChoices ? 0.044 : 0.032);
             maxEndByChoice = Math.max(safeStart + 0.18, Math.min(0.995, maxChoiceBottom + tailPad));
           }
-          const c4 = activeAnchors.find((a) => a.choice === 4) || anchors.find((a) => a.choice === 4);
-          if (c4 && Number.isFinite(c4.yRatio) && Number.isFinite(c4.hRatio)) {
-            choice4Bottom = Math.max(0, Math.min(1, c4.yRatio + c4.hRatio));
+          const lastChoice = activeAnchors.find((a) => a.choice === CHOICE_COUNT) || anchors.find((a) => a.choice === CHOICE_COUNT) || activeAnchors.at(-1);
+          if (lastChoice && Number.isFinite(lastChoice.yRatio) && Number.isFinite(lastChoice.hRatio)) {
+            lastChoiceBottom = Math.max(0, Math.min(1, lastChoice.yRatio + lastChoice.hRatio));
           }
+          // SOFTM-위치맵: 컷 하단 보정 기준을 4번 고정이 아니라 실제 선택지 수의 마지막 위치로 계산 - 2026-05-30
         }
       }catch(_){}
 
-      if (q < 100) {
+      if (q < QUESTION_COUNT) {
         try{
           provisionalBoundary = await getNextQuestionBoundaryRatioForPage(
             safePage,
             q,
             safeStart,
-            Number.isFinite(choice4Bottom) ? choice4Bottom : null
+            Number.isFinite(lastChoiceBottom) ? lastChoiceBottom : null
           );
         }catch(_){}
       }
@@ -3903,19 +4743,26 @@
 
       // 경계 적용: 선택지 하단보다 이르면 무시
       if (Number.isFinite(nextStartBoundaryRatio)) {
-        const endGapRatio = mobileViewport ? 0.012 : (lowConfidenceRange ? 0.018 : 0.015);
+        const endGapRatio = reliableAnchorBoundary ? (mobileViewport ? 0.008 : 0.008) : (mobileViewport ? 0.012 : (lowConfidenceRange ? 0.018 : 0.015));
         const capEnd = Math.min(0.995, Number(nextStartBoundaryRatio) - endGapRatio);
         if (capEnd > safeStart + 0.03) hardEndCapRatio = capEnd;
       } else if (Number.isFinite(mappedNextSamePage)) {
         // 실측 경계 탐지가 실패해도, 같은 페이지 q+1 맵 경계는 하드 상한으로 사용
-        const mapGapRatio = mobileViewport ? 0.012 : 0.015;
+        const mapGapRatio = reliableAnchorBoundary ? (mobileViewport ? 0.008 : 0.008) : (mobileViewport ? 0.012 : 0.015);
         const mapCap = Math.min(0.995, Number(mappedNextSamePage) - mapGapRatio);
         if (mapCap > safeStart + 0.03) hardEndCapRatio = mapCap;
       } else if (Number.isFinite(rangeNextBoundary)) {
-        const rangeGapRatio = mobileViewport ? 0.012 : 0.015;
+        const rangeGapRatio = reliableAnchorBoundary ? (mobileViewport ? 0.008 : 0.008) : (mobileViewport ? 0.012 : 0.015);
         const rangeCap = Math.min(0.995, Number(rangeNextBoundary) - rangeGapRatio);
         if (rangeCap > safeStart + 0.03) hardEndCapRatio = rangeCap;
       }
+      if (Number.isFinite(hardEndCapRatio) && Number.isFinite(lastChoiceBottom)) {
+        const choiceBottomGuard = Math.min(0.995, Number(lastChoiceBottom) + (mobileViewport ? 0.022 : 0.018));
+        if (hardEndCapRatio < choiceBottomGuard) {
+          hardEndCapRatio = null;
+        }
+      }
+      // SOFTM-위치맵: q90처럼 선택지 하단보다 이른 다음경계 오탐은 후속 클램프에서 재사용하지 않도록 제거 - 2026-05-30
       if (Number.isFinite(hardEndCapRatio) && !hasEndOverride) safeEnd = Math.min(safeEnd, hardEndCapRatio);
       // 경계 탐지 실패 시에는 선지 하단 기반 상한으로 다음 문항 혼입을 방지
       if (!Number.isFinite(hardEndCapRatio) && Number.isFinite(maxEndByChoice)) {
@@ -3923,18 +4770,15 @@
       }
 
       if (Number.isFinite(minEndByChoice)) {
-        if (Number.isFinite(hardEndCapRatio)) {
-          minEndByChoice = Math.min(minEndByChoice, hardEndCapRatio);
-        }
         safeEnd = Math.max(safeEnd, minEndByChoice);
       }
       // 핵심 규칙:
       // 1) 끝은 항상 q+1 이전 (hardEndCapRatio 이하)
-      // 2) 같은 범위 내에서는 ④ 선택지 하단이 보이도록 보장
-      if (Number.isFinite(hardEndCapRatio) && Number.isFinite(choice4Bottom) && !hasEndOverride) {
-        const c4Need = Math.min(0.995, choice4Bottom + (mobileViewport ? 0.022 : 0.018));
-        if (c4Need <= hardEndCapRatio) {
-          safeEnd = Math.max(safeEnd, c4Need);
+      // 2) 같은 범위 내에서는 마지막 선택지 하단이 보이도록 보장
+      if (Number.isFinite(hardEndCapRatio) && Number.isFinite(lastChoiceBottom) && !hasEndOverride) {
+        const lastChoiceNeed = Math.min(0.995, lastChoiceBottom + (mobileViewport ? 0.022 : 0.018));
+        if (lastChoiceNeed <= hardEndCapRatio) {
+          safeEnd = Math.max(safeEnd, lastChoiceNeed);
         }
         safeEnd = Math.min(safeEnd, hardEndCapRatio);
       }
@@ -3983,20 +4827,29 @@
       }
       // 라벨 기반 최종 경계 강제: q+1 문항번호 라벨이 보이면 항상 그 직전에서 컷.
       if (!hasEndOverride && Number.isFinite(strictNextLabelBoundary)) {
-          const labelGap = mobileViewport ? 0.012 : 0.016;
+        const labelGap = reliableAnchorBoundary ? (mobileViewport ? 0.008 : 0.008) : (mobileViewport ? 0.012 : 0.016);
         const labelCap = Math.min(0.995, Number(strictNextLabelBoundary) - labelGap);
         safeEnd = Math.min(safeEnd, labelCap);
       }
-      const minContentEnd = Number.isFinite(minEndByChoice)
+      const fallbackMinSpan = mobileViewport ? 0.30 : 0.24;
+      const sparseChoiceMinSpan = mobileViewport ? 0.38 : 0.32;
+      const incompleteChoiceEnd = choiceAnchorCount > 0 && choiceAnchorCount < CHOICE_COUNT
+        ? Math.min(0.995, safeStart + sparseChoiceMinSpan)
+        : null;
+      const minContentEndBase = Number.isFinite(minEndByChoice)
         ? Math.max(safeStart + 0.02, Number(minEndByChoice))
         : (
-          Number.isFinite(choice4Bottom)
-            ? Math.max(safeStart + 0.02, Math.min(0.995, Number(choice4Bottom) + (mobileViewport ? 0.02 : 0.016)))
-            : (safeStart + 0.10)
+          Number.isFinite(lastChoiceBottom)
+            ? Math.max(safeStart + 0.02, Math.min(0.995, Number(lastChoiceBottom) + (mobileViewport ? 0.02 : 0.016)))
+            : Math.min(0.995, safeStart + (choiceAnchorCount > 0 ? sparseChoiceMinSpan : fallbackMinSpan))
         );
+      const minContentEnd = Number.isFinite(incompleteChoiceEnd)
+        ? Math.max(minContentEndBase, incompleteChoiceEnd)
+        : minContentEndBase;
+      // SOFTM-위치맵: 문항 컷 하단 계산을 4번 선택지 고정에서 실제 마지막 선택지 기준으로 변경 - 2026-05-30
       // 절대 규칙: 페이지 내 "다음 문항(>q) 시작점" 이전으로 최종 캡.
       // 중간 분기에서 safeEnd가 늘어나더라도 마지막에 반드시 잘라낸다.
-      if (!hasEndOverride && q < 100) {
+      if (!hasEndOverride && q < QUESTION_COUNT) {
         try{
           const absoluteNextStart = await getNearestNextQuestionStartRatioForPage(safePage, q, safeStart);
           if (Number.isFinite(absoluteNextStart)) {
@@ -4026,7 +4879,7 @@
           );
         if (Number.isFinite(finalNextBoundary)) {
           finalNextBoundaryUsed = finalNextBoundary;
-          const finalGap = mobileViewport ? 0.012 : 0.022;
+          const finalGap = reliableAnchorBoundary ? (mobileViewport ? 0.008 : 0.008) : (mobileViewport ? 0.012 : 0.022);
           const finalCap = Math.min(0.995, finalNextBoundary - finalGap);
           if (finalCap >= minContentEnd) {
             safeEnd = Math.min(safeEnd, finalCap);
@@ -4039,6 +4892,12 @@
       // 최종 보장: 선택지 하단(특히 ④)이 잘리지 않도록 최소 하단을 보장한다.
       // 경계값이 이 최소 하단보다 이르면 오탐으로 보고 경계를 무시한다.
       safeEnd = Math.max(safeEnd, Math.min(0.995, minContentEnd));
+      if (!Number.isFinite(lastChoiceBottom) && !hasEndOverride) {
+        const sparseGuard = Math.min(0.995, safeStart + (choiceAnchorCount > 0 ? sparseChoiceMinSpan : fallbackMinSpan));
+        if (!Number.isFinite(finalNextBoundaryUsed) || sparseGuard < finalNextBoundaryUsed - 0.018) {
+          safeEnd = Math.max(safeEnd, sparseGuard);
+        }
+      }
       // render 단계 후처리에서 다시 잘리지 않도록 회차/문항 오버라이드를 최종 우선 적용
       if (qOverride) {
         if (Number.isFinite(qOverride.start)) {
@@ -4060,10 +4919,10 @@
         paddedTop = Math.max(paddedTop, startTopPx);
       }
       const bottomPadPx = Number.isFinite(labelNextBoundary)
-        ? 0
+        ? Math.max(3, Math.floor(singlePadPx * 0.35))
         : (
           Number.isFinite(finalNextBoundaryUsed)
-            ? Math.max(0, Math.floor(singlePadPx * 0.2))
+            ? Math.max(3, Math.floor(singlePadPx * 0.45))
             : singlePadPx
         );
       let paddedBottom = Math.min(fullCanvas.height, srcTop + srcHeight + bottomPadPx);
@@ -4074,29 +4933,29 @@
         paddedBottom = Math.min(paddedBottom, strictBottom);
       }
       // 다음 문항 시작점이 같은 페이지에 있으면 하단 패딩이 경계를 넘지 않도록 제한
-      const padBoundaryRatioRaw = Number.isFinite(hardEndCapRatio)
-        ? Number(hardEndCapRatio)
-        : (
-          Number.isFinite(finalNextBoundaryUsed)
-            ? Number(finalNextBoundaryUsed)
-            : (
-          Number.isFinite(nextStartBoundaryRatio)
-            ? Number(nextStartBoundaryRatio)
-            : (
-              Number.isFinite(mappedNextSamePage)
-              ? Number(mappedNextSamePage)
-                : null
-            )
-            )
-        );
+      const minVisibleEndForPadding = Math.max(safeStart + 0.02, Math.min(0.995, Number(minContentEnd) || safeEnd));
+      const pickPadBoundary = (...values) => {
+        for (const value of values){
+          if (!Number.isFinite(value)) continue;
+          const r = Math.max(0, Math.min(1, Number(value)));
+          if (r > minVisibleEndForPadding + 0.004) return r;
+        }
+        return null;
+      };
+      const padBoundaryRatioRaw = pickPadBoundary(
+        hardEndCapRatio,
+        finalNextBoundaryUsed,
+        nextStartBoundaryRatio,
+        mappedNextSamePage
+      );
       const padBoundaryRatio = Number.isFinite(padBoundaryRatioRaw)
         ? Math.max(0, Math.min(1, Number(padBoundaryRatioRaw)))
         : null;
       if (Number.isFinite(padBoundaryRatio) && !hasEndOverride) {
         const nextTopPx = Math.floor(fullCanvas.height * padBoundaryRatio);
         const nextGapPx = mobileViewport
-          ? Math.max(18, Math.floor(fullCanvas.height * 0.018))
-          : Math.max(12, Math.floor(fullCanvas.height * 0.012));
+          ? Math.max(10, Math.floor(fullCanvas.height * (reliableAnchorBoundary ? 0.008 : 0.018)))
+          : Math.max(8, Math.floor(fullCanvas.height * (reliableAnchorBoundary ? 0.006 : 0.012)));
         // 패딩 단계에서도 다음 문항 시작 경계를 절대 넘지 않게 강제
         paddedBottom = Math.min(paddedBottom, Math.max(srcTop + 1, nextTopPx - nextGapPx));
       }
@@ -4165,6 +5024,9 @@
       srcLeft, srcTop, srcWidth, srcHeight,
       0, 0, pdfCanvas.width, pdfCanvas.height
     );
+    if (state.viewMode === "single" && Number.isFinite(q)) {
+      await drawAnchorDebugMarkerSingle(q, safePage, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
+    }
     const selectedChoice = normalizeChoiceValue(state.answers[q]);
     if (state.viewMode === "single" && Number.isFinite(q) && Number.isFinite(selectedChoice)) {
       const visibleStartRatio = Math.max(0, Math.min(1, srcTop / Math.max(1, fullCanvas.height)));
@@ -4178,44 +5040,25 @@
       );
       if (token !== state.renderToken) return;
       if (sel) {
-        const sx = srcWidth / pdfCanvas.width;
-        const sy = srcHeight / pdfCanvas.height;
-        const ax = sel.xRatio * fullCanvas.width;
-        const ay = sel.yRatio * fullCanvas.height;
-        const aw = sel.wRatio * fullCanvas.width;
-        const ah = sel.hRatio * fullCanvas.height;
-        const dx = (ax - srcLeft) / sx;
-        const dy = (ay - srcTop) / sy;
-        const dw = Math.max(16, aw / sx);
-        const dh = Math.max(18, ah / sy);
-        const cx = dx + (dw * 0.5);
-        const cy = dy + (dh * 0.5);
-        const r = Math.max(13, Math.min(24, Math.max(dw, dh) * 0.65));
-        if (cx < -r || cx > (pdfCanvas.width + r) || cy < -r || cy > (pdfCanvas.height + r)) {
+        const projected = projectChoiceAnchorToCanvas(sel, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, pdfCanvas.width, pdfCanvas.height);
+        const cx = projected?.x;
+        const cy = projected?.y;
+        const r = projected?.r;
+        if (!projected) {
+          drawFallbackSelectedChoiceMarker(selectedChoice);
+        } else if (cx < -r || cx > (pdfCanvas.width + r) || cy < -r || cy > (pdfCanvas.height + r)) {
           // 탐지점이 컷 영역 밖이면 현재 화면 내에서라도 선택 마커가 보이도록 클램프한다.
           const ccx = Math.max(r + 6, Math.min(pdfCanvas.width - r - 6, cx));
           const ccy = Math.max(r + 6, Math.min(pdfCanvas.height - r - 6, cy));
-          pdfCtx.save();
-          pdfCtx.lineWidth = 3;
-          pdfCtx.strokeStyle = "#0a66d6";
-          pdfCtx.fillStyle = "rgba(10,102,214,0.22)";
-          pdfCtx.beginPath();
-          pdfCtx.arc(ccx, ccy, r, 0, Math.PI * 2);
-          pdfCtx.fill();
-          pdfCtx.stroke();
-          pdfCtx.restore();
+          drawSelectedChoiceCircle(pdfCtx, ccx, ccy, r);
         } else {
-          pdfCtx.save();
-          pdfCtx.lineWidth = 3;
-          pdfCtx.strokeStyle = "#0a66d6";
-          pdfCtx.fillStyle = "rgba(10,102,214,0.22)";
-          pdfCtx.beginPath();
-          pdfCtx.arc(cx, cy, r, 0, Math.PI * 2);
-          pdfCtx.fill();
-          pdfCtx.stroke();
-          pdfCtx.restore();
+          drawSelectedChoiceCircle(pdfCtx, cx, cy, r);
         }
+      } else {
+        drawFallbackSelectedChoiceMarker(selectedChoice);
       }
+      // SOFTM-위치맵: 선택 표시도 저장 앵커의 중심좌표를 그대로 사용해 문항번호 위에 체크되도록 보정 - 2026-05-30
+      drawSelectedChoiceBadge(selectedChoice);
     }
     if (state.viewMode === "single" && Number.isFinite(q)) {
       const gradeState = getViewerGradeState(q);
@@ -4238,7 +5081,8 @@
       fullHeightPx: fullCanvas.height
     };
     const nearTag = activeRange && activeRange.lowConfidence ? " · 근접모드" : "";
-    pdfStatus.textContent = `페이지 ${safePage}${Number.isFinite(q) ? ` · ${q}번` : ""} 표시 중${nearTag}`;
+    const displayQ = Number.isFinite(q) ? formatPrintedQuestionLabel(q) : "";
+    pdfStatus.textContent = `페이지 ${safePage}${displayQ ? ` · ${displayQ}번` : ""} 표시 중${nearTag}`;
     setPdfLoading(false);
     if (state.scrollTopOnModeChange) {
       scrollPdfViewportTo(0);
@@ -4430,7 +5274,8 @@
       }
       state.currentPdfPage = targetPage;
       const precision = mobileViewport ? "맵기준" : (located && located.exact ? "정확" : "근사");
-      pdfStatus.textContent = `전체 페이지 표시 중 · ${targetPage}페이지${Number.isFinite(targetQ) ? ` · ${targetQ}번` : ""} (${precision})`;
+      const displayQ = Number.isFinite(targetQ) ? formatPrintedQuestionLabel(targetQ) : "";
+      pdfStatus.textContent = `전체 페이지 표시 중 · ${targetPage}페이지${displayQ ? ` · ${displayQ}번` : ""} (${precision})`;
     }
     await redrawAllModeMarkers(pdf.numPages);
     state.allModeLastMarked = null;
@@ -4449,7 +5294,7 @@
     const maxScrollable = Math.max(0, pdfViewer.scrollHeight - pdfViewer.clientHeight);
     const targetTop = Math.max(0, Math.min(maxScrollable, Math.round(maxScrollable * ratio)));
     scrollPdfViewportTo(targetTop);
-    pdfStatus.textContent = `페이지 ${page} · ${q}번 위치로 이동`;
+    pdfStatus.textContent = `페이지 ${page} · ${formatPrintedQuestionLabel(q)}번 위치로 이동`;
   }
 
   function scrollPdfViewportTo(top){
@@ -4496,12 +5341,12 @@
     if (!Number.isFinite(q)) return null;
     const chosen = normalizeChoiceValue(state.answers[q]);
     const correct = getCorrectAnswer(q);
-    if (chosen == null || !Number.isFinite(correct)) return null;
+    if (chosen == null || !isKnownAnswerValue(correct)) return null;
     const card = getCard(q);
     const mark = card ? card.querySelector('[data-role="mark"]') : null;
     const graded = !!autoGradeEl.checked || !!(mark && (mark.classList.contains("ok") || mark.classList.contains("bad")));
     if (!graded) return null;
-    return chosen === correct ? "ok" : "bad";
+    return answerValueMatches(correct, chosen) ? "ok" : "bad";
   }
 
   async function resolveQuestionAnchorForMark(pageNo, q){
@@ -4656,6 +5501,216 @@
     ctx.drawImage(img, dx, dy, size, size);
   }
 
+  function drawSelectedChoiceBadge(choice){
+    if (!Number.isFinite(choice)) return;
+    const text = `선택 ${choice}`;
+    const padX = Math.max(10, pdfCanvas.width * 0.012);
+    const padY = Math.max(7, pdfCanvas.width * 0.008);
+    const fontSize = Math.max(22, Math.min(36, pdfCanvas.width * 0.021));
+    pdfCtx.save();
+    pdfCtx.font = `700 ${fontSize}px sans-serif`;
+    const width = pdfCtx.measureText(text).width + (padX * 2);
+    const height = fontSize + (padY * 2);
+    const x = pdfCanvas.width - width - Math.max(14, pdfCanvas.width * 0.016);
+    const y = Math.max(12, pdfCanvas.height * 0.02);
+    pdfCtx.fillStyle = "rgba(10,102,214,0.90)";
+    pdfCtx.strokeStyle = "rgba(255,255,255,0.96)";
+    pdfCtx.lineWidth = 2;
+    pdfCtx.beginPath();
+    pdfCtx.roundRect(x, y, width, height, Math.max(10, height * 0.32));
+    pdfCtx.fill();
+    pdfCtx.stroke();
+    pdfCtx.fillStyle = "#fff";
+    pdfCtx.textBaseline = "middle";
+    pdfCtx.fillText(text, x + padX, y + (height * 0.52));
+    pdfCtx.restore();
+  }
+
+  function drawFallbackSelectedChoiceMarker(choice){
+    if (!Number.isFinite(choice)) return false;
+    const positions = {
+      1: [0.18, 0.72],
+      2: [0.54, 0.72],
+      3: [0.18, 0.86],
+      4: [0.54, 0.86],
+      5: [0.18, 0.94],
+    };
+    const pos = positions[Math.max(1, Math.min(5, Math.trunc(choice)))];
+    if (!pos) return false;
+    const x = Math.max(28, Math.min(pdfCanvas.width - 28, pdfCanvas.width * pos[0]));
+    const y = Math.max(28, Math.min(pdfCanvas.height - 28, pdfCanvas.height * pos[1]));
+    const r = Math.max(17, Math.min(28, pdfCanvas.width * 0.018));
+    pdfCtx.save();
+    pdfCtx.lineWidth = 3;
+    pdfCtx.setLineDash([10, 6]);
+    pdfCtx.strokeStyle = "#0a66d6";
+    pdfCtx.fillStyle = "rgba(10,102,214,0.16)";
+    pdfCtx.beginPath();
+    pdfCtx.arc(x, y, r, 0, Math.PI * 2);
+    pdfCtx.fill();
+    pdfCtx.stroke();
+    pdfCtx.setLineDash([]);
+    pdfCtx.restore();
+    return true;
+  }
+
+  function getAnchorDebugStyle(source = ""){
+    const strong = String(source || "").toLowerCase() === "anchor";
+    return strong
+      ? {
+        stroke: "rgba(220,38,38,0.95)",
+        fill: "rgba(220,38,38,0.95)",
+        softFill: "rgba(220,38,38,0.10)",
+        lineWidth: 2,
+        dash: [8, 5],
+        label: "anchor"
+      }
+      : {
+        stroke: "rgba(220,90,90,0.46)",
+        fill: "rgba(220,90,90,0.62)",
+        softFill: "rgba(220,90,90,0.06)",
+        lineWidth: 1.5,
+        dash: [6, 7],
+        label: "pdf"
+      };
+  }
+
+  async function drawAnchorDebugMarkerSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight){
+    if (!ANCHOR_DEBUG || !Number.isFinite(q) || !Number.isFinite(pageNo)) return;
+    const pageMap = state.pdfNav.questionPageMap;
+    const ratioMap = state.pdfNav.questionTopRatioMap;
+    if (!Array.isArray(pageMap) || !Array.isArray(ratioMap)) return;
+    if (pageMap[q] !== pageNo || !Number.isFinite(ratioMap[q])) return;
+    const style = getAnchorDebugStyle(state.pdfNav.patternSource);
+    const yFull = Math.max(0, Math.min(fullCanvas.height, fullCanvas.height * Number(ratioMap[q])));
+    const sy = srcHeight / pdfCanvas.height;
+    const y = (yFull - srcTop) / sy;
+    if (!Number.isFinite(y) || y < -24 || y > pdfCanvas.height + 24) return;
+    const clampedY = Math.max(8, Math.min(pdfCanvas.height - 8, y));
+    pdfCtx.save();
+    pdfCtx.lineWidth = style.lineWidth;
+    pdfCtx.strokeStyle = style.stroke;
+    pdfCtx.fillStyle = style.fill;
+    pdfCtx.setLineDash(style.dash);
+    pdfCtx.beginPath();
+    pdfCtx.moveTo(0, clampedY);
+    pdfCtx.lineTo(pdfCanvas.width, clampedY);
+    pdfCtx.stroke();
+    pdfCtx.setLineDash([]);
+    pdfCtx.font = `700 ${Math.max(16, Math.min(26, pdfCanvas.width * 0.016))}px sans-serif`;
+    const printed = localQuestionNoToPrinted(q);
+    const questionLabel = Number.isFinite(printed) && printed !== q ? `${printed}번(앱 ${q})` : `${q}번`;
+    pdfCtx.fillText(`${questionLabel} ${style.label}`, Math.max(10, pdfCanvas.width * 0.015), Math.max(22, clampedY - 8));
+    pdfCtx.restore();
+    await drawChoiceAnchorDebugMarkersSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
+  }
+
+  function drawDebugChoiceCircle(ctx, x, y, label, options = {}){
+    if (!ctx || !Number.isFinite(x) || !Number.isFinite(y)) return;
+    const canvas = ctx.canvas;
+    const style = getAnchorDebugStyle(options.tone || options.sourceTone || "anchor");
+    const r = Math.max(17, Math.min(32, (canvas.width || 1000) * 0.0155));
+    const fontSize = Math.max(13, Math.min(24, (canvas.width || 1000) * 0.014));
+    ctx.save();
+    ctx.lineWidth = Math.max(style.lineWidth, r * (style.label === "anchor" ? 0.16 : 0.11));
+    ctx.strokeStyle = style.stroke;
+    ctx.fillStyle = style.softFill;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = style.fill;
+    ctx.font = `800 ${fontSize}px sans-serif`;
+    ctx.textBaseline = "middle";
+    const labelX = Math.max(4, Math.min((canvas.width || 0) - (fontSize * 4.5), x + r + 5));
+    const labelY = Math.max(fontSize, Math.min((canvas.height || 0) - fontSize, y - r * 0.6));
+    ctx.fillText(String(label || ""), labelX, labelY);
+    if (options.source) {
+      ctx.font = `700 ${Math.max(10, fontSize * 0.72)}px sans-serif`;
+      ctx.fillText(String(options.source).replace("anchor-", ""), labelX, labelY + fontSize * 0.85);
+    }
+    ctx.restore();
+  }
+
+  function isCenterBasedChoiceAnchor(anchor){
+    const mode = String(anchor?.anchorMode || "").toLowerCase();
+    const source = String(anchor?.source || "").toLowerCase();
+    return mode === "center" || source.includes("image");
+  }
+
+  function projectChoiceAnchorToCanvas(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, destWidth, destHeight){
+    if (!anchor || !fullCanvas) return null;
+    const fullWidth = Number(fullCanvas.width || 0);
+    const fullHeight = Number(fullCanvas.height || 0);
+    if (![fullWidth, fullHeight, srcWidth, srcHeight, destWidth, destHeight].every(Number.isFinite)) return null;
+    if (fullWidth <= 0 || fullHeight <= 0 || srcWidth <= 0 || srcHeight <= 0 || destWidth <= 0 || destHeight <= 0) return null;
+    const ax = Number(anchor.xRatio) * fullWidth;
+    const ay = Number(anchor.yRatio) * fullHeight;
+    const aw = Math.max(1, Number(anchor.wRatio || 0.012) * fullWidth);
+    const ah = Math.max(1, Number(anchor.hRatio || 0.012) * fullHeight);
+    if (![ax, ay, aw, ah].every(Number.isFinite)) return null;
+    const centerBased = isCenterBasedChoiceAnchor(anchor);
+    const centerX = centerBased ? ax : ax + (aw * 0.5);
+    const centerY = centerBased ? ay : ay + (ah * 0.5);
+    const sx = srcWidth / destWidth;
+    const sy = srcHeight / destHeight;
+    const x = (centerX - Number(srcLeft || 0)) / sx;
+    const y = (centerY - Number(srcTop || 0)) / sy;
+    const dw = Math.max(1, aw / sx);
+    const dh = Math.max(1, ah / sy);
+    const rawRadius = Math.max(Math.max(dw, dh) * (centerBased ? 1.18 : 0.78), destWidth * 0.0135);
+    const r = Math.max(18, Math.min(34, rawRadius));
+    return { x, y, r, centerBased };
+  }
+
+  function drawSelectedChoiceCircle(ctx, x, y, r){
+    if (!ctx || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(r)) return;
+    ctx.save();
+    ctx.lineWidth = Math.max(3, r * 0.16);
+    ctx.strokeStyle = "#0a66d6";
+    ctx.fillStyle = "rgba(10,102,214,0.22)";
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+  // SOFTM-위치맵: 이미지 기반 선택지 앵커는 중심좌표로 저장되므로 디버그/선택 표시 투영을 공통화 - 2026-05-30
+
+  async function drawChoiceAnchorDebugMarkersSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight){
+    if (!ANCHOR_DEBUG || !fullCanvas || !Number.isFinite(q) || !Number.isFinite(pageNo)) return;
+    let sourceTone = "anchor";
+    let list = getReliableStoredChoiceAnchors(state.pdfNav.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
+    if (!Array.isArray(list) || !list.length) {
+      sourceTone = "pdf";
+      const startRatio = Math.max(0, Math.min(1, Number(srcTop || 0) / Math.max(1, Number(fullCanvas.height || 1))));
+      const endRatio = Math.max(startRatio + 0.02, Math.min(1, (Number(srcTop || 0) + Number(srcHeight || 0)) / Math.max(1, Number(fullCanvas.height || 1))));
+      try{
+        list = await getChoiceAnchorsForQuestion(pageNo, q, { startRatio, endRatio });
+      }catch(_){
+        list = [];
+      }
+    }
+    if (!Array.isArray(list) || !list.length) return;
+    for (const item of list){
+      if (Number(item?.page || pageNo) !== Number(pageNo)) continue;
+      const choice = Number(item.choice);
+      const visibleChoiceCount = Math.max(1, Math.min(5, Number(state.pdfNav.choiceCount) || CHOICE_COUNT));
+      if (!Number.isInteger(choice) || choice < 1 || choice > visibleChoiceCount) continue;
+      const projected = projectChoiceAnchorToCanvas(item, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, pdfCanvas.width, pdfCanvas.height);
+      const x = projected?.x;
+      const y = projected?.y;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || x < -40 || x > pdfCanvas.width + 40 || y < -40 || y > pdfCanvas.height + 40) continue;
+      const printed = localQuestionNoToPrinted(q);
+      drawDebugChoiceCircle(pdfCtx, x, y, formatPrintedChoiceLabel(q, choice), {
+        source: Number.isFinite(printed) && printed !== q ? `앱${q} ${item.source || sourceTone}`.trim() : (item.source || sourceTone),
+        tone: sourceTone
+      });
+    }
+  }
+  // SOFTM-위치맵: anchorDebug 모드에서 선택지 좌표를 문제번호-선택지번호 붉은 원으로 표시해 위치맵 오류를 직접 검증 - 2026-05-30
+  // SOFTM-위치맵: 선택지 텍스트 앵커가 부족해도 선택 사실과 문제·문항 위치맵을 PDF 위에서 확인할 수 있게 표시 - 2026-05-30
+
   function cloneCanvas(src){
     if (!src) return null;
     const c = document.createElement("canvas");
@@ -4695,32 +5750,38 @@
     }catch(_){}
 
     const sel = await resolveSelectedChoiceAnchorWithRecovery(pageNo, q, selected, hint);
-    if (!sel) return false;
 
+    const fallbackPositions = {
+      1: [0.18, 0.72],
+      2: [0.54, 0.72],
+      3: [0.18, 0.86],
+      4: [0.54, 0.86],
+      5: [0.18, 0.94],
+    };
+    const fallbackPos = fallbackPositions[Math.max(1, Math.min(5, Math.trunc(selected)))] || fallbackPositions[1];
+    const startRatio = Number.isFinite(hint?.startRatio) ? hint.startRatio : 0.1;
+    const endRatio = Number.isFinite(hint?.endRatio) ? hint.endRatio : Math.min(1, startRatio + 0.34);
+    const projected = sel
+      ? projectChoiceAnchorToCanvas(
+        sel,
+        { width: meta.fullWidth, height: meta.fullHeight },
+        meta.srcLeft || 0,
+        0,
+        meta.srcWidth,
+        meta.fullHeight,
+        meta.destWidth,
+        meta.destHeight
+      )
+      : null;
     const sx = meta.srcWidth / meta.destWidth;
     const sy = meta.fullHeight / meta.destHeight;
-    const ax = sel.xRatio * meta.fullWidth;
-    const ay = sel.yRatio * meta.fullHeight;
-    const aw = sel.wRatio * meta.fullWidth;
-    const ah = sel.hRatio * meta.fullHeight;
-    const dx = (ax - meta.srcLeft) / sx;
-    const dy = ay / sy;
-    const dw = Math.max(14, aw / sx);
-    const dh = Math.max(16, ah / sy);
-    const cx = dx + (dw * 0.5);
-    const cy = dy + (dh * 0.5);
-    const r = Math.max(11, Math.min(22, Math.max(dw, dh) * 0.62));
+    const cx = projected ? projected.x : ((meta.srcWidth * fallbackPos[0]) / sx);
+    const cy = projected ? projected.y : ((meta.fullHeight * (startRatio + ((endRatio - startRatio) * fallbackPos[1]))) / sy);
+    const r = projected ? projected.r : Math.max(18, Math.min(32, canvas.width * 0.0135));
 
     const ctx = canvas.getContext("2d");
-    ctx.save();
-    ctx.lineWidth = 2.6;
-    ctx.strokeStyle = "#0a66d6";
-    ctx.fillStyle = "rgba(10,102,214,0.2)";
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
+    drawSelectedChoiceCircle(ctx, cx, cy, r);
+    // SOFTM-위치맵: 전체보기 선택 표시도 이미지 앵커 중심좌표를 사용하고 번호를 덮는 크기로 통일 - 2026-05-30
     return true;
   }
 
@@ -4731,6 +5792,75 @@
     }
     return Math.max(1, Math.min(totalPages, getPdfPageByQuestion(q)));
   }
+
+  function drawAnchorDebugMarkerAll(pageNo, q){
+    if (!ANCHOR_DEBUG || !Number.isFinite(pageNo) || !Number.isFinite(q)) return false;
+    const pageMap = state.pdfNav.questionPageMap;
+    const ratioMap = state.pdfNav.questionTopRatioMap;
+    if (!Array.isArray(pageMap) || !Array.isArray(ratioMap)) return false;
+    if (pageMap[q] !== pageNo || !Number.isFinite(ratioMap[q])) return false;
+    const canvas = state.allPageCanvases[pageNo];
+    const meta = state.allPageCanvasMeta[pageNo];
+    if (!canvas || !meta) return false;
+    const ctx = canvas.getContext("2d");
+    const sy = meta.fullHeight / Math.max(1, meta.destHeight);
+    const yFull = Math.max(0, Math.min(meta.fullHeight, meta.fullHeight * Number(ratioMap[q])));
+    const y = Math.max(6, Math.min(canvas.height - 6, yFull / sy));
+    const style = getAnchorDebugStyle(state.pdfNav.patternSource);
+    ctx.save();
+    ctx.lineWidth = Math.max(style.lineWidth, canvas.width * 0.0024);
+    ctx.strokeStyle = style.stroke;
+    ctx.fillStyle = style.fill;
+    ctx.setLineDash(style.dash);
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const fontSize = Math.max(14, Math.min(24, canvas.width * 0.018));
+    ctx.font = `700 ${fontSize}px sans-serif`;
+    const printed = localQuestionNoToPrinted(q);
+    const label = Number.isFinite(printed) && printed !== q ? `${printed}(앱${q})` : `${q}`;
+    ctx.fillText(`${label} ${style.label}`, Math.max(8, canvas.width * 0.018), Math.max(fontSize + 2, y - 6));
+    ctx.restore();
+    return true;
+  }
+
+  function drawChoiceAnchorDebugMarkersAll(pageNo, q){
+    if (!ANCHOR_DEBUG || !Number.isFinite(pageNo) || !Number.isFinite(q)) return false;
+    const list = getReliableStoredChoiceAnchors(state.pdfNav.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
+    if (!Array.isArray(list) || !list.length) return false;
+    const canvas = state.allPageCanvases[pageNo];
+    const meta = state.allPageCanvasMeta[pageNo];
+    if (!canvas || !meta) return false;
+    const ctx = canvas.getContext("2d");
+    let drawn = false;
+    for (const item of list){
+      if (Number(item?.page || pageNo) !== Number(pageNo)) continue;
+      const choice = Number(item.choice);
+      if (!Number.isInteger(choice) || choice < 1 || choice > Math.max(5, CHOICE_COUNT)) continue;
+      const projected = projectChoiceAnchorToCanvas(
+        item,
+        { width: meta.fullWidth, height: meta.fullHeight },
+        meta.srcLeft || 0,
+        0,
+        meta.srcWidth,
+        meta.fullHeight,
+        meta.destWidth,
+        meta.destHeight
+      );
+      const x = projected?.x;
+      const y = projected?.y;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || x < -40 || x > canvas.width + 40 || y < -40 || y > canvas.height + 40) continue;
+      const printed = localQuestionNoToPrinted(q);
+      drawDebugChoiceCircle(ctx, x, y, formatPrintedChoiceLabel(q, choice), {
+        source: Number.isFinite(printed) && printed !== q ? `앱${q} ${item.source || ""}`.trim() : item.source
+      });
+      drawn = true;
+    }
+    return drawn;
+  }
+  // SOFTM-위치맵: 전체보기에서도 문제·문항 위치맵 기준선을 페이지별로 표시해 앵커 정상 여부를 확인 - 2026-05-30
 
   async function drawAllModeGradeMarker(pageNo, q, gradeState){
     if (!Number.isFinite(pageNo) || !Number.isFinite(q) || !gradeState) return false;
@@ -4776,7 +5906,17 @@
     for (let p = 1; p <= totalPages; p++){
       restoreAllPageCanvas(p);
     }
-    for (let q = 1; q <= 100; q++){
+    if (ANCHOR_DEBUG) {
+      const pageMap = state.pdfNav.questionPageMap;
+      for (let q = 1; q <= QUESTION_COUNT; q++){
+        const pageNo = Array.isArray(pageMap) ? Number(pageMap[q]) : NaN;
+        if (!Number.isFinite(pageNo)) continue;
+        const safePage = Math.max(1, Math.min(totalPages, Math.floor(pageNo)));
+        drawAnchorDebugMarkerAll(safePage, q);
+        drawChoiceAnchorDebugMarkersAll(safePage, q);
+      }
+    }
+    for (let q = 1; q <= QUESTION_COUNT; q++){
       const selected = normalizeChoiceValue(state.answers[q]);
       if (!Number.isFinite(selected)) continue;
       const pageNo = getAllModePageForQuestion(q, totalPages);
@@ -4868,17 +6008,62 @@
   function loadPdfJsLib(){
     if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
     if (pdfJsLoaderPromise) return pdfJsLoaderPromise;
-    pdfJsLoaderPromise = new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-      script.onload = () => {
-        if (window.pdfjsLib) resolve(window.pdfjsLib);
-        else reject(new Error("pdf.js load failed"));
-      };
-      script.onerror = () => reject(new Error("pdf.js script error"));
-      document.head.appendChild(script);
-    });
+    if (typeof window.globalThis === "undefined") window.globalThis = window; // SOFTM-위치맵: 일부 내장 브라우저에서 PDF.js 전역 attach가 실패하지 않도록 globalThis 보강 - 2026-05-30
+    pdfJsLoaderPromise = (async () => {
+      const errors = [];
+      for (const src of PDFJS_SCRIPT_URLS){
+        try{
+          await loadScriptWithTimeout(src, 6000);
+          if (window.pdfjsLib) return window.pdfjsLib;
+          errors.push(`${src}: pdfjsLib 없음`);
+        }catch(err){
+          errors.push(`${src}: ${err && err.message ? err.message : "로드 실패"}`);
+        }
+      }
+      throw new Error(`pdf.js 로드 실패 (${errors.join(" / ")})`);
+    })();
     return pdfJsLoaderPromise;
+  }
+
+  function configurePdfJsWorker(pdfjsLib){
+    if (pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+    }
+    return pdfjsLib;
+  }
+
+  function loadScriptWithTimeout(src, timeoutMs){
+    return new Promise((resolve, reject) => {
+      const existing = Array.from(document.scripts).find((script) => script.src && script.src === new URL(src, window.location.href).href);
+      if (existing && existing.dataset.loaded === "1") {
+        resolve();
+        return;
+      }
+      const script = existing || document.createElement("script");
+      let done = false;
+      const timer = window.setTimeout(() => {
+        if (done) return;
+        done = true;
+        reject(new Error("시간 초과"));
+      }, timeoutMs);
+      script.onload = () => {
+        if (done) return;
+        done = true;
+        window.clearTimeout(timer);
+        script.dataset.loaded = "1";
+        resolve();
+      };
+      script.onerror = () => {
+        if (done) return;
+        done = true;
+        window.clearTimeout(timer);
+        reject(new Error("스크립트 오류"));
+      };
+      if (!existing) {
+        script.src = src;
+        document.head.appendChild(script);
+      }
+    });
   }
 
   function loadTesseractLib(){
@@ -4915,8 +6100,8 @@
     return null;
   }
 
-  async function getOcrQuestionStartRatiosForPage(pageNo){
-    const key = String(pageNo);
+  async function getOcrQuestionStartRatiosForPage(pageNo, questionStartNo = null){
+    const key = `${pageNo}|${questionStartNo || getActiveQuestionStartNo()}`;
     if (state.pageOcrQuestionStartCache[key]) return state.pageOcrQuestionStartCache[key];
 
     const resultMap = new Map();
@@ -4957,8 +6142,9 @@
         const xRatio = row.parts[0].x / ocrCanvas.width;
         if (xRatio > 0.45) continue;
         const lineText = row.parts.map(p => p.t).join(" ");
-        const qn = parseQuestionNumberFromOcrLine(lineText);
-        if (!Number.isFinite(qn) || qn < 1 || qn > 100) continue;
+        const label = parseQuestionNumberFromOcrLine(lineText);
+        const qn = mapPrintedQuestionNoToLocal(label, questionStartNo || getActiveQuestionStartNo());
+        if (!Number.isFinite(qn)) continue;
         const top = Math.max(0, Math.min(ocrCanvas.height - 1, row.parts[0].top));
         const ratio = top / ocrCanvas.height;
         if (!resultMap.has(qn) || ratio < resultMap.get(qn)) resultMap.set(qn, ratio);
@@ -4991,72 +6177,77 @@
   }
 
   function parseQuestionNumberFromLineStart(lineText){
-    const t = lineText.trim();
-    if (!t) return null;
-
-    // 문제 번호는 "3." 또는 "3번" 계열만 허용해 선택지 "3)" 오검출을 줄인다.
-    let m = t.match(/^\(?\s*(\d{1,3})\s*(?:번|[.])(?:\s+|$)/);
-    if (m) {
-      const q = Number(m[1]);
-      return q >= 1 && q <= 100 ? q : null;
-    }
-
-    m = t.match(/^제\s*(\d{1,3})\s*문\s*/);
-    if (m) {
-      const q = Number(m[1]);
-      return q >= 1 && q <= 100 ? q : null;
-    }
-
-    m = t.match(/^문(?:항|제)?\s*(\d{1,3})\s*/);
-    if (m) {
-      const q = Number(m[1]);
-      return q >= 1 && q <= 100 ? q : null;
-    }
-
-    return null;
+    const label = parseQuestionLabelFromLineStart(lineText);
+    return mapPrintedQuestionNoToLocal(label);
   }
 
   function normalizeChoiceValue(value){
     const n = Number(value);
     if (!Number.isFinite(n)) return null;
     const c = Math.trunc(n);
-    return (c >= 1 && c <= 4) ? c : null;
+    return (c >= 1 && c <= CHOICE_COUNT) ? c : null;
   }
+
+  function isReliableStoredChoiceAnchor(item){
+    if (!item || typeof item !== "object") return false;
+    const source = String(item.source || "").toLowerCase();
+    if (source.includes("geometry") || source.includes("fill")) return false;
+    const choice = Number(item.choice);
+    const x = Number(item.xRatio);
+    const y = Number(item.yRatio);
+    const confidence = item.confidence == null ? 1 : Number(item.confidence);
+    return Number.isInteger(choice)
+      && choice >= 1
+      && choice <= CHOICE_COUNT
+      && Number.isFinite(x)
+      && x >= 0
+      && x <= 1
+      && Number.isFinite(y)
+      && y >= 0
+      && y <= 1
+      && (!Number.isFinite(confidence) || confidence >= 0.45);
+  }
+
+  function getReliableStoredChoiceAnchors(list){
+    if (!Array.isArray(list)) return [];
+    return list.filter(isReliableStoredChoiceAnchor);
+  }
+  // SOFTM-위치맵: 저장 위치맵에서도 기하 추정/채움 좌표는 실제 선택지 앵커로 사용하지 않음 - 2026-05-30
 
   function parseChoiceNumberToken(token){
     const t = String(token || "").trim();
     if (!t) return null;
     const normalized = t.normalize("NFKC");
     const circled = {
-      "①": 1, "②": 2, "③": 3, "④": 4,
-      "❶": 1, "❷": 2, "❸": 3, "❹": 4,
-      "➀": 1, "➁": 2, "➂": 3, "➃": 4,
-      "➊": 1, "➋": 2, "➌": 3, "➍": 4,
-      "⓵": 1, "⓶": 2, "⓷": 3, "⓸": 4,
-      "㈠": 1, "㈡": 2, "㈢": 3, "㈣": 4,
-      "㊀": 1, "㊁": 2, "㊂": 3, "㊃": 4,
-      "㉠": 1, "㉡": 2, "㉢": 3, "㉣": 4
+      "①": 1, "②": 2, "③": 3, "④": 4, "⑤": 5,
+      "❶": 1, "❷": 2, "❸": 3, "❹": 4, "❺": 5,
+      "➀": 1, "➁": 2, "➂": 3, "➃": 4, "➄": 5,
+      "➊": 1, "➋": 2, "➌": 3, "➍": 4, "➎": 5,
+      "⓵": 1, "⓶": 2, "⓷": 3, "⓸": 4, "⓹": 5,
+      "㈠": 1, "㈡": 2, "㈢": 3, "㈣": 4, "㈤": 5,
+      "㊀": 1, "㊁": 2, "㊂": 3, "㊃": 4, "㊄": 5,
+      "㉠": 1, "㉡": 2, "㉢": 3, "㉣": 4, "㉤": 5
     };
     if (circled[t]) return circled[t];
     if (circled[normalized]) return circled[normalized];
-    let m = t.match(/^([①②③④❶❷❸❹➀➁➂➃➊➋➌➍⓵⓶⓷⓸㈠㈡㈢㈣㊀㊁㊂㊃㉠㉡㉢㉣])/);
+    let m = t.match(/^([①②③④⑤❶❷❸❹❺➀➁➂➃➄➊➋➌➍➎⓵⓶⓷⓸⓹㈠㈡㈢㈣㈤㊀㊁㊂㊃㊄㉠㉡㉢㉣㉤])/);
     if (m && circled[m[1]]) return circled[m[1]];
-    m = normalized.match(/^([①②③④❶❷❸❹➀➁➂➃➊➋➌➍⓵⓶⓷⓸㈠㈡㈢㈣㊀㊁㊂㊃㉠㉡㉢㉣])/);
+    m = normalized.match(/^([①②③④⑤❶❷❸❹❺➀➁➂➃➄➊➋➌➍➎⓵⓶⓷⓸⓹㈠㈡㈢㈣㈤㊀㊁㊂㊃㊄㉠㉡㉢㉣㉤])/);
     if (m && circled[m[1]]) return circled[m[1]];
-    m = t.match(/^([1-4])\s*[.)]/);
+    m = t.match(/^([1-5])\s*[.)]/);
     if (m) return Number(m[1]);
-    m = normalized.match(/^\(([1-4])\)$/);
+    m = normalized.match(/^\(([1-5])\)$/);
     if (m) return Number(m[1]);
-    m = normalized.match(/^\[([1-4])\]$/);
+    m = normalized.match(/^\[([1-5])\]$/);
     if (m) return Number(m[1]);
-    m = normalized.match(/^([1-4])\s*[.)]$/);
+    m = normalized.match(/^([1-5])\s*[.)]$/);
     if (m) return Number(m[1]);
     return null;
   }
 
   function parseWeakChoiceDigitToken(token){
     const t = String(token || "").trim().normalize("NFKC");
-    if (/^[1-4]$/.test(t)) return Number(t);
+    if (/^[1-5]$/.test(t)) return Number(t);
     return null;
   }
 
@@ -5078,6 +6269,35 @@
     const hasOptions = !!(options && typeof options === "object");
     const cacheKey = `${pageNo}:${q}`;
     if (!hasOptions && state.questionChoiceAnchorCache[cacheKey]) return state.questionChoiceAnchorCache[cacheKey];
+    const storedChoices = getReliableStoredChoiceAnchors(state.pdfNav.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
+    if (Array.isArray(storedChoices) && storedChoices.length) {
+      const optStart = (hasOptions && Number.isFinite(options.startRatio)) ? Math.max(0, Math.min(1, Number(options.startRatio))) : null;
+      const optEnd = (hasOptions && Number.isFinite(options.endRatio)) ? Math.max(0, Math.min(1, Number(options.endRatio))) : null;
+      const fromMap = storedChoices
+        .filter((item) => Number(item?.page || pageNo) === Number(pageNo))
+        .filter((item) => {
+          const y = Number(item?.yRatio);
+          if (!Number.isFinite(y)) return false;
+          if (Number.isFinite(optStart) && y < optStart - 0.035) return false;
+          if (Number.isFinite(optEnd) && y > optEnd + 0.08) return false;
+          return true;
+        })
+        .map((item) => ({
+          choice: Number(item.choice),
+          xRatio: Math.max(0, Math.min(1, Number(item.xRatio))),
+          yRatio: Math.max(0, Math.min(1, Number(item.yRatio))),
+          wRatio: Math.max(0.004, Math.min(0.2, Number(item.wRatio) || 0.018)),
+          hRatio: Math.max(0.006, Math.min(0.15, Number(item.hRatio) || 0.018)),
+          source: item.source || "anchor-map",
+        }))
+        .filter((item) => Number.isFinite(item.choice) && item.choice >= 1 && item.choice <= CHOICE_COUNT)
+        .sort((a, b) => a.choice - b.choice);
+      if (fromMap.length) {
+        if (!hasOptions) state.questionChoiceAnchorCache[cacheKey] = fromMap;
+        return fromMap;
+      }
+    }
+    // SOFTM-위치맵: 저장된 선택지(1~5) 좌표가 있으면 깨진 PDF 텍스트/OCR보다 우선 사용 - 2026-05-30
 
     const pageRatios = await getQuestionRatiosForPage(pageNo);
     let startRatioBase = (pageRatios && pageRatios.has(q)) ? pageRatios.get(q) : null;
@@ -5136,7 +6356,7 @@
     if (endRatio >= 0.999) {
       const pageMap = state.pdfNav.questionPageMap;
       const ratioMap = state.pdfNav.questionTopRatioMap;
-      if (Array.isArray(pageMap) && Array.isArray(ratioMap) && q < 100 && pageMap[q + 1] === pageNo && Number.isFinite(ratioMap[q + 1])) {
+      if (Array.isArray(pageMap) && Array.isArray(ratioMap) && q < QUESTION_COUNT && pageMap[q + 1] === pageNo && Number.isFinite(ratioMap[q + 1])) {
         endRatio = Math.max(startRatio + 0.02, Math.min(1, Number(ratioMap[q + 1]) - 0.004));
       }
     }
@@ -5172,7 +6392,7 @@
       const startGuard = hasOptions ? 0.002 : 0.014;
       if (topRatio < startRatio + startGuard) continue;
       const compact = rawToken.replace(/\s+/g, "");
-      const numericToken = /^\(?[1-4][.)]/.test(compact);
+      const numericToken = /^\(?[1-5][.)]/.test(compact);
       if (numericToken && (x / pageW) < 0.16 && topRatio < startRatio + 0.09) continue;
       if (topRatio < startRatio - 0.01 || topRatio > endRatio + 0.01) continue;
 
@@ -5193,7 +6413,7 @@
 
     const pickChoices = (list, targetYRatio = null) => {
       const picked = [];
-      for (let c = 1; c <= 4; c++){
+      for (let c = 1; c <= CHOICE_COUNT; c++){
         const rows = list.filter(a => a.choice === c).sort((a, b) => {
           if (targetYRatio != null) {
             const da = Math.abs(a.yRatio - targetYRatio);
@@ -5229,18 +6449,18 @@
     }
     let result = hintedResult && hintedResult.length ? hintedResult : pickChoices(refined);
     // 2차: 선지 누락 시 전체 앵커로 재탐색(세로 배열/다단 배치 대응)
-    if (result.length < 4) {
+    if (result.length < CHOICE_COUNT) {
       result = pickChoices(anchors);
     }
     // 2.5차: ③④ 누락 등 강한 토큰 부족 시, 약한 토큰(단독 숫자)을 위치 제약으로 보강한다.
-    if (result.length < 4 && weakAnchors.length) {
+    if (result.length < CHOICE_COUNT && weakAnchors.length) {
       const existingChoices = new Set(result.map((a) => a.choice));
       const xSeeds = result.length ? result.map((a) => a.xRatio) : anchors.map((a) => a.xRatio);
       const yMin = (result.length ? Math.min(...result.map((a) => a.yRatio)) : Math.min(...anchors.map((a) => a.yRatio), 0));
       const yMax = (result.length ? Math.max(...result.map((a) => a.yRatio)) : Math.max(...anchors.map((a) => a.yRatio), 1));
       const combined = result.slice();
 
-      for (let c = 1; c <= 4; c++){
+      for (let c = 1; c <= CHOICE_COUNT; c++){
         if (existingChoices.has(c)) continue;
         let rows = weakAnchors.filter((a) => a.choice === c);
         if (xSeeds.length) {
@@ -5317,7 +6537,7 @@
       if (!Number.isFinite(qStart)) return null;
       qStart = Math.max(0, Math.min(1, qStart));
       qEnd = 1;
-      if (q < 100) {
+      if (q < QUESTION_COUNT) {
         const nextStart = await getQuestionStartRatioForPage(pageNo, q + 1);
         if (Number.isFinite(nextStart) && nextStart > qStart + 0.03) {
           qEnd = Math.max(qStart + 0.06, Math.min(1, nextStart - 0.004));
@@ -5461,6 +6681,7 @@
     for (const row of rows){
       row.parts.sort((a, b) => a.x - b.x);
       if (row.parts.length) startXs.push(row.parts[0].x);
+      row.line = row.parts.map(p => p.s).join(" ").replace(/\s+/g, " ").trim();
     }
     const minStartX = startXs.length ? Math.min(...startXs) : 0;
     const leftThreshold = minStartX + 240;
@@ -5474,10 +6695,9 @@
     const ySpan = Math.max(1, maxY - minY);
 
     for (const row of rows){
-      row.parts.sort((a, b) => a.x - b.x);
       if (!row.parts.length) continue;
       if (row.parts[0].x > leftThreshold) continue;
-      const lineText = row.parts.map(p => p.s).join(" ").replace(/\s+/g, " ").trim();
+      const lineText = row.line;
       const q = parseQuestionNumberFromLineStart(lineText);
       if (q != null){
         found.add(q);
@@ -5506,14 +6726,14 @@
 
       anchors.push({ page: pageNo, q: picked });
       prevQ = picked;
-      if (prevQ >= 100) break;
+      if (prevQ >= QUESTION_COUNT) break;
     }
 
     // 최소 앵커가 부족하면 기본 균등 분배로 fallback
     if (anchors.length < 2){
-      const result = Array(101).fill(1);
-      const qpp = Math.max(1, Math.round(100 / Math.max(1, totalPages)));
-      for (let q = 1; q <= 100; q++){
+      const result = Array(QUESTION_COUNT + 1).fill(1);
+      const qpp = Math.max(1, Math.round(QUESTION_COUNT / Math.max(1, totalPages)));
+      for (let q = 1; q <= QUESTION_COUNT; q++){
         result[q] = Math.min(totalPages, 1 + Math.floor((q - 1) / qpp));
       }
       return result;
@@ -5529,17 +6749,17 @@
     }
 
     // 첫 앵커가 늦게 잡혀도 초반 문항(1~)은 1페이지부터 시작하도록 기본값을 1로 둔다.
-    const result = Array(101).fill(1);
+    const result = Array(QUESTION_COUNT + 1).fill(1);
     for (let i = 0; i < normalizedAnchors.length; i++){
       const cur = normalizedAnchors[i];
       const next = normalizedAnchors[i + 1];
-      const endQ = next ? Math.max(cur.q, next.q - 1) : 100;
+      const endQ = next ? Math.max(cur.q, next.q - 1) : QUESTION_COUNT;
       for (let q = cur.q; q <= endQ; q++){
         result[q] = cur.page;
       }
     }
 
-    for (let q = 2; q <= 100; q++){
+    for (let q = 2; q <= QUESTION_COUNT; q++){
       result[q] = Math.max(result[q], result[q - 1]);
       result[q] = Math.min(totalPages, result[q]);
     }
@@ -5547,14 +6767,35 @@
     return result;
   }
 
+  /* SOFTM-패턴 시작: 저장된 UI 매핑의 신뢰도까지 확인해 실시간 분석 경로를 안정화 - 2026-05-29 */
   function ensureAutoPdfMap(){
-    if (applyPresetMapIfAvailable()) return;
     const currentSource = getCurrentPdfSourceKey();
-    if (state.pdfNav.mode === "auto" && state.pdfNav.source === currentSource && Array.isArray(state.pdfNav.questionPageMap)) {
+    const confidence = Number(state.pdfNav.confidence);
+    const currentAutoMap = state.pdfNav.mode === "auto"
+      && state.pdfNav.source === currentSource
+      && state.pdfNav.version === PDF_MAP_VERSION
+      && Array.isArray(state.pdfNav.questionPageMap)
+      && (state.pdfNav.patternSource === "anchor" || state.pdfNav.patternSource === "realtime" || state.pdfNav.patternSource === "cache")
+      && Number.isFinite(confidence)
+      && confidence >= 0.32;
+    if (currentAutoMap) {
+      updatePdfInfo();
+      loadQuestionAnchorPattern({ force: true }).then((anchorPattern) => {
+        if (shouldRefreshFromAnchorPattern(anchorPattern)) {
+          applyPdfPatternResult(anchorPattern, "anchor");
+          navigatePdfToQuestion(state.focusQ || 1);
+        }
+      }).catch(() => {});
       return;
+    }
+    if (pdfStatus) {
+      pdfStatus.dataset.patternSource = "scheduled";
+      pdfStatus.dataset.patternConfidence = "";
     }
     buildAutoPdfMap({ silent: true });
   }
+  /* SOFTM-패턴 끝 */
+  // SOFTM-ANCHOR: 저장된 실시간/캐시 매핑이 있어도 anchorMap이 있으면 비동기로 우선 교체 - 2026-05-30
 
   async function buildAutoPdfMap(options = {}){
     const silent = options.silent === true;
@@ -5562,10 +6803,43 @@
       if (silent && pdfInfo) {
         pdfInfo.textContent = "왼쪽 문제 / 오른쪽 답 체크 · 페이지이동 ON (자동 매핑 분석 중...)";
       }
+      if (pdfStatus) {
+        pdfStatus.dataset.patternSource = "analyzing";
+        pdfStatus.dataset.patternConfidence = "";
+      }
+      const anchorPattern = await loadQuestionAnchorPattern({ force: true });
+      if (isUsablePdfPatternResult(anchorPattern, { allowLowConfidence: true })) {
+        applyPdfPatternResult(anchorPattern, "anchor");
+        navigatePdfToQuestion(state.focusQ || 1);
+        if (!silent) alert("문제·문항 위치맵을 적용했습니다.");
+        return;
+      }
       const pdf = await ensurePdfDocument();
+      const livePattern = await analyzePdfPattern(pdf, { allowOcr: !silent });
+      if (isUsablePdfPatternResult(livePattern)) {
+        applyPdfPatternResult(livePattern, "realtime");
+        writePdfPatternCache(livePattern);
+        navigatePdfToQuestion(state.focusQ || 1);
+        if (!silent) alert("PDF 실시간 패턴 분석이 완료되었습니다.");
+        return;
+      }
+
+      const cachedPattern = readPdfPatternCache();
+      if (cachedPattern) {
+        applyPdfPatternResult(cachedPattern, "cache");
+        navigatePdfToQuestion(state.focusQ || 1);
+        if (!silent) alert("저장된 PDF 패턴 캐시를 적용했습니다.");
+        return;
+      }
+
+      if (applyPresetMapIfAvailable()) {
+        navigatePdfToQuestion(state.focusQ || 1);
+        if (!silent) alert("기본 패턴 fallback을 적용했습니다.");
+        return;
+      }
+
       const startsByPage = {};
       const ratiosByPage = {};
-
       for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++){
         const layer = await getQuestionPageTextLayer(pageNo);
         const detected = extractQuestionStartsFromItems(layer.items || []);
@@ -5574,42 +6848,43 @@
       }
 
       const normalized = buildQuestionPageMapFromPageStarts(startsByPage, pdf.numPages);
-      const ratioMap = Array(101).fill(0.12);
-      for (let q = 1; q <= 100; q++){
+      const ratioMap = Array(QUESTION_COUNT + 1).fill(0.12);
+      for (let q = 1; q <= QUESTION_COUNT; q++){
         const p = normalized[q];
         const byQ = ratiosByPage[p];
-        if (byQ && byQ.has(q)) {
-          ratioMap[q] = byQ.get(q);
-          continue;
-        }
-        if (byQ && byQ.size > 0){
-          let nearestQ = null;
-          for (const k of byQ.keys()){
-            if (nearestQ == null || Math.abs(k - q) < Math.abs(nearestQ - q)) nearestQ = k;
-          }
-          if (nearestQ != null) ratioMap[q] = byQ.get(nearestQ);
-        }
+        if (byQ && byQ.has(q)) ratioMap[q] = byQ.get(q);
       }
-
       state.pdfNav.enabled = true;
       state.pdfNav.mode = "auto";
       state.pdfNav.questionPageMap = normalized;
       state.pdfNav.questionTopRatioMap = ratioMap;
-      state.questionCropRangeCache = {};
-      state.pageTextLayerCache = {};
-      state.locateQuestionCache = {};
+      state.pdfNav.patternSource = "legacy";
+      state.pdfNav.pageCount = pdf.numPages || null;
+      state.pdfNav.questionCount = QUESTION_COUNT;
+      state.pdfNav.choiceCount = CHOICE_COUNT;
+      state.pdfNav.questionStartNo = QUESTION_START_NO || 1;
+      state.pdfNav.questionEndNo = QUESTION_END_NO || (state.pdfNav.questionStartNo + QUESTION_COUNT - 1);
+      state.pdfNav.printedQuestionNoMap = null;
+      state.pdfNav.contentBands = null;
+      state.pdfNav.footerBand = null;
+      state.pdfNav.confidence = 0.2;
+      clearPdfAnalysisCaches();
       state.pdfNav.source = getCurrentPdfSourceKey();
+      state.pdfNav.generatedAt = new Date().toISOString(); // SOFTM-위치맵: legacy 자동 매핑도 저장 캐시의 생성 기준을 명확히 기록 - 2026-05-30
       state.pdfNav.version = PDF_MAP_VERSION;
       updatePdfInfo();
       navigatePdfToQuestion(state.focusQ || 1);
       saveUi();
       if (!silent) alert("PDF 자동 매핑이 완료되었습니다.");
     }catch (e){
+      console.warn("[pdf-pattern] 자동 패턴 분석 실패", e);
       state.pdfNav.mode = "basic";
       state.pdfNav.questionPageMap = null;
       state.pdfNav.questionTopRatioMap = null;
+      state.pdfNav.generatedAt = null; // SOFTM-위치맵: 자동 매핑 실패 시 이전 위치맵 생성 시각을 제거 - 2026-05-30
       state.questionCropRangeCache = {};
       state.pageTextLayerCache = {};
+      state.pageTextRowsCache = {};
       state.locateQuestionCache = {};
       if (!silent) alert("PDF 자동 매핑에 실패했습니다.");
       updatePdfInfo();
@@ -5631,14 +6906,14 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) { saveHint.textContent = "저장 상태: 없음"; return; }
       const arr = JSON.parse(raw);
-      if (!Array.isArray(arr) || arr.length < 101) { saveHint.textContent = "저장 상태: 형식 오류"; return; }
-      state.answers = arr.slice(0,101);
-      for (let q = 1; q <= 100; q++){
+      if (!Array.isArray(arr) || arr.length < QUESTION_COUNT + 1) { saveHint.textContent = "저장 상태: 형식 오류"; return; }
+      state.answers = arr.slice(0, QUESTION_COUNT + 1);
+      for (let q = 1; q <= QUESTION_COUNT; q++){
         const n = normalizeChoiceValue(state.answers[q]);
         state.answers[q] = Number.isFinite(n) ? n : null;
       }
 
-      for(let q=1; q<=100; q++){
+      for(let q=1; q<=QUESTION_COUNT; q++){
         const a = state.answers[q];
         if (a == null) continue;
         const card = getCard(q);
@@ -5658,7 +6933,7 @@
       const raw = localStorage.getItem(STORAGE_BOOKMARK_KEY);
       const bag = raw ? JSON.parse(raw) : {};
       const list = [];
-      for (let q = 1; q <= 100; q++){
+      for (let q = 1; q <= QUESTION_COUNT; q++){
         if (state.bookmarks[q]) list.push(q);
       }
       bag[getBookmarkScopeId()] = list;
@@ -5667,7 +6942,7 @@
   }
   function loadBookmarks(){
     try{
-      state.bookmarks = Array(101).fill(false);
+      state.bookmarks = Array(QUESTION_COUNT + 1).fill(false);
       const raw = localStorage.getItem(STORAGE_BOOKMARK_KEY);
       if (!raw) return;
       const bag = JSON.parse(raw);
@@ -5675,10 +6950,10 @@
       if (!Array.isArray(list)) return;
       for (const q of list){
         const n = Number(q);
-        if (Number.isFinite(n) && n >= 1 && n <= 100) state.bookmarks[n] = true;
+        if (Number.isFinite(n) && n >= 1 && n <= QUESTION_COUNT) state.bookmarks[n] = true;
       }
     }catch(_){
-      state.bookmarks = Array(101).fill(false);
+      state.bookmarks = Array(QUESTION_COUNT + 1).fill(false);
     }
   }
   function updateBookmarkUi(q){
@@ -5686,17 +6961,18 @@
     const on = !!state.bookmarks[target];
     btnBookmark.classList.toggle("active", on);
     btnBookmark.setAttribute("aria-pressed", on ? "true" : "false");
-    btnBookmark.title = on ? `${target}번 북마크 해제` : `${target}번 북마크`;
+    const label = formatPrintedQuestionLabel(target);
+    btnBookmark.title = on ? `${label}번 북마크 해제` : `${label}번 북마크`;
     if (mobileBookmarkBtn){
       mobileBookmarkBtn.classList.toggle("active", on);
       mobileBookmarkBtn.setAttribute("aria-pressed", on ? "true" : "false");
-      mobileBookmarkBtn.title = on ? `${target}번 북마크 해제` : `${target}번 북마크`;
+      mobileBookmarkBtn.title = on ? `${label}번 북마크 해제` : `${label}번 북마크`;
     }
   }
 
   function isWrongFilterAvailable(){
     if (autoGradeEl.checked) return true;
-    for (let q = 1; q <= 100; q++){
+    for (let q = 1; q <= QUESTION_COUNT; q++){
       const card = getCard(q);
       const mark = card ? card.querySelector('[data-role="mark"]') : null;
       if (mark && (mark.classList.contains("ok") || mark.classList.contains("bad"))) return true;
@@ -5718,7 +6994,7 @@
 
   function toggleBookmark(q){
     const target = Number(q);
-    if (!Number.isFinite(target) || target < 1 || target > 100) return;
+    if (!Number.isFinite(target) || target < 1 || target > QUESTION_COUNT) return;
     state.bookmarks[target] = !state.bookmarks[target];
     const card = getCard(target);
     if (card) card.classList.toggle("bookmarked", !!state.bookmarks[target]);
@@ -5741,7 +7017,7 @@
   }
 
   function applyFilter(){
-    for(let q=1; q<=100; q++){
+    for(let q=1; q<=QUESTION_COUNT; q++){
       const card = getCard(q);
       const chosen = normalizeChoiceValue(state.answers[q]);
       const correct = getCorrectAnswer(q);
@@ -5749,7 +7025,7 @@
       let show = true;
 
       if (state.filter === "blank") show = (chosen == null);
-      else if (state.filter === "wrong") show = (chosen != null && Number.isFinite(correct) && chosen !== correct);
+      else if (state.filter === "wrong") show = (chosen != null && isKnownAnswerValue(correct) && !answerValueMatches(correct, chosen));
       else if (state.filter === "bookmark") show = !!state.bookmarks[q];
 
       card.classList.toggle("hidden", !show);
@@ -5757,7 +7033,7 @@
   }
 
   function firstVisibleQuestion(){
-    for(let q=1; q<=100; q++){
+    for(let q=1; q<=QUESTION_COUNT; q++){
       const card = getCard(q);
       if (!card.classList.contains("hidden")) return q;
     }
@@ -5771,7 +7047,7 @@
   // ====== UI 생성 ======
   function buildGrid(){
     const frag = document.createDocumentFragment();
-    for(let q=1; q<=100; q++){
+    for(let q=1; q<=QUESTION_COUNT; q++){
       const card = document.createElement("div");
       card.className = "qcard";
       card.dataset.q = String(q);
@@ -5784,7 +7060,7 @@
 
       const qnum = document.createElement("div");
       qnum.className = "qnum";
-      qnum.textContent = `${q}번`;
+      qnum.textContent = `${formatPrintedQuestionLabel(q)}번`;
 
       const qbm = document.createElement("div");
       qbm.className = "qbm";
@@ -5802,9 +7078,10 @@
 
       const choices = document.createElement("div");
       choices.className = "choices";
+      choices.style.gridTemplateColumns = `repeat(${CHOICE_COUNT}, 1fr)`;
 
-      // 기본 1~4 선택 UI
-      for(let c=1; c<=4; c++){
+      // 기본 1~5 선택 UI
+      for(let c=1; c<=CHOICE_COUNT; c++){
         const lab = document.createElement("label");
         lab.className = "choice";
         lab.dataset.q = String(q);
@@ -5866,11 +7143,11 @@
     } else if (state.viewMode === "all") {
       refreshAllModeMarkersWithoutScroll();
     }
-    mobileQNow.textContent = `${q}번`;
-    if (currentQInfo) currentQInfo.textContent = `${q}번`;
+    mobileQNow.textContent = `${formatPrintedQuestionLabel(q)}번`;
+    if (currentQInfo) currentQInfo.textContent = `${formatPrintedQuestionLabel(q)}번`;
     updateMobileChoiceButtons();
     updateBookmarkUi(q);
-    for(let i=1;i<=100;i++){
+    for(let i=1;i<=QUESTION_COUNT;i++){
       getCard(i).classList.toggle("focus", i===q);
     }
     if (scroll){
@@ -5975,7 +7252,7 @@
 
   function visibleQuestions(){
     const arr = [];
-    for(let q=1;q<=100;q++){
+    for(let q=1;q<=QUESTION_COUNT;q++){
       const card = getCard(q);
       if (!card.classList.contains("hidden")) arr.push(q);
     }
@@ -6022,23 +7299,25 @@
   function updateMobileChoiceButtons(){
     const q = state.focusQ;
     const selected = Number.isFinite(q) ? normalizeChoiceValue(state.answers[q]) : null;
-    for (let c = 1; c <= 4; c++){
+    for (let c = 1; c <= 5; c++){
       const btn = document.getElementById(`mobileChoice${c}`);
       if (!btn) continue;
+      btn.style.display = c <= CHOICE_COUNT ? "" : "none";
       const on = selected === c;
       btn.classList.toggle("active", on);
       btn.setAttribute("aria-pressed", on ? "true" : "false");
     }
   }
+  // SOFTM-위치맵: 모바일 선택 버튼 표시 범위를 선택지 1~5까지 동적으로 맞춤 - 2026-05-30
 
   function setFocusQuestionSilently(q){
-    if (!Number.isFinite(q) || q < 1 || q > 100) return;
+    if (!Number.isFinite(q) || q < 1 || q > QUESTION_COUNT) return;
     state.focusQ = q;
-    mobileQNow.textContent = `${q}번`;
-    if (currentQInfo) currentQInfo.textContent = `${q}번`;
+    mobileQNow.textContent = `${formatPrintedQuestionLabel(q)}번`;
+    if (currentQInfo) currentQInfo.textContent = `${formatPrintedQuestionLabel(q)}번`;
     updateMobileChoiceButtons();
     updateBookmarkUi(q);
-    for (let i = 1; i <= 100; i++){
+    for (let i = 1; i <= QUESTION_COUNT; i++){
       const card = getCard(i);
       if (card) card.classList.toggle("focus", i === q);
     }
@@ -6048,7 +7327,7 @@
     if (!Number.isFinite(pageNo) || !Number.isFinite(yRatio)) return null;
     const y = Math.max(0, Math.min(1, Number(yRatio)));
     const starts = [];
-    for (let q = 1; q <= 100; q++){
+    for (let q = 1; q <= QUESTION_COUNT; q++){
       const mappedPage = getPdfPageByQuestion(q);
       if (mappedPage !== pageNo) continue;
       const s = await getQuestionStartRatioForPage(pageNo, q);
@@ -6094,13 +7373,13 @@
       endRatio: visibleEndRatio
     });
     if (!Array.isArray(anchors)) anchors = [];
-    if (anchors.length < 4) {
+    if (anchors.length < CHOICE_COUNT) {
       const byChoice = new Map();
       for (const a of anchors) {
         if (!a || !Number.isFinite(a.choice)) continue;
         if (!byChoice.has(a.choice)) byChoice.set(a.choice, a);
       }
-      for (let c = 1; c <= 4; c++){
+      for (let c = 1; c <= CHOICE_COUNT; c++){
         if (byChoice.has(c)) continue;
         try{
           const recovered = await resolveChoiceAnchorByQuestionBand(meta.page, q, c, visibleStartRatio, visibleEndRatio);
@@ -6140,25 +7419,25 @@
           const row = yFull < midY ? 0 : 1;
           const choice = (row * 2) + col + 1;
           chooseByKeyboard(choice);
-          pdfStatus.textContent = `${q}번 ${choice} 선택`;
+          pdfStatus.textContent = `${formatPrintedQuestionLabel(q)}번 ${choice} 선택`;
           return;
         }
         if (ySpread <= Math.max(22, xSpread * 0.22)) {
-          // 가로 1열 배치(①②③④)
+          // 가로 1열 배치
           const sorted = [...points].sort((a, b) => a.cx - b.cx);
           const idx = sorted.findIndex((p, i) => i === sorted.length - 1 || xFull < ((p.cx + sorted[i + 1].cx) * 0.5));
-          const choice = Math.max(1, Math.min(4, (idx >= 0 ? idx : (sorted.length - 1)) + 1));
+          const choice = Math.max(1, Math.min(CHOICE_COUNT, (idx >= 0 ? idx : (sorted.length - 1)) + 1));
           chooseByKeyboard(choice);
-          pdfStatus.textContent = `${q}번 ${choice} 선택`;
+          pdfStatus.textContent = `${formatPrintedQuestionLabel(q)}번 ${choice} 선택`;
           return;
         }
         if (xSpread <= Math.max(70, ySpread * 0.35)) {
-          // 세로 1열 배치(①②③④)
+          // 세로 1열 배치
           const sorted = [...points].sort((a, b) => a.cy - b.cy);
           const idx = sorted.findIndex((p, i) => i === sorted.length - 1 || yFull < ((p.cy + sorted[i + 1].cy) * 0.5));
-          const choice = Math.max(1, Math.min(4, (idx >= 0 ? idx : (sorted.length - 1)) + 1));
+          const choice = Math.max(1, Math.min(CHOICE_COUNT, (idx >= 0 ? idx : (sorted.length - 1)) + 1));
           chooseByKeyboard(choice);
-          pdfStatus.textContent = `${q}번 ${choice} 선택`;
+          pdfStatus.textContent = `${formatPrintedQuestionLabel(q)}번 ${choice} 선택`;
           return;
         }
       }
@@ -6171,7 +7450,7 @@
           .sort((a, b) => Math.abs(xFull - a.cx) - Math.abs(xFull - b.cx))[0];
         if (cand && Math.abs(yFull - cand.cy) <= (rowBand * 1.25)) {
           chooseByKeyboard(cand.choice);
-          pdfStatus.textContent = `${q}번 ${cand.choice} 선택`;
+          pdfStatus.textContent = `${formatPrintedQuestionLabel(q)}번 ${cand.choice} 선택`;
           return;
         }
       }
@@ -6197,7 +7476,7 @@
           : Math.max(90, best.aw * 10.0);
         if (best.dy <= yLimit && best.dx <= xLimit) {
           chooseByKeyboard(best.choice);
-          pdfStatus.textContent = `${q}번 ${best.choice} 선택`;
+          pdfStatus.textContent = `${formatPrintedQuestionLabel(q)}번 ${best.choice} 선택`;
           return;
         }
       }
@@ -6215,7 +7494,7 @@
       if (ny < 0.40) choice = col === 0 ? 1 : 2;
       if (ny > 0.66) choice = col === 0 ? 3 : 4;
       chooseByKeyboard(choice);
-      pdfStatus.textContent = `${q}번 ${choice} 선택`;
+      pdfStatus.textContent = `${formatPrintedQuestionLabel(q)}번 ${choice} 선택`;
     }
   }
 
@@ -6248,13 +7527,13 @@
 
     let anchors = await getChoiceAnchorsForQuestion(pageNo, q, { startRatio, endRatio });
     if (!Array.isArray(anchors)) anchors = [];
-    if (anchors.length < 4) {
+    if (anchors.length < CHOICE_COUNT) {
       const byChoice = new Map();
       for (const a of anchors){
         if (!a || !Number.isFinite(a.choice)) continue;
         if (!byChoice.has(a.choice)) byChoice.set(a.choice, a);
       }
-      for (let c = 1; c <= 4; c++){
+      for (let c = 1; c <= CHOICE_COUNT; c++){
         if (byChoice.has(c)) continue;
         try{
           const recovered = await resolveChoiceAnchorByQuestionBand(pageNo, q, c, startRatio, endRatio);
@@ -6286,11 +7565,11 @@
       } else if (points.length >= 3 && ySpread <= Math.max(22, xSpread * 0.22)) {
         const sorted = [...points].sort((a, b) => a.cx - b.cx);
         const idx = sorted.findIndex((p, i) => i === sorted.length - 1 || xFull < ((p.cx + sorted[i + 1].cx) * 0.5));
-        picked = Math.max(1, Math.min(4, (idx >= 0 ? idx : (sorted.length - 1)) + 1));
+        picked = Math.max(1, Math.min(CHOICE_COUNT, (idx >= 0 ? idx : (sorted.length - 1)) + 1));
       } else if (points.length >= 3) {
         const sorted = [...points].sort((a, b) => a.cy - b.cy);
         const idx = sorted.findIndex((p, i) => i === sorted.length - 1 || yFull < ((p.cy + sorted[i + 1].cy) * 0.5));
-        picked = Math.max(1, Math.min(4, (idx >= 0 ? idx : (sorted.length - 1)) + 1));
+        picked = Math.max(1, Math.min(CHOICE_COUNT, (idx >= 0 ? idx : (sorted.length - 1)) + 1));
       }
     }
 
@@ -6301,7 +7580,7 @@
       const row = ny < 0.56 ? 0 : 1;
       picked = (row * 2) + col + 1;
     }
-    const choice = Math.max(1, Math.min(4, Math.trunc(picked)));
+    const choice = Math.max(1, Math.min(CHOICE_COUNT, Math.trunc(picked)));
     setFocusQuestionSilently(q);
     chooseByKeyboard(choice);
   }
@@ -6327,11 +7606,11 @@
       mark.classList.add("blank");
       return;
     }
-    if (!Number.isFinite(correct)){
+    if (!isKnownAnswerValue(correct)){
       mark.textContent = "정답미확정";
       return;
     }
-    if (chosen === correct){
+    if (answerValueMatches(correct, chosen)){
       mark.textContent = "정답";
       mark.classList.add("ok");
     } else {
@@ -6342,20 +7621,20 @@
     for (const el of card.querySelectorAll(".choice")){
       el.classList.remove("wrong");
       const c = Number(el.dataset.c);
-      if (showCorrectEl.checked && Number.isFinite(correct) && c === correct){
+      if (showCorrectEl.checked && answerValueMatches(correct, c)){
         el.classList.add("correct");
       } else {
         el.classList.remove("correct");
       }
       if (chosen === c){
-        if (chosen !== correct) el.classList.add("wrong");
+        if (!answerValueMatches(correct, chosen)) el.classList.add("wrong");
       }
     }
   }
 
   function gradeAll(forceShowMarks){
     if (forceShowMarks) {
-      for(let q=1;q<=100;q++) gradeQuestion(q);
+      for(let q=1;q<=QUESTION_COUNT;q++) gradeQuestion(q);
       updateFilterButtons();
       updateStats();
       applyFilter();
@@ -6363,7 +7642,7 @@
       return;
     }
     if (autoGradeEl.checked){
-      for(let q=1;q<=100;q++) gradeQuestion(q);
+      for(let q=1;q<=QUESTION_COUNT;q++) gradeQuestion(q);
       updateFilterButtons();
       updateStats();
       applyFilter();
@@ -6373,10 +7652,10 @@
 
   // ====== 리셋 ======
   function resetAll(){
-    state.answers = Array(101).fill(null);
+    state.answers = Array(QUESTION_COUNT + 1).fill(null);
     modeHint.textContent = "모드: 일반";
 
-    for(let q=1; q<=100; q++){
+    for(let q=1; q<=QUESTION_COUNT; q++){
       const card = getCard(q);
       card.querySelectorAll("input[type=radio]").forEach(r => r.checked = false);
 
@@ -6414,11 +7693,11 @@
       const c = Number(el.dataset.c);
       el.classList.toggle("selected", chosen === c);
 
-      if (showCorrectEl.checked && Number.isFinite(correct) && c === correct) el.classList.add("correct");
+      if (showCorrectEl.checked && answerValueMatches(correct, c)) el.classList.add("correct");
       else {
         if (!autoGradeEl.checked) el.classList.remove("correct","wrong");
         else {
-          if (!showCorrectEl.checked && Number.isFinite(correct) && c === correct) el.classList.remove("correct");
+          if (!showCorrectEl.checked && answerValueMatches(correct, c)) el.classList.remove("correct");
         }
       }
     });
@@ -6439,12 +7718,12 @@
   }
 
   function refreshAllCards(){
-    for(let q=1; q<=100; q++) refreshCard(q);
+    for(let q=1; q<=QUESTION_COUNT; q++) refreshCard(q);
     updateBookmarkUi(state.focusQ || 1);
   }
 
   function clearMarksOnly(){
-    for(let q=1; q<=100; q++){
+    for(let q=1; q<=QUESTION_COUNT; q++){
       const card = getCard(q);
       const mark = card.querySelector('[data-role="mark"]');
       mark.classList.remove("ok","bad","lock","blank");
@@ -6462,7 +7741,7 @@
         el.classList.remove("wrong");
         const c = Number(el.dataset.c);
         const correct = getCorrectAnswer(q);
-        if (showCorrectEl.checked && Number.isFinite(correct) && c === correct) el.classList.add("correct");
+        if (showCorrectEl.checked && answerValueMatches(correct, c)) el.classList.add("correct");
         else el.classList.remove("correct");
       });
     }
@@ -6474,16 +7753,11 @@
   function updateStats(){
     let blanks = 0, correct = 0, knownTotal = 0;
 
-    const s = [
-      {from:1,to:25, ok:0, total:0},
-      {from:26,to:50, ok:0, total:0},
-      {from:51,to:75, ok:0, total:0},
-      {from:76,to:100, ok:0, total:0},
-    ];
+    const s = buildQuestionSections();
 
-    for(let q=1; q<=100; q++){
+    for(let q=1; q<=QUESTION_COUNT; q++){
       const corr = getCorrectAnswer(q);
-      if (Number.isFinite(corr)) {
+      if (isKnownAnswerValue(corr)) {
         knownTotal++;
         for (const sec of s){
           if (q>=sec.from && q<=sec.to){
@@ -6494,11 +7768,11 @@
       }
       const a = normalizeChoiceValue(state.answers[q]);
       if (a == null) { blanks++; continue; }
-      if (Number.isFinite(corr) && a === corr) correct++;
+      if (isKnownAnswerValue(corr) && answerValueMatches(corr, a)) correct++;
 
       for (const sec of s){
         if (q>=sec.from && q<=sec.to){
-          if (Number.isFinite(corr) && a === corr) sec.ok++;
+          if (isKnownAnswerValue(corr) && answerValueMatches(corr, a)) sec.ok++;
           break;
         }
       }
@@ -6508,10 +7782,10 @@
     correctEl.textContent = String(correct);
     blankEl.textContent = String(blanks);
 
-    sec1.textContent = `${s[0].ok} / ${s[0].total}`;
-    sec2.textContent = `${s[1].ok} / ${s[1].total}`;
-    sec3.textContent = `${s[2].ok} / ${s[2].total}`;
-    sec4.textContent = `${s[3].ok} / ${s[3].total}`;
+    const sectionEls = [sec1, sec2, sec3, sec4];
+    for (let i = 0; i < sectionEls.length; i++){
+      if (sectionEls[i] && s[i]) sectionEls[i].textContent = `${s[i].ok} / ${s[i].total}`;
+    }
   }
 
   // ====== 오답노트 ======
@@ -6520,15 +7794,9 @@
     const blank = [];
     const unknown = [];
 
-    // 섹션별 오답/미응답 집계 (1~25, 26~50, 51~75, 76~100)
-    const sections = [
-      {name:"1~25", from:1, to:25, wrong:0, blank:0},
-      {name:"26~50", from:26, to:50, wrong:0, blank:0},
-      {name:"51~75", from:51, to:75, wrong:0, blank:0},
-      {name:"76~100", from:76, to:100, wrong:0, blank:0},
-    ];
+    const sections = buildQuestionSections();
 
-    for(let q=1; q<=100; q++){
+    for(let q=1; q<=QUESTION_COUNT; q++){
       const a = normalizeChoiceValue(state.answers[q]);
       const correct = getCorrectAnswer(q);
 
@@ -6539,12 +7807,12 @@
         if (sec) sec.blank++;
         continue;
       }
-      if (!Number.isFinite(correct)){
+      if (!isKnownAnswerValue(correct)){
         unknown.push(q);
         continue;
       }
-      if (a !== correct){
-        wrong.push({q, mine:a, ans:correct});
+      if (!answerValueMatches(correct, a)){
+        wrong.push({q, mine:a, ans:formatAnswerValue(correct)});
         if (sec) sec.wrong++;
       }
     }
@@ -6558,15 +7826,15 @@
     lines.push("");
     lines.push("## 오답");
     if (wrong.length === 0) lines.push("- (없음)");
-    else for (const w of wrong) lines.push(`- ${w.q}번: 내답 ${w.mine} / 정답 ${w.ans}`);
+    else for (const w of wrong) lines.push(`- ${formatPrintedQuestionLabel(w.q)}번: 내답 ${w.mine} / 정답 ${w.ans}`);
     lines.push("");
     lines.push("## 미응답");
     if (blank.length === 0) lines.push("- (없음)");
-    else lines.push(`- ${blank.join(", ")}`);
+    else lines.push(`- ${blank.map((q) => formatPrintedQuestionLabel(q)).join(", ")}`);
     lines.push("");
     lines.push("## 정답미확정");
     if (unknown.length === 0) lines.push("- (없음)");
-    else lines.push(`- ${unknown.join(", ")}`);
+    else lines.push(`- ${unknown.map((q) => formatPrintedQuestionLabel(q)).join(", ")}`);
 
     noteArea.value = lines.join("\n");
     copyHint.textContent = "오답노트 생성 완료";

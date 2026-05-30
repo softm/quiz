@@ -1,0 +1,1666 @@
+#!/usr/bin/env node
+/* SOFTM-ADMIN 시작: 로컬 관리자 서버 및 파일 관리 API 추가 - 2026-05-29 */
+import http from "node:http";
+import fs from "node:fs";
+import fsp from "node:fs/promises";
+import path from "node:path";
+import { execFile, spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const root = process.cwd();
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const port = Number(process.env.PORT || getArg("--port") || 8787);
+const maxUploadBytes = 250 * 1024 * 1024;
+const mimeTypes = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".pdf": "application/pdf",
+  ".hwp": "application/octet-stream",
+  ".txt": "text/plain; charset=utf-8",
+};
+
+function getArg(name){
+  const idx = process.argv.indexOf(name);
+  return idx >= 0 ? process.argv[idx + 1] : "";
+}
+
+function sendJson(res, status, data){
+  const body = `${JSON.stringify(data, null, 2)}\n`;
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+  });
+  res.end(body);
+}
+
+function sendText(res, status, text){
+  res.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
+  res.end(text);
+}
+
+function normalizeRelPath(value){
+  return String(value || "")
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/^\.\//, "")
+    .trim();
+}
+
+function resolveWorkspacePath(value){
+  const rel = normalizeRelPath(value);
+  const abs = path.resolve(root, rel || ".");
+  const rootWithSep = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+  if (abs !== root && !abs.startsWith(rootWithSep)) {
+    throw new Error("workspace 밖 경로는 사용할 수 없습니다.");
+  }
+  return abs;
+}
+
+function assertManagedPath(value){
+  const rel = normalizeRelPath(value);
+  const allowed = rel === "pdf" || rel === "json" || rel.startsWith("pdf/") || rel.startsWith("json/");
+  if (!rel || !allowed) {
+    throw new Error("관리 가능 경로는 pdf 또는 json 아래로 제한됩니다.");
+  }
+  return resolveWorkspacePath(rel);
+}
+
+function toRel(abs){
+  return path.relative(root, abs).split(path.sep).join("/") || ".";
+}
+
+function readJsonFile(rel, fallback){
+  try{
+    return JSON.parse(fs.readFileSync(path.join(root, "json", rel), "utf8"));
+  }catch(_){
+    return fallback;
+  }
+}
+
+async function writeJsonFile(rel, data){
+  const target = path.join(root, "json", rel);
+  await fsp.mkdir(path.dirname(target), { recursive: true });
+  await fsp.writeFile(target, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+}
+// SOFTM-위치맵: 문제·문항 위치맵 생성 후 manifest 보조 필드를 저장하기 위한 JSON 쓰기 헬퍼 추가 - 2026-05-30
+
+/* SOFTM-ADMIN 시작: 카테고리/문제 관리 테이블용 카탈로그 집계 API 추가 - 2026-05-29 */
+const pdfDiagnosticCache = new Map();
+
+function stripManifestPrefix(value){
+  const raw = normalizeRelPath(value);
+  return raw.replace(/^quiz\//, "");
+}
+
+function managedRelPath(value){
+  const raw = String(value || "");
+  if (path.isAbsolute(raw)) {
+    try{
+      return toRel(raw);
+    }catch(_){
+      return normalizeRelPath(raw);
+    }
+  }
+  return stripManifestPrefix(raw);
+}
+
+function isDerivedPdfPath(value){
+  const rel = managedRelPath(value);
+  const base = path.posix.basename(rel).normalize("NFC");
+  const stem = path.posix.parse(base).name.replace(/\s+/g, "");
+  return base.startsWith(".") || /_(?:ocr_failed(?:_\d{14})?|ocr_rejected(?:_\d{14})?|ocr_fixed|ocrfixed|ocr|fixed|original(?:_\d{14}|\d{14})?)$/i.test(stem);
+}
+
+function originalCandidateForDerivedPdf(value){
+  const rel = managedRelPath(value);
+  const parsed = path.posix.parse(rel);
+  const stem = parsed.name;
+  const originalStem = stem.replace(/_(?:ocr_failed(?:_\d{14})?|ocr_rejected(?:_\d{14})?|ocr_fixed|ocrfixed|ocr|fixed|original(?:_\d{14}|\d{14})?)$/i, "");
+  if (!originalStem || originalStem === stem) return "";
+  return path.posix.join(parsed.dir, `${originalStem}${parsed.ext}`);
+}
+// SOFTM-OCR: OCR 결과/백업 PDF를 원본 문제 회차와 분리해 관리하도록 경로 판정 추가 - 2026-05-30
+// SOFTM-OCR: 원본 후보 경로는 실제 파일명 유니코드 형태를 보존해 링크/존재 확인이 깨지지 않게 유지 - 2026-05-30
+
+function manifestFileExists(value){
+  const rel = stripManifestPrefix(value);
+  if (!rel) return false;
+  try{
+    return fs.existsSync(resolveWorkspacePath(rel));
+  }catch(_){
+    return false;
+  }
+}
+
+function manifestPublishedReady(row){
+  if (String(row?.correctJson || "").trim()) return true;
+  if (String(row?.answerSourceId || "").trim()) return true;
+  return row?.published === true || String(row?.published || "") === "true";
+}
+
+function questionAnswerCountIssue(row){
+  const questionCount = Number(row?.questionCount || 0);
+  const answerCount = Number(row?.answerCount || 0);
+  if (questionCount > 0 && answerCount > 0 && questionCount !== answerCount) {
+    return `문항/정답 수 불일치(${questionCount}/${answerCount})`;
+  }
+  return "";
+}
+
+function isPublishedQuestion(row){
+  return manifestPublishedReady(row) && !questionAnswerCountIssue(row);
+}
+// SOFTM-OCR: 게시 기준에서 OCR 품질을 분리하고 correct.json/정답 원본 기준으로 풀이 가능 여부를 판정 - 2026-05-30
+
+function collectDescendantCatNos(categories, catNo){
+  const out = new Set([String(catNo || "")]);
+  let changed = true;
+  while (changed){
+    changed = false;
+    for (const category of categories || []){
+      const parent = String(category?.parentCatNo || "");
+      const current = String(category?.catNo || "");
+      if (parent && current && out.has(parent) && !out.has(current)) {
+        out.add(current);
+        changed = true;
+      }
+    }
+  }
+  return out;
+}
+
+function categoryBreadcrumb(categories, row){
+  const byNo = new Map((categories || []).map((item) => [String(item?.catNo || ""), item]));
+  const parts = [];
+  let current = row;
+  const guard = new Set();
+  while (current && !guard.has(String(current.catNo || ""))){
+    guard.add(String(current.catNo || ""));
+    parts.unshift(String(current.catNm || ""));
+    current = byNo.get(String(current.parentCatNo || ""));
+  }
+  return parts.filter(Boolean).join(" / ");
+}
+
+function questionIssue(row){
+  const questionPdf = stripManifestPrefix(row?.questionPdf);
+  const answerPdf = stripManifestPrefix(row?.answerPdf);
+  const correctJson = stripManifestPrefix(row?.correctJson);
+  if (!questionPdf) return "문제 PDF 없음";
+  if (isDerivedPdfPath(questionPdf)) return "OCR 파생 파일";
+  if (!manifestFileExists(questionPdf)) return "문제 파일 없음";
+  if (!answerPdf && !String(row?.answerSourceId || "").trim()) return "정답 매핑 없음";
+  if (answerPdf && !manifestFileExists(answerPdf)) return "정답 파일 없음";
+  if (!correctJson && !String(row?.answerSourceId || "").trim()) return "correct.json 없음";
+  if (correctJson && !manifestFileExists(correctJson)) return "correct.json 파일 없음";
+  const countIssue = questionAnswerCountIssue(row);
+  if (countIssue) return countIssue;
+  return isPublishedQuestion(row) ? "정상" : "미게시";
+}
+
+async function cachedPdfDiagnostics(relPath, options = {}){
+  const rel = stripManifestPrefix(relPath);
+  if (!rel) return null;
+  let abs;
+  try{
+    abs = assertPdfManagedPath(rel);
+  }catch(_){
+    return null;
+  }
+  let stat;
+  try{
+    stat = fs.statSync(abs);
+  }catch(_){
+    return null;
+  }
+  const expected = expectedQuestionCount(options.meta);
+  const key = `${options.docType || "question"}:${expected}:${rel}:${stat.size}:${stat.mtimeMs}`;
+  if (pdfDiagnosticCache.has(key)) return pdfDiagnosticCache.get(key);
+  const data = await pdfDiagnostics(rel, options);
+  pdfDiagnosticCache.set(key, data);
+  return data;
+}
+
+function ocrIssueFromDiagnostics(data){
+  if (!data || !data.needsOcr) return "";
+  const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+  if (warnings.some((item) => String(item).includes("선택지 기호"))) return "OCR 품질 경고";
+  if (warnings.some((item) => String(item).includes("문항번호") || String(item).includes("문항 수"))) return "OCR 품질 경고";
+  return "PDF 품질 경고";
+}
+
+function diagTone(issue){
+  if (!issue || issue === "정상") return "ok";
+  if (String(issue).includes("없음") || String(issue).includes("파일")) return "warn";
+  return "warn";
+}
+
+function questionDiagSummary(data){
+  const issue = ocrIssueFromDiagnostics(data) || "정상";
+  return {
+    status: issue,
+    tone: diagTone(issue),
+    warnings: data?.warnings || [],
+    textChars: data?.textChars || 0,
+    questionLabels: data?.questionLabels || 0,
+    uniqueQuestionLabels: data?.uniqueQuestionLabels || 0,
+    choiceLabels: data?.choiceLabels || 0,
+  };
+}
+
+function answerDiagSummary(row, data){
+  if (!row?.answerPdf && !String(row?.answerSourceId || "").trim()) {
+    return { status: "정답 없음", tone: "warn", warnings: ["정답 파일 또는 정답 원본 ID가 연결되지 않았습니다."] };
+  }
+  if (row?.answerPdf && !manifestFileExists(row.answerPdf)) {
+    return { status: "정답 파일 없음", tone: "warn", warnings: ["정답 파일 경로가 있지만 실제 파일을 찾을 수 없습니다."] };
+  }
+  if (data?.needsOcr) {
+    return {
+      status: "정답 확인 필요",
+      tone: "warn",
+      warnings: data.warnings || [],
+      textChars: data.textChars || 0,
+      answerPairs: data.answerPairs || 0,
+    };
+  }
+  if (row?.correctJson && manifestFileExists(row.correctJson)) {
+    return { status: "정상", tone: "ok", warnings: [], textChars: data?.textChars || 0, answerPairs: data?.answerPairs || 0 };
+  }
+  if (String(row?.answerSourceId || "").trim()) {
+    return { status: "정답 원본 연결", tone: "ok", warnings: [], textChars: data?.textChars || 0, answerPairs: data?.answerPairs || 0 };
+  }
+  return { status: "correct.json 필요", tone: "warn", warnings: ["정답 파일은 있으나 correct.json 생성 상태가 아닙니다."], textChars: data?.textChars || 0, answerPairs: data?.answerPairs || 0 };
+}
+
+async function buildCatalogDataset(dataset, datasetLabel, categories, questions){
+  const categoryRows = Array.isArray(categories) ? categories : [];
+  const questionRows = Array.isArray(questions) ? questions : [];
+  const categoryByNo = new Map(categoryRows.map((row) => [String(row?.catNo || ""), row]));
+
+  const normalizedQuestions = await Promise.all(questionRows.map(async (row) => {
+    const category = categoryByNo.get(String(row?.catNo || "")) || {};
+    const manifestReady = isPublishedQuestion(row);
+    const fileIssue = questionIssue(row);
+    const diagnostics = manifestFileExists(row?.questionPdf || "") ? await cachedPdfDiagnostics(row.questionPdf, { docType: "question", meta: row }) : null;
+    const answerExt = path.extname(stripManifestPrefix(row?.answerPdf || "")).toLowerCase();
+    const answerDiagnostics = answerExt === ".pdf" && manifestFileExists(row?.answerPdf || "") ? await cachedPdfDiagnostics(row.answerPdf, { docType: "answer", meta: row }) : null;
+    const questionDiag = questionDiagSummary(diagnostics);
+    const answerDiag = answerDiagSummary(row, answerDiagnostics);
+    const ocrIssue = questionDiag.status !== "정상" ? questionDiag.status : "";
+    const answerIssue = answerDiag.status !== "정상" && answerDiag.status !== "정답 원본 연결" ? answerDiag.status : "";
+    const published = manifestReady && (fileIssue === "정상" || fileIssue === "미게시");
+    const issue = (fileIssue !== "정상" && fileIssue !== "미게시") ? fileIssue : (answerIssue || fileIssue);
+    const derivedPdf = isDerivedPdfPath(row?.questionPdf || "");
+    const originalCandidatePath = derivedPdf ? originalCandidateForDerivedPdf(row?.questionPdf || "") : "";
+    return {
+      dataset,
+      datasetLabel,
+      gNo: row?.gNo || category.gNo || "",
+      gNm: row?.gNm || category.gNm || "",
+      catNo: row?.catNo || "",
+      catNm: row?.catNm || category.catNm || "",
+      parentCatNo: row?.parentCatNo || category.parentCatNo || "",
+      categoryPath: stripManifestPrefix(category.catPath || ""),
+      categoryFullName: categoryBreadcrumb(categoryRows, categoryByNo.get(String(row?.catNo || "")) || row),
+      questionNo: row?.questionNo || "",
+      questionNm: row?.questionNm || "",
+      questionPdf: stripManifestPrefix(row?.questionPdf || ""),
+      answerPdf: stripManifestPrefix(row?.answerPdf || ""),
+      correctJson: stripManifestPrefix(row?.correctJson || ""),
+      year: row?.year || "",
+      semester: row?.semester || "",
+      examType: row?.examType || "",
+      questionCount: row?.questionCount || "",
+      answerCount: row?.answerCount || "",
+      questionStartNo: row?.questionStartNo || "",
+      questionEndNo: row?.questionEndNo || "",
+      answerStartNo: row?.answerStartNo || "",
+      answerEndNo: row?.answerEndNo || "",
+      choiceCount: row?.choiceCount || "",
+      anchorMap: stripManifestPrefix(row?.anchorMap || ""),
+      anchorStatus: row?.anchorStatus || "",
+      anchorConfidence: row?.anchorConfidence || "",
+      anchorWarnings: Array.isArray(row?.anchorWarnings) ? row.anchorWarnings : [],
+      anchorGeneratedAt: row?.anchorGeneratedAt || "",
+      answerSourceId: row?.answerSourceId || "",
+      published,
+      issue,
+      fileIssue,
+      derivedPdf,
+      originalCandidatePath,
+      originalCandidateExists: originalCandidatePath ? manifestFileExists(originalCandidatePath) : false,
+      ocrIssue,
+      needsOcr: Boolean(ocrIssue),
+      ocrWarnings: diagnostics?.warnings || [],
+      ocrTextChars: diagnostics?.textChars || 0,
+      ocrQuestionLabels: diagnostics?.questionLabels || 0,
+      ocrUniqueQuestionLabels: diagnostics?.uniqueQuestionLabels || 0,
+      ocrChoiceLabels: diagnostics?.choiceLabels || 0,
+      ocrChoiceVariantLabels: diagnostics?.choiceVariantLabels || 0,
+      ocrBrokenHangulRuns: diagnostics?.brokenHangulRuns || 0,
+      questionDiagStatus: questionDiag.status,
+      questionDiagTone: questionDiag.tone,
+      questionDiagWarnings: questionDiag.warnings,
+      answerDiagStatus: answerDiag.status,
+      answerDiagTone: answerDiag.tone,
+      answerDiagWarnings: answerDiag.warnings,
+      answerIssue,
+      answerTextChars: answerDiag.textChars || 0,
+      answerPairs: answerDiag.answerPairs || 0,
+      hasQuestionFile: manifestFileExists(row?.questionPdf || ""),
+      hasAnswerFile: row?.answerPdf ? manifestFileExists(row.answerPdf) : Boolean(row?.answerSourceId),
+      hasCorrectJson: row?.correctJson ? manifestFileExists(row.correctJson) : false,
+      seq: Number(row?.seq || 0),
+    };
+  }));
+  // SOFTM-OCR: 관리자 catalog의 게시/미게시 판정에서 OCR 품질 경고를 제거하고 별도 진단 필드로만 유지 - 2026-05-30
+  // SOFTM-위치맵: 문제·문항 위치맵 상태를 회차 catalog에 포함해 상세 화면과 풀이 화면이 참조 가능하도록 연결 - 2026-05-30
+
+  const normalizedCategories = categoryRows.map((row) => {
+    const catNos = collectDescendantCatNos(categoryRows, row?.catNo);
+    const rows = normalizedQuestions.filter((item) => catNos.has(String(item.catNo || "")));
+    const published = rows.filter((item) => item.published).length;
+    const answerMapped = rows.filter((item) => item.answerPdf || item.answerSourceId).length;
+    const correctReady = rows.filter((item) => item.correctJson || item.answerSourceId).length;
+    const ocrWarning = rows.filter((item) => item.needsOcr).length;
+    return {
+      dataset,
+      datasetLabel,
+      gNo: row?.gNo || "",
+      gNm: row?.gNm || "",
+      catNo: row?.catNo || "",
+      catNm: row?.catNm || "",
+      parentCatNo: row?.parentCatNo || "",
+      catPath: stripManifestPrefix(row?.catPath || ""),
+      depth: Number(row?.depth || 0),
+      seq: Number(row?.seq || 0),
+      fullName: categoryBreadcrumb(categoryRows, row),
+      questionTotal: rows.length,
+      published,
+      unpublished: Math.max(0, rows.length - published),
+      answerMapped,
+      correctReady,
+      ocrWarning,
+      latestQuestion: rows.sort((a, b) => Number(b.seq || 0) - Number(a.seq || 0))[0]?.questionNm || "",
+    };
+  });
+
+  return { categories: normalizedCategories, questions: normalizedQuestions };
+}
+
+async function catalogState(){
+  const defaults = await buildCatalogDataset("default", "PDF", readJsonFile("category.json", []), readJsonFile("question.json", []));
+  const knou = await buildCatalogDataset("knou", "방통대 별도", readJsonFile("knou_category.json", []), readJsonFile("knou_question.json", []));
+  return {
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    categories: [...defaults.categories, ...knou.categories],
+    questions: [...defaults.questions, ...knou.questions],
+  };
+}
+/* SOFTM-ADMIN 끝 */
+
+function listDir(rel){
+  const abs = assertManagedPath(rel || "pdf");
+  const entries = fs.readdirSync(abs, { withFileTypes: true })
+    .filter((entry) => !entry.name.startsWith("."))
+    .map((entry) => {
+      const full = path.join(abs, entry.name);
+      const stat = fs.statSync(full);
+      return {
+        name: entry.name,
+        path: toRel(full),
+        type: entry.isDirectory() ? "dir" : "file",
+        size: stat.size,
+        mtime: stat.mtime.toISOString(),
+      };
+    })
+    .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name, "ko") : (a.type === "dir" ? -1 : 1)));
+  const parent = toRel(path.dirname(abs));
+  return { cwd: toRel(abs), parent: parent.startsWith("pdf") || parent.startsWith("json") ? parent : "", entries };
+}
+
+async function manifestState(){
+  const groups = readJsonFile("group.json", []);
+  const categories = readJsonFile("category.json", []);
+  const questions = readJsonFile("question.json", []);
+  const knouGroups = readJsonFile("knou_group.json", []);
+  const knouCategories = readJsonFile("knou_category.json", []);
+  const knouQuestions = readJsonFile("knou_question.json", []);
+  const knouAnswerSources = readJsonFile("knou_answer_sources.json", []);
+  const catalog = await catalogState();
+  const defaultPublished = catalog.questions.filter((row) => row.dataset === "default" && row.published).length;
+  const knouPublished = catalog.questions.filter((row) => row.dataset === "knou" && row.published).length;
+  return {
+    root,
+    counts: {
+      groups: Array.isArray(groups) ? groups.length : 0,
+      categories: Array.isArray(categories) ? categories.length : 0,
+      questions: Array.isArray(questions) ? questions.length : 0,
+      publishedQuestions: defaultPublished,
+      knouGroups: Array.isArray(knouGroups) ? knouGroups.length : 0,
+      knouCategories: Array.isArray(knouCategories) ? knouCategories.length : 0,
+      knouQuestions: Array.isArray(knouQuestions) ? knouQuestions.length : 0,
+      knouPublishedQuestions: knouPublished,
+      knouAnswerSources: Array.isArray(knouAnswerSources) ? knouAnswerSources.length : 0,
+    },
+    recent: {
+      knouQuestions: Array.isArray(knouQuestions) ? knouQuestions.slice(-8).reverse() : [],
+      knouAnswerSources: Array.isArray(knouAnswerSources) ? knouAnswerSources.slice(-8).reverse() : [],
+    },
+  };
+}
+// SOFTM-OCR: 관리자 요약 카운트도 OCR 통과 회차만 게시 회차로 집계 - 2026-05-30
+
+function bufferSplit(buf, sep){
+  const out = [];
+  let start = 0;
+  let idx = buf.indexOf(sep, start);
+  while (idx !== -1){
+    out.push(buf.subarray(start, idx));
+    start = idx + sep.length;
+    idx = buf.indexOf(sep, start);
+  }
+  out.push(buf.subarray(start));
+  return out;
+}
+
+function parseMultipart(req, body){
+  const type = req.headers["content-type"] || "";
+  const match = type.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  if (!match) throw new Error("multipart boundary가 없습니다.");
+  const boundary = Buffer.from(`--${match[1] || match[2]}`);
+  const fields = {};
+  const files = [];
+  for (let part of bufferSplit(body, boundary)){
+    if (part.length === 0) continue;
+    if (part.subarray(0, 2).toString() === "\r\n") part = part.subarray(2);
+    if (part.subarray(0, 2).toString() === "--") continue;
+    if (part.subarray(part.length - 2).toString() === "\r\n") part = part.subarray(0, part.length - 2);
+    const headerEnd = part.indexOf(Buffer.from("\r\n\r\n"));
+    if (headerEnd < 0) continue;
+    const headerText = part.subarray(0, headerEnd).toString("utf8");
+    const content = part.subarray(headerEnd + 4);
+    const disposition = headerText.match(/content-disposition:\s*form-data;([^\r\n]+)/i)?.[1] || "";
+    const name = disposition.match(/name="([^"]+)"/)?.[1] || "";
+    const fileName = disposition.match(/filename="([^"]*)"/)?.[1] || "";
+    if (!name) continue;
+    if (fileName) files.push({ field: name, fileName: path.basename(fileName), content });
+    else fields[name] = content.toString("utf8");
+  }
+  return { fields, files };
+}
+
+function readBody(req){
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > maxUploadBytes) {
+        reject(new Error("업로드 용량 제한을 초과했습니다."));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+function runImport(args){
+  return new Promise((resolve, reject) => {
+    execFile(process.execPath, [path.join(scriptDir, "import-knou.mjs"), ...args], { cwd: root, maxBuffer: 40 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) {
+        err.message = `${err.message}\n${stderr || stdout}`;
+        reject(err);
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
+  });
+}
+
+function gitStatus(){
+  return new Promise((resolve) => {
+    execFile("git", ["status", "--short"], { cwd: root, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+      resolve({
+        ok: !err,
+        status: stdout.trimEnd(),
+        error: err ? String(stderr || err.message).trim() : "",
+      });
+    });
+  });
+}
+
+/* SOFTM-ADMIN 시작: 문제 등록 프로세스 점검용 리포트 API 추가 - 2026-05-29 */
+function walkManagedFiles(baseRel){
+  const baseAbs = resolveWorkspacePath(baseRel);
+  const out = [];
+  const visit = (dir) => {
+    if (!fs.existsSync(dir)) return;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })){
+      if (entry.name.startsWith(".")) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        visit(full);
+        continue;
+      }
+      out.push(full);
+    }
+  };
+  visit(baseAbs);
+  return out;
+}
+
+function isAnswerPath(rel){
+  const normalized = normalizeRelPath(rel).normalize("NFC");
+  const parts = normalized.split("/");
+  const name = path.basename(normalized);
+  const stem = name.replace(/\.[^.]+$/, "");
+  return parts.includes("정답") || /(?:최종)?정답|정답표/.test(stem);
+}
+
+function processFileSummary(){
+  const files = walkManagedFiles("pdf");
+  const questionFiles = files.filter((file) => {
+    const rel = toRel(file);
+    return path.extname(file).toLowerCase() === ".pdf" && !isAnswerPath(rel);
+  });
+  const answerFiles = files.filter((file) => {
+    const ext = path.extname(file).toLowerCase();
+    return [".pdf", ".hwp"].includes(ext) && isAnswerPath(toRel(file));
+  });
+  const correctFiles = files.filter((file) => path.basename(file) === "correct.json");
+  return {
+    questionFiles: questionFiles.length,
+    answerFiles: answerFiles.length,
+    correctFiles: correctFiles.length,
+  };
+}
+
+function fileInfo(rel){
+  const abs = resolveWorkspacePath(rel);
+  try{
+    const stat = fs.statSync(abs);
+    return { path: rel, exists: true, size: stat.size, mtime: stat.mtime.toISOString() };
+  }catch(_){
+    return { path: rel, exists: false, size: 0, mtime: "" };
+  }
+}
+
+function scriptInfo(scriptName){
+  return fileInfo(`scripts/${scriptName}`);
+}
+
+function checkCommand(name){
+  return new Promise((resolve) => {
+    execFile("which", [name], { cwd: root }, (err, stdout) => {
+      resolve({ name, ok: !err, path: stdout.trim() });
+    });
+  });
+}
+
+function runCommand(command, args, options = {}){
+  return new Promise((resolve, reject) => {
+    execFile(command, args, {
+      cwd: root,
+      maxBuffer: options.maxBuffer || 80 * 1024 * 1024,
+      timeout: options.timeout || 0,
+    }, (err, stdout, stderr) => {
+      if (err) {
+        err.message = `${err.message}\n${stderr || stdout}`;
+        reject(err);
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
+  });
+}
+
+/* SOFTM-OCR 시작: 원본 문제/정답 PDF 진단 및 OCR 적용 API 추가 - 2026-05-29 */
+const ocrJobs = new Map();
+const ocrLogLimit = 160;
+const ocrTimeoutMs = 30 * 60 * 1000;
+const ocrEstimateMsPerPage = 45 * 1000;
+
+function assertPdfManagedPath(value){
+  const rel = normalizeRelPath(value).replace(/^quiz\//, "");
+  if (!rel.startsWith("pdf/") || path.extname(rel).toLowerCase() !== ".pdf") {
+    throw new Error("PDF 진단/OCR 대상은 pdf 하위의 .pdf 파일이어야 합니다.");
+  }
+  return resolveWorkspacePath(rel);
+}
+
+function parsePdfInfoText(text){
+  const pageMatch = String(text || "").match(/^Pages:\s*(\d+)/mi);
+  const encryptedMatch = String(text || "").match(/^Encrypted:\s*(.+)$/mi);
+  const sizeMatch = String(text || "").match(/^Page size:\s*(.+)$/mi);
+  return {
+    pages: pageMatch ? Number(pageMatch[1]) : 0,
+    encrypted: encryptedMatch ? encryptedMatch[1].trim() : "",
+    pageSize: sizeMatch ? sizeMatch[1].trim() : "",
+  };
+}
+
+function questionMetaForPdf(relPath){
+  const normalized = stripManifestPrefix(relPath);
+  const rows = [
+    ...readJsonFile("question.json", []),
+    ...readJsonFile("knou_question.json", []),
+  ].filter((row) => row && typeof row === "object");
+  const matched = rows.find((row) => sameManagedRelPath(row.questionPdf, normalized));
+  if (matched) return matched;
+  if (isDerivedPdfPath(normalized)) {
+    const original = originalCandidateForDerivedPdf(normalized);
+    return rows.find((row) => sameManagedRelPath(row.questionPdf, original)) || null;
+  }
+  return null;
+}
+// SOFTM-OCR: OCR 파생 PDF 진단 시 NFC/NFD 파일명 차이에도 원본 회차 문항 수를 매칭 - 2026-05-30
+
+function expectedQuestionCount(meta){
+  const explicit = Number(meta?.questionCount || 0);
+  if (explicit > 0) return explicit;
+  const start = Number(meta?.questionStartNo || 0);
+  const end = Number(meta?.questionEndNo || 0);
+  if (start > 0 && end >= start) return end - start + 1;
+  return 0;
+}
+
+function questionLabelStats(text){
+  const labels = [...String(text || "").matchAll(/(?:^|\n)\s*(\d{1,3})\s*(?:[.)]|번)/g)]
+    .map((match) => Number(match[1]))
+    .filter((value) => value >= 1 && value <= 300);
+  const unique = [...new Set(labels)].sort((a, b) => a - b);
+  return {
+    total: labels.length,
+    unique: unique.length,
+    min: unique[0] || 0,
+    max: unique[unique.length - 1] || 0,
+  };
+}
+
+function choiceLabelStats(text){
+  const raw = String(text || "");
+  const strong = (raw.match(/[①②③④⑤❶❷❸❹❺➀➁➂➃➄➊➋➌➍➎⓵⓶⓷⓸⓹㈠㈡㈢㈣㈤㊀㊁㊂㊃㊄㉠㉡㉢㉣㉤]/g) || []).length;
+  const variantMatches = [
+    ...raw.matchAll(/(?:^|[\s])(?:[0OQ@©®]\s*[).:]|Q@|QO|Qo|DO|OD|00|0Q|Q0)(?=\s*\S)/g),
+    ...raw.matchAll(/(?:^|[\s])(?:[@©®])(?=\s*[가-힣A-Za-z0-9ㄱ-ㅎㅏ-ㅣ])/g),
+  ];
+  return { strong, variants: variantMatches.length, total: strong + variantMatches.length };
+}
+
+function countChoiceLabels(text){
+  return choiceLabelStats(text).strong;
+}
+
+function countBrokenHangulRuns(text){
+  const raw = String(text || "");
+  let count = 0;
+  for (const match of raw.matchAll(/(?:^|[\s\n])(?:[가-힣]\s+){3,}[가-힣](?=$|[\s\n.,!?])/g)) {
+    const syllables = match[0].match(/[가-힣]/g) || [];
+    if (syllables.length >= 4) count += 1;
+  }
+  return count;
+}
+// SOFTM-OCR: OCR 생성 성공과 실제 텍스트 품질을 분리하기 위해 선택지 깨짐/한글 음절 분리 지표 추가 - 2026-05-30
+
+function countAnswerPairs(text){
+  const normalized = String(text || "").replace(/[①②③④⑤]/g, (value) => String("①②③④⑤".indexOf(value) + 1));
+  const matches = normalized.match(/(?:^|[\s,])(?:\d{1,3})\s*[:.)-]?\s*[1-5](?=\s|,|$)/g);
+  return matches ? matches.length : 0;
+}
+
+async function pdfDiagnostics(relPath, options = {}){
+  const abs = assertPdfManagedPath(relPath);
+  const rel = toRel(abs);
+  const stat = fs.statSync(abs);
+  let pdfInfoRaw = "";
+  let text = "";
+  let textError = "";
+  try{
+    pdfInfoRaw = (await runCommand("pdfinfo", [abs], { maxBuffer: 4 * 1024 * 1024 })).stdout;
+  }catch(err){
+    pdfInfoRaw = "";
+    textError = String(err?.message || err);
+  }
+  try{
+    text = (await runCommand("pdftotext", ["-layout", abs, "-"], { maxBuffer: 80 * 1024 * 1024 })).stdout;
+  }catch(err){
+    textError = String(err?.message || err);
+  }
+  const info = parsePdfInfoText(pdfInfoRaw);
+  const pages = Number(info.pages || 0);
+  const compactText = text.replace(/\s+/g, "");
+  const koreanChars = (compactText.match(/[가-힣]/g) || []).length;
+  const alphaNumChars = (compactText.match(/[0-9A-Za-z]/g) || []).length;
+  const docType = options.docType || "question";
+  const questionMeta = options.meta || questionMetaForPdf(rel);
+  const expectedCount = expectedQuestionCount(questionMeta);
+  const derivedPdf = isDerivedPdfPath(rel);
+  const originalCandidatePath = derivedPdf ? originalCandidateForDerivedPdf(rel) : "";
+  const labelStats = questionLabelStats(text);
+  const questionLabels = labelStats.total;
+  const choiceStats = choiceLabelStats(text);
+  const choiceLabels = choiceStats.strong;
+  const choiceVariantLabels = choiceStats.variants;
+  const brokenHangulRuns = countBrokenHangulRuns(text);
+  const answerPairs = countAnswerPairs(text);
+  const charsPerPage = pages ? Math.round(compactText.length / pages) : compactText.length;
+  const hasReliableQuestionStructure = docType !== "answer" && expectedCount && labelStats.unique >= expectedCount * 0.9 && choiceLabels >= expectedCount * 2;
+  const qualityWarnings = [];
+  const managementWarnings = [];
+  if (!compactText.length) qualityWarnings.push("텍스트 레이어가 없습니다. OCR 적용이 필요합니다.");
+  if (pages && charsPerPage < 120 && !hasReliableQuestionStructure) qualityWarnings.push("페이지당 추출 텍스트가 적습니다. 스캔 PDF이거나 OCR 품질이 낮을 수 있습니다.");
+  if (brokenHangulRuns >= Math.max(6, Math.ceil((pages || 1) * 0.6))) qualityWarnings.push(`한글 음절이 과도하게 분리되어 있습니다(${brokenHangulRuns}개 구간). OCR 텍스트 품질이 낮습니다.`);
+  if (docType === "answer") {
+    if (expectedCount && answerPairs < Math.max(3, expectedCount * 0.6)) qualityWarnings.push(`예상 문항 수(${expectedCount}) 대비 정답 번호/값 감지가 부족합니다(${answerPairs}개).`);
+  } else {
+    if (pages && questionLabels < Math.min(5, Math.max(1, pages))) qualityWarnings.push("문항 번호 패턴이 적게 감지됩니다. 문제지 OCR 상태를 확인하세요.");
+    if (expectedCount && labelStats.unique < Math.max(3, expectedCount * 0.75)) qualityWarnings.push(`예상 문항 수(${expectedCount}) 대비 고유 문항번호 감지가 부족합니다.`);
+    if (expectedCount && questionLabels > expectedCount * 1.3) qualityWarnings.push(`예상 문항 수(${expectedCount})보다 문항번호가 과다 감지됩니다. OCR 오인식 가능성이 있습니다.`);
+    if (expectedCount && choiceLabels < expectedCount * 2) {
+      if (choiceVariantLabels >= expectedCount) qualityWarnings.push(`선택지 기호가 OCR 변형 토큰으로 인식되었습니다(정상 ${choiceLabels}개, 변형 ${choiceVariantLabels}개). OCR 품질을 확인하세요.`);
+      else qualityWarnings.push(`선택지 기호 감지가 부족합니다(${choiceLabels}개). OCR 품질 또는 텍스트 레이어를 확인하세요.`);
+    }
+    if (derivedPdf) managementWarnings.push("OCR 결과/백업 PDF입니다. 문제 회차 관리는 원본 PDF 기준으로 진행하세요.");
+  }
+  if (/yes/i.test(info.encrypted)) qualityWarnings.push("암호화 PDF입니다. OCR 또는 텍스트 추출이 제한될 수 있습니다.");
+  const parsed = path.parse(abs);
+  const defaultOcrAbs = path.join(parsed.dir, `${parsed.name.endsWith("_ocr") ? parsed.name : `${parsed.name}_ocr`}.pdf`);
+  return {
+    ok: true,
+    path: rel,
+    size: stat.size,
+    mtime: stat.mtime.toISOString(),
+    pages,
+    pageSize: info.pageSize,
+    encrypted: info.encrypted,
+    textChars: compactText.length,
+    docType,
+    derivedPdf,
+    originalCandidatePath,
+    originalCandidateExists: originalCandidatePath ? manifestFileExists(originalCandidatePath) : false,
+    koreanChars,
+    alphaNumChars,
+    charsPerPage,
+    questionLabels,
+    uniqueQuestionLabels: labelStats.unique,
+    questionLabelMin: labelStats.min,
+    questionLabelMax: labelStats.max,
+    choiceLabels,
+    choiceVariantLabels,
+    brokenHangulRuns,
+    answerPairs,
+    expectedQuestionCount: expectedCount,
+    matchedQuestionNo: questionMeta?.questionNo || "",
+    matchedQuestionNm: questionMeta?.questionNm || "",
+    needsOcr: qualityWarnings.length > 0,
+    warnings: qualityWarnings,
+    qualityWarnings,
+    managementWarnings,
+    textSample: text.replace(/\s+\n/g, "\n").trim().slice(0, 1200),
+    textError,
+    ocrCopyPath: fs.existsSync(defaultOcrAbs) ? toRel(defaultOcrAbs) : "",
+    suggestedOcrPath: toRel(defaultOcrAbs),
+  };
+}
+
+function nextBackupPath(abs){
+  const parsed = path.parse(abs);
+  let candidate = path.join(parsed.dir, `${parsed.name}_original${parsed.ext}`);
+  if (!fs.existsSync(candidate)) return candidate;
+  const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+  candidate = path.join(parsed.dir, `${parsed.name}_original_${stamp}${parsed.ext}`);
+  return candidate;
+}
+
+function nextRejectedOcrPath(abs){
+  const parsed = path.parse(abs);
+  const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+  let candidate = path.join(parsed.dir, `${parsed.name}_ocr_failed_${stamp}${parsed.ext}`);
+  let seq = 2;
+  while (fs.existsSync(candidate)) {
+    candidate = path.join(parsed.dir, `${parsed.name}_ocr_failed_${stamp}_${seq}${parsed.ext}`);
+    seq += 1;
+  }
+  return candidate;
+}
+// SOFTM-OCR: 품질 기준 미통과 OCR 결과는 원본을 덮지 않고 실패 산출물로 분리 보관 - 2026-05-30
+
+async function handlePdfInfo(req, res, url){
+  const relPath = url.searchParams.get("path") || "";
+  sendJson(res, 200, await pdfDiagnostics(relPath));
+}
+
+function ocrStatusText(status){
+  return {
+    queued: "대기",
+    running: "실행 중",
+    canceling: "취소 중",
+    canceled: "취소됨",
+    completed: "완료",
+    failed: "실패",
+  }[status] || status;
+}
+
+function sanitizeOcrText(value){
+  return String(value || "")
+    .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "")
+    .replace(/\r/g, "\n")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
+}
+
+function appendOcrLog(job, chunk, stream){
+  const text = sanitizeOcrText(chunk);
+  job[stream] = `${job[stream] || ""}${text}`.slice(-40000);
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines){
+    job.logs.push(line);
+    if (job.logs.length > ocrLogLimit) job.logs.shift();
+    const percentMatch = line.match(/(\d{1,3})\s*%/);
+    if (percentMatch) {
+      job.progress = Math.max(job.progress || 0, Math.min(99, Number(percentMatch[1])));
+      job.progressUpdatedMs = Date.now();
+    }
+    const pageMatch = line.match(/^(\d{1,4})\s+page is facing/i);
+    if (pageMatch) {
+      job.processedPages = Math.max(job.processedPages || 0, Number(pageMatch[1]));
+      if (job.pageCount) {
+        job.progress = Math.max(job.progress || 0, Math.min(80, Math.round((job.processedPages / job.pageCount) * 75)));
+        job.progressUpdatedMs = Date.now();
+      }
+    }
+    if (/Parsing\s+\d+\s+pages/i.test(line)) {
+      job.progress = Math.max(job.progress || 0, 84);
+      job.progressUpdatedMs = Date.now();
+    }
+    if (/Optimize|Linearizing|Postprocessing|Output file/i.test(line)) {
+      job.progress = Math.max(job.progress || 0, 92);
+      job.progressUpdatedMs = Date.now();
+    }
+    const fallbackPagesMatch = line.match(/^FALLBACK pages\s+(\d+)/i);
+    if (fallbackPagesMatch) {
+      job.pageCount = Number(fallbackPagesMatch[1]);
+      job.progress = Math.max(job.progress || 0, 8);
+      job.progressUpdatedMs = Date.now();
+    }
+    const fallbackPageMatch = line.match(/^FALLBACK page\s+(\d+)\/(\d+)/i);
+    if (fallbackPageMatch) {
+      job.processedPages = Math.max(job.processedPages || 0, Number(fallbackPageMatch[1]));
+      job.pageCount = Number(fallbackPageMatch[2]) || job.pageCount;
+      job.progress = Math.max(job.progress || 0, Math.min(88, Math.round((job.processedPages / job.pageCount) * 82)));
+      job.progressUpdatedMs = Date.now();
+    }
+    if (/^FALLBACK merge/i.test(line)) {
+      job.progress = Math.max(job.progress || 0, 92);
+      job.progressUpdatedMs = Date.now();
+    }
+    if (/^FALLBACK done/i.test(line)) {
+      job.progress = Math.max(job.progress || 0, 96);
+      job.progressUpdatedMs = Date.now();
+    }
+  }
+  job.updatedAt = new Date().toISOString();
+}
+
+function currentOcrProgress(job){
+  let progress = Math.max(0, Math.min(100, Math.round(job.progress || 0)));
+  let estimated = false;
+  if ((job.status === "running" || job.status === "canceling") && progress < 84) {
+    const elapsedMs = Math.max(0, Date.now() - job.startedMs);
+    const estimatedTotalMs = Math.max(5 * 60 * 1000, (job.pageCount || 8) * ocrEstimateMsPerPage);
+    const elapsedEstimate = Math.min(82, Math.max(2, Math.round((elapsedMs / estimatedTotalMs) * 82)));
+    if (elapsedEstimate > progress) {
+      progress = elapsedEstimate;
+      estimated = true;
+    }
+  }
+  return { progress, estimated };
+}
+
+function stopOcrProcess(job, signal = "SIGTERM"){
+  if (!job?.pid) return;
+  try{
+    process.kill(-job.pid, signal);
+    return;
+  }catch(_){
+    try{ process.kill(job.pid, signal); }catch(__){}
+  }
+}
+
+function stopOcrPid(pid, signal = "SIGTERM"){
+  const value = Number(pid || 0);
+  if (!value) return false;
+  try{
+    process.kill(-value, signal);
+    return true;
+  }catch(_){
+    try{
+      process.kill(value, signal);
+      return true;
+    }catch(__){
+      return false;
+    }
+  }
+}
+
+function commandIncludesPath(command, abs){
+  if (!abs) return true;
+  const raw = String(command || "");
+  return raw.includes(abs) || raw.normalize("NFC").includes(abs.normalize("NFC")) || raw.normalize("NFD").includes(abs.normalize("NFD"));
+}
+
+function sameManagedRelPath(a, b){
+  const left = stripManifestPrefix(a);
+  const right = stripManifestPrefix(b);
+  return left === right || left.normalize("NFC") === right.normalize("NFC") || left.normalize("NFD") === right.normalize("NFD");
+}
+
+async function findOcrProcessesForPath(relPath){
+  const abs = relPath ? assertPdfManagedPath(relPath) : "";
+  const { stdout } = await runCommand("ps", ["-axo", "pid=,command="], { maxBuffer: 8 * 1024 * 1024 });
+  return stdout.split(/\r?\n/)
+    .map((line) => {
+      const match = line.match(/^\s*(\d+)\s+(.+)$/);
+      return match ? { pid: Number(match[1]), command: match[2] } : null;
+    })
+    .filter(Boolean)
+    .filter((row) => row.command.includes("ocrmypdf"))
+    .filter((row) => row.command.includes(root))
+    .filter((row) => commandIncludesPath(row.command, abs));
+}
+
+async function stopOcrProcessesForPath(relPath){
+  const rows = await findOcrProcessesForPath(relPath);
+  for (const row of rows) stopOcrPid(row.pid, "SIGTERM");
+  setTimeout(() => {
+    findOcrProcessesForPath(relPath).then((remaining) => {
+      for (const row of remaining) stopOcrPid(row.pid, "SIGKILL");
+    }).catch(() => {});
+  }, 5000);
+  return rows;
+}
+
+function snapshotOcrJob(job){
+  const currentProgress = currentOcrProgress(job);
+  const waitingForLogs = (job.status === "running" || job.status === "canceling") && !job.processedPages;
+  return {
+    ok: true,
+    id: job.id,
+    status: job.status,
+    statusText: ocrStatusText(job.status),
+    progress: currentProgress.progress,
+    progressEstimated: currentProgress.estimated,
+    waitingForLogs,
+    pageCount: job.pageCount || 0,
+    processedPages: job.processedPages || 0,
+    source: job.sourceRel,
+    output: job.outputRel,
+    backup: job.backupRel || "",
+    pid: job.pid || 0,
+    mode: job.ocrMode,
+    engine: job.ocrEngine || "ocrmypdf",
+    outputMode: job.outputMode,
+    command: job.command,
+    logs: job.logs.slice(-80),
+    stdout: sanitizeOcrText(job.stdout).trim(),
+    stderr: sanitizeOcrText(job.stderr).trim(),
+    error: job.error || "",
+    startedAt: job.startedAt,
+    updatedAt: job.updatedAt,
+    lastProgressAt: job.progressUpdatedMs ? new Date(job.progressUpdatedMs).toISOString() : "",
+    lastProgressAgeMs: job.progressUpdatedMs ? Date.now() - job.progressUpdatedMs : Date.now() - job.startedMs,
+    endedAt: job.endedAt || "",
+    elapsedMs: Date.now() - job.startedMs,
+    result: job.result || null,
+  };
+}
+
+function activeOcrJobForRel(relPath){
+  const rel = stripManifestPrefix(relPath);
+  return [...ocrJobs.values()].find((job) => {
+    return ["running", "canceling"].includes(job.status) && sameManagedRelPath(job.sourceRel, rel);
+  }) || null;
+}
+
+async function buildOcrJobConfig(body){
+  const inputAbs = assertPdfManagedPath(body.path);
+  if (isDerivedPdfPath(toRel(inputAbs))) {
+    const original = originalCandidateForDerivedPdf(toRel(inputAbs));
+    throw new Error(`OCR 결과/백업 PDF에는 다시 OCR을 적용할 수 없습니다. 원본 문제 PDF에서 실행하세요.${original ? ` 원본 후보: ${original}` : ""}`);
+  }
+  const outputMode = String(body.outputMode || "copy");
+  const ocrMode = String(body.ocrMode || "redo");
+  const ocrEngine = String(body.ocrEngine || "fallback");
+  const sourceMeta = questionMetaForPdf(toRel(inputAbs));
+  const sourceDiagnostics = await pdfDiagnostics(toRel(inputAbs), { meta: sourceMeta || undefined });
+  if (ocrMode !== "force" && sourceDiagnostics && !sourceDiagnostics.needsOcr) {
+    throw new Error("이미 OCR 텍스트 품질 기준을 통과했습니다. 기본 OCR은 원본보다 품질이 낮은 사본을 만들 수 있어 실행하지 않습니다. 반드시 필요하면 OCR 방식을 '전체 강제 OCR'로 바꾸세요.");
+  }
+  // SOFTM-OCR: OCR 품질 정상 원본은 기본 OCR 재실행을 차단해 저품질 사본 생성을 방지 - 2026-05-30
+  const parsed = path.parse(inputAbs);
+  const tool = await checkCommand("ocrmypdf");
+  if (ocrEngine === "ocrmypdf" && !tool.ok) throw new Error("ocrmypdf를 찾을 수 없습니다. OCR 적용을 위해 ocrmypdf 설치가 필요합니다.");
+
+  let flag = "--redo-ocr";
+  if (ocrMode === "force") flag = "--force-ocr";
+  if (ocrMode === "skip") flag = "--skip-text";
+
+  const copyOutputAbs = path.join(parsed.dir, `${parsed.name.endsWith("_ocr") ? `${parsed.name}_fixed` : `${parsed.name}_ocr`}${parsed.ext}`);
+  const tempOutputAbs = path.join(parsed.dir, `.${parsed.name}_ocr_${Date.now()}${parsed.ext}`);
+  const outputAbs = outputMode === "replace" ? tempOutputAbs : copyOutputAbs;
+  if (outputMode !== "replace" && fs.existsSync(outputAbs)) {
+    await fsp.rm(outputAbs, { force: true });
+  }
+  let pageCount = 0;
+  try{
+    const infoRaw = (await runCommand("pdfinfo", [inputAbs], { maxBuffer: 4 * 1024 * 1024 })).stdout;
+    pageCount = Number(parsePdfInfoText(infoRaw).pages || 0);
+  }catch(_){
+    pageCount = 0;
+  }
+
+  if (ocrEngine === "fallback") {
+    const fallbackTools = await Promise.all(["pdftoppm", "tesseract", "python3"].map((name) => checkCommand(name)));
+    const missing = fallbackTools.filter((row) => !row.ok).map((row) => row.name);
+    if (missing.length) throw new Error(`fallback OCR 도구가 없습니다: ${missing.join(", ")}`);
+    return {
+      inputAbs,
+      outputAbs,
+      outputMode,
+      ocrMode,
+      ocrEngine,
+      commandName: process.execPath,
+      args: [path.join(scriptDir, "ocr-fallback.mjs"), inputAbs, outputAbs],
+      pageCount,
+    };
+  }
+
+  const preprocessArgs = ocrMode === "redo" ? [] : ["--deskew"];
+  const args = [
+    "-v", "1",
+    ...preprocessArgs,
+    "--rotate-pages",
+    "--optimize", "1",
+    "--output-type", "pdf",
+    "-l", "kor+eng",
+    flag,
+    inputAbs,
+    outputAbs,
+  ];
+  // SOFTM-OCR: OCR 품질 기준을 통과한 원본은 기본 OCR 재실행을 막아 더 낮은 품질의 OCR 사본 생성을 방지 - 2026-05-30
+  // SOFTM-OCR: ocrmypdf redo 모드는 deskew와 호환되지 않아 모드별 전처리 옵션을 분리 - 2026-05-30
+  return { inputAbs, outputAbs, outputMode, ocrMode, ocrEngine, commandName: "ocrmypdf", args, pageCount };
+}
+
+async function finalizeOcrJob(job){
+  let finalAbs = job.outputAbs;
+  let backupRel = "";
+  let replaced = false;
+  let rejected = false;
+  const sourceRel = toRel(job.inputAbs);
+  const sourceMeta = questionMetaForPdf(sourceRel);
+  let diagnostics = await pdfDiagnostics(toRel(job.outputAbs), { meta: sourceMeta || undefined });
+  if (job.outputMode === "replace") {
+    if (diagnostics.needsOcr) {
+      const rejectedAbs = nextRejectedOcrPath(job.inputAbs);
+      await fsp.rename(job.outputAbs, rejectedAbs);
+      finalAbs = rejectedAbs;
+      job.outputAbs = rejectedAbs;
+      rejected = true;
+      diagnostics = await pdfDiagnostics(toRel(finalAbs), { meta: sourceMeta || undefined });
+    } else {
+      const backupAbs = nextBackupPath(job.inputAbs);
+      await fsp.rename(job.inputAbs, backupAbs);
+      await fsp.rename(job.outputAbs, job.inputAbs);
+      finalAbs = job.inputAbs;
+      backupRel = toRel(backupAbs);
+      replaced = true;
+      diagnostics = await pdfDiagnostics(toRel(finalAbs), { meta: sourceMeta || undefined });
+    }
+  } else if (diagnostics.needsOcr) {
+    const rejectedAbs = nextRejectedOcrPath(job.inputAbs);
+    await fsp.rename(job.outputAbs, rejectedAbs);
+    finalAbs = rejectedAbs;
+    job.outputAbs = rejectedAbs;
+    rejected = true;
+    diagnostics = await pdfDiagnostics(toRel(finalAbs), { meta: sourceMeta || undefined });
+  } else {
+    finalAbs = job.outputAbs;
+  }
+  // SOFTM-OCR: 사본 생성 모드에서도 품질 미달 OCR은 _ocr.pdf로 남기지 않고 실패 산출물로 분리 - 2026-05-30
+  job.backupRel = backupRel;
+  job.result = {
+    ok: true,
+    source: toRel(job.inputAbs),
+    output: toRel(finalAbs),
+    backup: backupRel,
+    replaced,
+    rejected,
+    mode: job.ocrMode,
+    engine: job.ocrEngine || "fallback",
+    outputMode: job.outputMode,
+    stdout: sanitizeOcrText(job.stdout).trim(),
+    stderr: sanitizeOcrText(job.stderr).trim(),
+    diagnostics,
+  };
+  job.outputRel = toRel(finalAbs);
+  appendOcrLog(job, `최종 OCR 산출물: ${job.result.output}`, "stdout");
+  if (diagnostics.needsOcr) appendOcrLog(job, "OCR 품질 미달로 실패 산출물에 보관했습니다. 게시/풀이에는 원본 PDF를 사용하세요.", "stdout");
+  return job.result;
+}
+// SOFTM-OCR: 원본 교체 모드는 OCR 결과 품질 진단 통과 후에만 실제 원본을 덮어쓰도록 보정 - 2026-05-30
+// SOFTM-OCR: 엔진 임시 출력 경로와 최종 보관 경로를 분리해 OCR 실패 산출물이 _ocr.pdf 성공처럼 보이지 않게 표시 - 2026-05-30
+
+async function startOcrJob(body){
+  const inputAbs = assertPdfManagedPath(body.path);
+  const sourceRel = toRel(inputAbs);
+  const existingJob = activeOcrJobForRel(sourceRel);
+  if (existingJob) {
+    existingJob.reused = true;
+    appendOcrLog(existingJob, "이미 실행 중인 OCR 작업에 연결했습니다.", "stdout");
+    return existingJob;
+  }
+  const config = await buildOcrJobConfig(body);
+  const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const startedAt = new Date().toISOString();
+  const job = {
+    id,
+    status: "running",
+    progress: 2,
+    processedPages: 0,
+    pageCount: config.pageCount,
+    progressUpdatedMs: Date.now(),
+    logs: [],
+    stdout: "",
+    stderr: "",
+    startedAt,
+    updatedAt: startedAt,
+    startedMs: Date.now(),
+    sourceRel: toRel(config.inputAbs),
+    outputRel: toRel(config.outputAbs),
+    inputAbs: config.inputAbs,
+    outputAbs: config.outputAbs,
+    outputMode: config.outputMode,
+    ocrMode: config.ocrMode,
+    ocrEngine: config.ocrEngine,
+    reused: false,
+    command: `${config.commandName} ${config.args.map((arg) => /\s/.test(arg) ? `"${arg}"` : arg).join(" ")}`,
+  };
+  ocrJobs.set(id, job);
+  const child = spawn(config.commandName, config.args, { cwd: root, detached: true, env: { ...process.env, PYTHONUNBUFFERED: "1" } });
+  job.child = child;
+  job.pid = child.pid;
+  appendOcrLog(job, `OCR 작업을 시작했습니다. PID ${child.pid || "-"}`, "stdout");
+  child.stdout.on("data", (chunk) => appendOcrLog(job, chunk, "stdout"));
+  child.stderr.on("data", (chunk) => appendOcrLog(job, chunk, "stderr"));
+  child.on("error", (err) => {
+    job.status = "failed";
+    job.error = err?.message || String(err);
+    job.endedAt = new Date().toISOString();
+    job.updatedAt = job.endedAt;
+  });
+  const timeout = setTimeout(() => {
+    if (job.status === "running") {
+      job.status = "failed";
+      job.error = `OCR 적용 시간이 ${Math.round(ocrTimeoutMs / 60000)}분을 초과해 중단했습니다.`;
+      appendOcrLog(job, job.error, "stderr");
+      stopOcrProcess(job);
+    }
+  }, ocrTimeoutMs);
+  child.on("close", (code, signal) => {
+    clearTimeout(timeout);
+    (async () => {
+      if (job.status === "canceling") {
+        job.status = "canceled";
+        job.progress = Math.min(job.progress || 0, 99);
+        job.error = "사용자가 OCR 작업을 취소했습니다.";
+        return;
+      }
+      if (job.status === "failed") return;
+      if (code === 0) {
+        job.progress = 96;
+        await finalizeOcrJob(job);
+        job.status = "completed";
+        job.progress = 100;
+      } else {
+        job.status = "failed";
+        job.error = `OCR 작업이 실패했습니다. 종료 코드 ${code ?? "-"}${signal ? `, signal ${signal}` : ""}`;
+      }
+    })().catch((err) => {
+      job.status = "failed";
+      job.error = err?.message || String(err);
+    }).finally(() => {
+      job.endedAt = new Date().toISOString();
+      job.updatedAt = job.endedAt;
+      delete job.child;
+    });
+  });
+  return job;
+}
+
+async function handleOcrStart(req, res){
+  const body = JSON.parse((await readBody(req)).toString("utf8") || "{}");
+  const job = await startOcrJob(body);
+  const snapshot = snapshotOcrJob(job);
+  snapshot.reused = Boolean(job.reused);
+  sendJson(res, 200, snapshot);
+}
+
+async function handleOcrStatus(_req, res, url){
+  const job = ocrJobs.get(url.searchParams.get("id") || "");
+  if (!job) throw new Error("OCR 작업을 찾을 수 없습니다.");
+  sendJson(res, 200, snapshotOcrJob(job));
+}
+
+async function handleOcrJobs(_req, res){
+  sendJson(res, 200, { ok: true, jobs: [...ocrJobs.values()].map((job) => snapshotOcrJob(job)) });
+}
+
+async function handleOcrCancel(req, res, url){
+  let id = url.searchParams.get("id") || "";
+  let relPath = url.searchParams.get("path") || "";
+  if (!id && req.method === "POST") {
+    const body = JSON.parse((await readBody(req)).toString("utf8") || "{}");
+    id = String(body.id || "");
+    relPath = String(body.path || relPath || "");
+  }
+  const job = id ? ocrJobs.get(id) : null;
+  if (!job) {
+    const killed = await stopOcrProcessesForPath(relPath);
+    if (!killed.length) throw new Error("취소할 OCR 작업을 찾을 수 없습니다.");
+    sendJson(res, 200, {
+      ok: true,
+      id: id || "",
+      status: "canceled",
+      statusText: "취소됨",
+      progress: 0,
+      orphanKilled: true,
+    killed: killed.map((row) => ({ pid: row.pid, command: sanitizeOcrText(row.command).slice(0, 500) })),
+      message: "서버 작업 ID 없이 실행 중이던 OCR 프로세스를 종료했습니다.",
+    });
+    return;
+  }
+  if (job.status === "running" && job.child) {
+    job.status = "canceling";
+    job.updatedAt = new Date().toISOString();
+    stopOcrProcess(job);
+    setTimeout(() => {
+      if (job.status === "canceling" || job.status === "running") stopOcrProcess(job, "SIGKILL");
+    }, 5000);
+  } else if (job.status === "running") {
+    await stopOcrProcessesForPath(job.sourceRel);
+    job.status = "canceling";
+    job.updatedAt = new Date().toISOString();
+  }
+  sendJson(res, 200, snapshotOcrJob(job));
+}
+
+async function handleOcr(req, res){
+  return await handleOcrStart(req, res);
+}
+// SOFTM-OCR: OCR 적용을 백그라운드 작업으로 실행하고 진행률/로그/오류를 조회할 수 있도록 변경 - 2026-05-30
+// SOFTM-OCR: ocrmypdf 중간 로그가 늦는 경우 추정 진행률과 작업 목록 조회를 제공 - 2026-05-30
+// SOFTM-OCR: OCR 취소 시 프로세스 그룹 종료와 강제 종료 fallback 적용 - 2026-05-30
+// SOFTM-OCR: 서버 재시작으로 작업 ID를 잃어도 PDF 경로 기준으로 남은 OCR 프로세스를 종료 - 2026-05-30
+// SOFTM-OCR: 같은 PDF의 OCR 중복 실행을 막고 기존 작업에 연결 - 2026-05-30
+// SOFTM-OCR: 한글 파일명 NFC/NFD 차이로 중복 OCR 작업이 생기지 않도록 경로 비교 보정 - 2026-05-30
+// SOFTM-OCR: 기본 OCR 엔진을 워크스페이스 임시 파일 기반 fallback 파이프라인으로 전환 - 2026-05-30
+/* SOFTM-OCR 끝 */
+
+function anchorManifestName(dataset){
+  return dataset === "knou" ? "knou_question.json" : "question.json";
+}
+
+function findQuestionManifestRow(body = {}){
+  const dataset = String(body.dataset || "default") === "knou" ? "knou" : "default";
+  const manifestName = anchorManifestName(dataset);
+  const rows = readJsonFile(manifestName, []);
+  const questionNo = String(body.questionNo || "");
+  const targetPath = stripManifestPrefix(body.path || "");
+  const index = (Array.isArray(rows) ? rows : []).findIndex((row) => (
+    (questionNo && String(row?.questionNo || "") === questionNo)
+    || (targetPath && sameManagedRelPath(row?.questionPdf || "", targetPath))
+  ));
+  if (index < 0) throw new Error("문제·문항 위치맵을 생성할 회차를 question manifest에서 찾을 수 없습니다.");
+  return { dataset, manifestName, rows, index, row: rows[index] };
+}
+
+function anchorOutputRelForQuestion(row){
+  const questionPdf = stripManifestPrefix(row?.questionPdf || "");
+  if (!questionPdf) throw new Error("문제 PDF 경로가 없습니다.");
+  const parsed = path.posix.parse(questionPdf);
+  return path.posix.join(parsed.dir, `${parsed.name}_anchor.json`);
+}
+
+async function updateCategoryQuestionManifest(row, fields){
+  const questionPdf = stripManifestPrefix(row?.questionPdf || "");
+  if (!questionPdf) return;
+  const dirRel = path.posix.dirname(questionPdf);
+  const localManifestAbs = resolveWorkspacePath(path.posix.join(dirRel, "question.json"));
+  if (!fs.existsSync(localManifestAbs)) return;
+  try{
+    const localRows = JSON.parse(await fsp.readFile(localManifestAbs, "utf8"));
+    if (!Array.isArray(localRows)) return;
+    const idx = localRows.findIndex((item) => (
+      (row?.questionNo && String(item?.questionNo || "") === String(row.questionNo))
+      || sameManagedRelPath(item?.questionPdf || "", questionPdf)
+    ));
+    if (idx < 0) return;
+    localRows[idx] = { ...localRows[idx], ...fields };
+    await fsp.writeFile(localManifestAbs, `${JSON.stringify(localRows, null, 2)}\n`, "utf8");
+  }catch(_){}
+}
+
+async function handleAnchorOcr(req, res){
+  const body = JSON.parse((await readBody(req)).toString("utf8") || "{}");
+  const found = findQuestionManifestRow(body);
+  const row = found.row;
+  const questionPdfRel = stripManifestPrefix(row.questionPdf || body.path || "");
+  const inputAbs = assertPdfManagedPath(questionPdfRel);
+  if (isDerivedPdfPath(questionPdfRel)) throw new Error("문제·문항 위치맵은 원본 문제 PDF에서만 생성합니다.");
+  const outputRel = anchorOutputRelForQuestion(row);
+  const outputAbs = resolveWorkspacePath(outputRel);
+  const questionCount = expectedQuestionCount(row);
+  if (!questionCount) throw new Error("문항 수 정보가 없어 문제·문항 위치맵을 생성할 수 없습니다.");
+  const choiceCount = Math.max(1, Math.min(5, Number(row.choiceCount || body.choiceCount || 4) || 4));
+  const args = [
+    path.join(scriptDir, "anchor-ocr.mjs"),
+    "--input", inputAbs,
+    "--output", outputAbs,
+    "--question-no", String(row.questionNo || ""),
+    "--question-count", String(questionCount),
+    "--choice-count", String(choiceCount),
+    "--question-pdf", questionPdfRel,
+  ];
+  if (row.questionStartNo) args.push("--question-start-no", String(row.questionStartNo));
+  if (row.questionEndNo) args.push("--question-end-no", String(row.questionEndNo));
+  const started = Date.now();
+  const result = await runCommand(process.execPath, args, { maxBuffer: 120 * 1024 * 1024, timeout: 10 * 60 * 1000 });
+  const anchorData = JSON.parse(await fsp.readFile(outputAbs, "utf8"));
+  const fields = {
+    anchorMap: `quiz/${outputRel}`,
+    anchorStatus: Number(anchorData.confidence || 0) >= 0.32 ? "위치맵 생성" : "위치맵 확인 필요",
+    anchorConfidence: Number(anchorData.confidence || 0),
+    anchorWarnings: Array.isArray(anchorData.warnings) ? anchorData.warnings : [],
+    anchorGeneratedAt: anchorData.generatedAt || new Date().toISOString(),
+    questionStartNo: row.questionStartNo || anchorData.questionStartNo || "",
+    questionEndNo: row.questionEndNo || anchorData.questionEndNo || "",
+  };
+  found.rows[found.index] = { ...found.rows[found.index], ...fields };
+  await writeJsonFile(found.manifestName, found.rows);
+  await updateCategoryQuestionManifest(row, fields);
+  sendJson(res, 200, {
+    ok: true,
+    output: outputRel,
+    manifestOutput: fields.anchorMap,
+    status: fields.anchorStatus,
+    confidence: fields.anchorConfidence,
+    warnings: fields.anchorWarnings,
+    detected: Array.isArray(anchorData.anchors) ? anchorData.anchors.length : 0,
+    rawDetected: anchorData.rawAnchorCount || 0,
+    pageCount: anchorData.pageCount || 0,
+    questionCount: anchorData.questionCount || questionCount,
+    choiceCount: anchorData.choiceCount || choiceCount,
+    questionStartNo: anchorData.questionStartNo || "",
+    questionEndNo: anchorData.questionEndNo || "",
+    elapsedMs: Date.now() - started,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  });
+}
+// SOFTM-위치맵: 전체 OCR PDF 대신 문제 시작 위치와 선택지 위치를 JSON으로 저장하고 manifest에 anchorMap 참조를 연결 - 2026-05-30
+
+async function processReport(){
+  const questions = readJsonFile("question.json", []);
+  const rawRows = Array.isArray(questions) ? questions : [];
+  const catalog = await catalogState();
+  const rows = catalog.questions.filter((row) => row.dataset === "default");
+  const published = rows.filter((row) => row.published);
+  const unpublished = rows.filter((row) => !row.published).map((row) => ({
+    questionNo: row.questionNo || "",
+    category: row.catNm || "",
+    questionNm: row.questionNm || "",
+    questionPdf: row.questionPdf || "",
+    answerPdf: row.answerPdf || "",
+    reason: row.issue && row.issue !== "정상" ? row.issue : (row.answerPdf ? "정답 파싱 또는 correct.json 생성 필요" : "정답 파일 매핑 필요"),
+  }));
+  const generatedFiles = [
+    fileInfo("json/group.json"),
+    fileInfo("json/category.json"),
+    fileInfo("json/question.json"),
+    ...walkManagedFiles("pdf").filter((file) => path.basename(file) === "question.json" || path.basename(file) === "correct.json").map((file) => fileInfo(toRel(file))),
+  ].sort((a, b) => String(b.mtime || "").localeCompare(String(a.mtime || "")));
+  const tools = await Promise.all([checkCommand("python3"), checkCommand("pdftotext"), checkCommand("pdfinfo"), checkCommand("ocrmypdf"), checkCommand("tesseract"), checkCommand("hwp5html")]);
+  return {
+    ok: true,
+    files: processFileSummary(),
+    manifest: {
+      questions: rawRows.length,
+      published: published.length,
+      unpublished: unpublished.length,
+    },
+    scripts: ["gen_category.py", "gen_question.py", "gen_correct.py"].map(scriptInfo),
+    tools,
+    generatedFiles: generatedFiles.slice(0, 24),
+    unpublished: unpublished.slice(0, 30),
+    nextSteps: [
+      "pdf 하위에 문제 PDF와 정답 PDF/HWP를 배치합니다.",
+      "프로세스 점검에서 정답 매핑 누락 여부를 확인합니다.",
+      "JSON 재생성을 실행합니다. 내부 순서는 gen_category.py → gen_question.py → gen_correct.py 입니다.",
+      "기존 카테고리에 파일만 추가한 경우에는 카테고리 행의 JSON 갱신으로 해당 범위만 업데이트할 수 있습니다.",
+      "미게시 회차가 0인지 확인하고 Git 상태를 확인합니다.",
+    ],
+  };
+}
+/* SOFTM-ADMIN 끝 */
+
+function runGenerateManifest(){
+  const scripts = ["gen_category.py", "gen_question.py", "gen_correct.py"];
+  const runOne = (scriptName) => new Promise((resolve, reject) => {
+    execFile("python3", [path.join(scriptDir, scriptName)], { cwd: root, maxBuffer: 80 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) {
+        err.message = `${scriptName} failed\n${stderr || stdout || err.message}`;
+        reject(err);
+        return;
+      }
+      resolve({ scriptName, stdout, stderr });
+    });
+  });
+  return scripts.reduce((promise, scriptName) => (
+    promise.then(async (results) => [...results, await runOne(scriptName)])
+  ), Promise.resolve([]));
+}
+
+function resolveRebuildCategory(body){
+  const dataset = String(body.dataset || "default");
+  if (dataset !== "default") {
+    throw new Error("카테고리 단위 JSON 갱신은 현재 기본 PDF 문제은행만 지원합니다. 방통대 별도 manifest는 전체 재생성 또는 import 흐름을 사용하세요.");
+  }
+  const categories = readJsonFile("category.json", []);
+  const catNo = String(body.catNo || "");
+  const requestedPath = stripManifestPrefix(body.categoryPath || "");
+  const row = (Array.isArray(categories) ? categories : []).find((item) => (
+    (catNo && String(item?.catNo || "") === catNo)
+    || (requestedPath && stripManifestPrefix(item?.catPath || "") === requestedPath)
+  ));
+  if (!row) throw new Error("선택한 카테고리를 json/category.json에서 찾을 수 없습니다. 새 카테고리는 전체 JSON 재생성을 먼저 실행하세요.");
+  const categoryPath = stripManifestPrefix(row.catPath || requestedPath);
+  if (!categoryPath) throw new Error("선택한 카테고리의 catPath가 없습니다.");
+  assertManagedPath(categoryPath);
+  return { category: row, categoryPath };
+}
+
+function runGenerateCategoryManifest(body){
+  const { category, categoryPath } = resolveRebuildCategory(body || {});
+  const scripts = [
+    { scriptName: "gen_question.py", args: ["--category-path", categoryPath] },
+    { scriptName: "gen_correct.py", args: ["--category-path", categoryPath] },
+  ];
+  const runOne = ({ scriptName, args }) => new Promise((resolve, reject) => {
+    execFile("python3", [path.join(scriptDir, scriptName), ...args], { cwd: root, maxBuffer: 80 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) {
+        err.message = `${scriptName} failed\n${stderr || stdout || err.message}`;
+        reject(err);
+        return;
+      }
+      resolve({ scriptName, stdout, stderr, args });
+    });
+  });
+  return scripts.reduce((promise, script) => (
+    promise.then(async (results) => [...results, await runOne(script)])
+  ), Promise.resolve([])).then((results) => ({ category, categoryPath, results }));
+}
+// SOFTM-GEN: 선택 카테고리만 question/correct JSON을 갱신하는 관리자 재생성 흐름 추가 - 2026-05-30
+
+function pushArg(args, flag, value){
+  const raw = String(value || "").trim();
+  if (raw) args.push(flag, raw);
+}
+
+async function handleUpload(req, res){
+  const body = await readBody(req);
+  const { fields, files } = parseMultipart(req, body);
+  const file = files.find((item) => item.field === "file");
+  if (!file) throw new Error("업로드 파일이 없습니다.");
+  const mode = String(fields.mode || "direct");
+  const originalName = file.fileName || "upload.bin";
+
+  if (mode === "direct") {
+    const dir = normalizeRelPath(fields.targetDir || "pdf/업로드");
+    const safeName = path.basename(String(fields.targetName || originalName).trim() || originalName);
+    const targetDir = assertManagedPath(dir);
+    const targetPath = path.join(targetDir, safeName);
+    await fsp.mkdir(targetDir, { recursive: true });
+    await fsp.writeFile(targetPath, file.content);
+    sendJson(res, 200, { ok: true, mode, file: toRel(targetPath) });
+    return;
+  }
+
+  const tempDir = path.join(root, ".admin_uploads");
+  await fsp.mkdir(tempDir, { recursive: true });
+  const tempPath = path.join(tempDir, `${Date.now()}_${path.basename(originalName)}`);
+  await fsp.writeFile(tempPath, file.content);
+  try{
+    const args = [];
+    if (mode === "knou-answer") args.push("--answer", tempPath);
+    else if (mode === "knou-question") args.push("--question", tempPath);
+    else throw new Error("알 수 없는 업로드 모드입니다.");
+    pushArg(args, "--year", fields.year);
+    pushArg(args, "--semester", fields.semester);
+    pushArg(args, "--exam-type", fields.examType);
+    pushArg(args, "--scope", fields.scope);
+    pushArg(args, "--course", fields.course);
+    pushArg(args, "--department", fields.department);
+    pushArg(args, "--answer-source-id", fields.answerSourceId);
+    pushArg(args, "--grade", fields.grade);
+    pushArg(args, "--question-count", fields.questionCount);
+    const result = await runImport(args);
+    sendJson(res, 200, { ok: true, mode, output: result.stdout, errorOutput: result.stderr });
+  } finally {
+    await fsp.rm(tempPath, { force: true }).catch(() => {});
+  }
+}
+
+async function handleJsonAction(req, res, action){
+  const body = JSON.parse((await readBody(req)).toString("utf8") || "{}");
+  if (action === "mkdir") {
+    const target = assertManagedPath(body.dir);
+    await fsp.mkdir(target, { recursive: true });
+    sendJson(res, 200, { ok: true, dir: toRel(target) });
+    return;
+  }
+  if (action === "rename") {
+    const from = assertManagedPath(body.from);
+    const to = assertManagedPath(body.to);
+    await fsp.mkdir(path.dirname(to), { recursive: true });
+    await fsp.rename(from, to);
+    sendJson(res, 200, { ok: true, from: toRel(from), to: toRel(to) });
+    return;
+  }
+  sendJson(res, 404, { ok: false, message: "unknown action" });
+}
+
+async function serveFile(res, filePath){
+  const ext = path.extname(filePath).toLowerCase();
+  res.writeHead(200, {
+    "content-type": mimeTypes[ext] || "application/octet-stream",
+    "cache-control": "no-store",
+  });
+  fs.createReadStream(filePath).pipe(res);
+}
+
+async function serveStatic(req, res, url){
+  const rel = normalizeRelPath(decodeURIComponent(url.pathname === "/" ? "index.html" : url.pathname));
+  const filePath = resolveWorkspacePath(rel);
+  let stat;
+  try{
+    stat = await fsp.stat(filePath);
+  }catch(_){
+    sendText(res, 404, "not found");
+    return;
+  }
+  if (stat.isDirectory()) {
+    const indexPath = path.join(filePath, "index.html");
+    try{
+      await fsp.access(indexPath);
+      await serveFile(res, indexPath);
+    }catch(_){
+      sendText(res, 403, "directory listing disabled");
+    }
+    return;
+  }
+  await serveFile(res, filePath);
+}
+
+const server = http.createServer(async (req, res) => {
+  try{
+    const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+    if (url.pathname === "/api/admin/state") return sendJson(res, 200, await manifestState());
+    if (url.pathname === "/api/admin/catalog") return sendJson(res, 200, await catalogState());
+    if (url.pathname === "/api/admin/process-report") return sendJson(res, 200, await processReport());
+    if (url.pathname === "/api/admin/pdf-info") return await handlePdfInfo(req, res, url);
+    if (url.pathname === "/api/admin/ocr/start" && req.method === "POST") return await handleOcrStart(req, res);
+    if (url.pathname === "/api/admin/ocr/status") return await handleOcrStatus(req, res, url);
+    if (url.pathname === "/api/admin/ocr/jobs") return await handleOcrJobs(req, res);
+    if (url.pathname === "/api/admin/ocr/cancel" && req.method === "POST") return await handleOcrCancel(req, res, url);
+    if (url.pathname === "/api/admin/ocr" && req.method === "POST") return await handleOcr(req, res);
+    if (url.pathname === "/api/admin/anchor-ocr" && req.method === "POST") return await handleAnchorOcr(req, res);
+    if (url.pathname === "/api/admin/git-status") return sendJson(res, 200, await gitStatus());
+    if (url.pathname === "/api/admin/rebuild" && req.method === "POST") {
+      const results = await runGenerateManifest();
+      return sendJson(res, 200, { ok: true, output: results.map((row) => `$ ${row.scriptName}\n${row.stdout}${row.stderr || ""}`).join("\n") });
+    }
+    if (url.pathname === "/api/admin/rebuild-category" && req.method === "POST") {
+      const body = JSON.parse((await readBody(req)).toString("utf8") || "{}");
+      const data = await runGenerateCategoryManifest(body);
+      const output = data.results.map((row) => `$ ${row.scriptName} ${row.args.join(" ")}\n${row.stdout}${row.stderr || ""}`).join("\n");
+      return sendJson(res, 200, {
+        ok: true,
+        category: data.category,
+        categoryPath: data.categoryPath,
+        output,
+      });
+    }
+    // SOFTM-GEN: 전체 재생성과 별도로 선택 카테고리 JSON 갱신 API 추가 - 2026-05-30
+    // SOFTM-위치맵: 상세 관리자에서 문제·문항 위치맵 JSON을 생성하는 API 추가 - 2026-05-30
+    if (url.pathname === "/api/admin/list") return sendJson(res, 200, listDir(url.searchParams.get("dir") || "pdf"));
+    if (url.pathname === "/api/admin/upload" && req.method === "POST") return await handleUpload(req, res);
+    if (url.pathname === "/api/admin/mkdir" && req.method === "POST") return await handleJsonAction(req, res, "mkdir");
+    if (url.pathname === "/api/admin/rename" && req.method === "POST") return await handleJsonAction(req, res, "rename");
+    await serveStatic(req, res, url);
+  }catch(err){
+    sendJson(res, 500, { ok: false, message: err?.message || String(err) });
+  }
+});
+
+server.listen(port, () => {
+  console.log(`Quiz admin server: http://localhost:${port}/admin.html`);
+});
+/* SOFTM-ADMIN 끝 */

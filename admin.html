@@ -1,0 +1,1712 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>문제은행 관리자</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --panel-soft: #f9fbfc;
+      --ink: #1f2933;
+      --muted: #66727f;
+      --line: #d8e0e6;
+      --accent: #256d7b;
+      --accent-2: #3858a6;
+      --ok: #17654f;
+      --warn: #8a5a14;
+      --danger: #b93838;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Pretendard", "SUIT", "Noto Sans KR", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    a { color: inherit; text-decoration: none; }
+    button, .button {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--ink);
+      padding: 8px 10px;
+      font-size: 13px;
+      line-height: 1.1;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    button.primary, .button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.secondary, .button.secondary { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
+    button.ghost, .button.ghost { background: transparent; }
+    button.danger, .button.danger { color: var(--danger); }
+    button:disabled, .button.disabled {
+      opacity: .48;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--ink);
+      padding: 9px 10px;
+      font-size: 13px;
+    }
+    textarea { min-height: 120px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .container {
+      width: min(1420px, 94vw);
+      margin: 0 auto;
+      padding: 24px 0 48px;
+    }
+    .top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    h1 { margin: 0; font-size: 28px; letter-spacing: 0; }
+    h2 { margin: 0; font-size: 17px; letter-spacing: 0; }
+    h3 { margin: 0; font-size: 14px; letter-spacing: 0; }
+    .desc { color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .top .desc { margin-top: 7px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 8px 18px rgba(31,41,51,.04);
+    }
+    .panelHead {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .panelBody { padding: 16px; }
+    .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .stack { display: grid; gap: 12px; }
+    .field { display: grid; gap: 5px; }
+    .field label { color: var(--muted); font-size: 12px; }
+    .summaryGrid {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(8, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .countBox {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 11px 12px;
+      min-height: 68px;
+    }
+    .countBox strong { display: block; font-size: 20px; }
+    .countBox span { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; }
+    /* SOFTM-ADMIN 시작: 선택 회차 상세를 우측 고정 작업대로 재배치 - 2026-05-30 */
+    .workspace {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .toolsPanel {
+      position: static;
+      display: grid;
+      gap: 14px;
+      max-height: none;
+      overflow: visible;
+      padding-right: 0;
+    }
+    .detailPanel {
+      border-color: #b6d4da;
+      box-shadow: 0 14px 28px rgba(37,109,123,.08);
+    }
+    .detailPanel .panelHead { background: #fbfeff; }
+    .sideUtility {
+      box-shadow: none;
+      background: #fbfcfd;
+    }
+    .sideUtility > summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    details.panel:not([open]) > summary { border-bottom: 0; }
+    .utilityBlock {
+      display: grid;
+      gap: 10px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .utilityBlock:last-child {
+      padding-bottom: 0;
+      border-bottom: 0;
+    }
+    /* SOFTM-ADMIN 끝 */
+    .filterBar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.4fr) minmax(140px, .7fr) minmax(140px, .7fr) minmax(220px, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .splitTables {
+      display: grid;
+      grid-template-columns: minmax(280px, .9fr) minmax(0, 1.6fr);
+      gap: 12px;
+      align-items: start;
+    }
+    .tableWrap {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: auto;
+      background: #fff;
+      max-height: 520px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      min-width: 720px;
+    }
+    #categoryTable { min-width: 560px; }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 9px 8px;
+      text-align: left;
+      vertical-align: middle;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      background: #f8fafb;
+      color: var(--muted);
+      font-weight: 700;
+      z-index: 1;
+    }
+    tr:hover td { background: #fbfcfd; }
+    tr.selectableRow { cursor: pointer; outline: none; }
+    tr.selectableRow.selected td,
+    tr.selectableRow:focus td,
+    tr.selectableRow:focus-within td { background: #eef7f8; }
+    tr.selectableRow:focus { outline: 2px solid rgba(37,109,123,.35); outline-offset: -2px; }
+    .cellTitle { font-weight: 700; line-height: 1.35; }
+    .cellSub {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      word-break: break-all;
+    }
+    .pathCell {
+      max-width: 300px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      word-break: break-all;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 8px;
+      margin: 0 5px 5px 0;
+      font-size: 12px;
+      background: #fff;
+      color: var(--muted);
+    }
+    .pill.ok { color: var(--ok); border-color: #b7d8ce; background: #f0faf6; }
+    .pill.warn { color: var(--warn); border-color: #eed6a7; background: #fff8e8; }
+    .pill.danger { color: var(--danger); border-color: #e7b9b9; background: #fff5f5; }
+    .status {
+      padding: 10px;
+      border-radius: 8px;
+      background: #eef5f6;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+    .status.warn { background: #fff8e8; color: var(--warn); }
+    /* SOFTM-ADMIN 시작: 정보성 알림을 토스트로 표시하는 UI 추가 - 2026-05-30 */
+    .toastRegion {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 20;
+      display: grid;
+      gap: 8px;
+      width: min(380px, calc(100vw - 36px));
+      pointer-events: none;
+    }
+    .toast {
+      pointer-events: auto;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: start;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--accent);
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px;
+      box-shadow: 0 16px 34px rgba(31,41,51,.18);
+      animation: toastIn .16s ease-out;
+    }
+    .toast.ok { border-left-color: var(--ok); }
+    .toast.warn { border-left-color: var(--warn); }
+    .toast.error { border-left-color: var(--danger); }
+    .toastTitle { font-weight: 700; font-size: 13px; }
+    .toastMessage { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.45; white-space: pre-wrap; }
+    .toastClose {
+      border: 0;
+      padding: 2px 4px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1;
+    }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    /* SOFTM-ADMIN 끝 */
+    .pdfPreview {
+      width: 100%;
+      height: min(330px, 36vh);
+      min-height: 220px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+    }
+    .pdfPreview[hidden] { display: none; }
+    .diagGrid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .diagBox {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 10px;
+      display: grid;
+      gap: 6px;
+      min-height: 92px;
+    }
+    .diagBox strong { font-size: 13px; }
+    .diagBox .small { color: var(--muted); font-size: 12px; line-height: 1.45; white-space: pre-wrap; }
+    /* SOFTM-ADMIN 시작: 파일 변경 작업 확인 다이얼로그와 진행 표시 UI 추가 - 2026-05-30 */
+    dialog {
+      border: 0;
+      border-radius: 10px;
+      padding: 0;
+      width: min(520px, 92vw);
+      color: var(--ink);
+      box-shadow: 0 22px 60px rgba(31,41,51,.24);
+    }
+    dialog::backdrop { background: rgba(20,28,36,.42); }
+    .dialogCard { padding: 18px; display: grid; gap: 14px; }
+    .dialogTitle { margin: 0; font-size: 18px; }
+    .dialogMessage { margin: 0; white-space: pre-wrap; }
+    .dialogActions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+    .progressTrack {
+      position: relative;
+      height: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #e7edf1;
+    }
+    .progressFill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 42%;
+      border-radius: inherit;
+      background: var(--accent);
+      animation: progressSlide 1.1s ease-in-out infinite;
+    }
+    @keyframes progressSlide {
+      0% { transform: translateX(-110%); }
+      100% { transform: translateX(240%); }
+    }
+    .progressSteps {
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 7px;
+      list-style: none;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .progressSteps li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .progressSteps li::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--line);
+      flex: 0 0 auto;
+    }
+    .progressSteps li.running { color: var(--ink); font-weight: 700; }
+    .progressSteps li.running::before { background: var(--accent); }
+    .progressSteps li.done::before { background: var(--ok); }
+    .progressSteps li.failed { color: var(--danger); }
+    .progressSteps li.failed::before { background: var(--danger); }
+    /* SOFTM-ADMIN 끝 */
+    .quickStats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .quickStats .countBox { min-height: 60px; }
+    .fileGrid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .sectionGap { margin-top: 14px; }
+    details.panel > summary {
+      cursor: pointer;
+      padding: 14px 16px;
+      font-weight: 700;
+      border-bottom: 1px solid var(--line);
+      list-style: none;
+    }
+    details.panel > summary::-webkit-details-marker { display: none; }
+    .empty {
+      color: var(--muted);
+      padding: 18px;
+      text-align: center;
+    }
+    @media (max-width: 1180px) {
+      .workspace, .splitTables, .fileGrid { grid-template-columns: 1fr; }
+      .toolsPanel {
+        order: initial;
+        position: static;
+        z-index: auto;
+        max-height: none;
+        overflow: visible;
+        padding-right: 0;
+      }
+      .pdfPreview { height: min(260px, 30vh); }
+      .summaryGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    @media (max-width: 760px) {
+      .container { width: min(96vw, 760px); padding-top: 18px; }
+      .filterBar, .grid2, .grid3, .quickStats { grid-template-columns: 1fr; }
+      .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      h1 { font-size: 23px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- SOFTM-ADMIN 시작: 테이블 중심 관리자 화면 재구성 - 2026-05-29 -->
+  <div id="toastRegion" class="toastRegion" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- SOFTM-ADMIN 시작: 중요 작업 확인 및 진행률 표시 다이얼로그 추가 - 2026-05-30 -->
+  <dialog id="confirmDialog">
+    <div class="dialogCard">
+      <h2 id="confirmTitle" class="dialogTitle">확인</h2>
+      <p id="confirmMessage" class="dialogMessage desc"></p>
+      <div id="confirmInputWrap" class="field" hidden>
+        <label id="confirmInputLabel" for="confirmInput">입력</label>
+        <input id="confirmInput" />
+      </div>
+      <div class="dialogActions">
+        <button id="confirmCancel" type="button">취소</button>
+        <button id="confirmOk" type="button" class="primary">확인</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="progressDialog">
+    <div class="dialogCard">
+      <h2 id="progressTitle" class="dialogTitle">처리 중</h2>
+      <div class="progressTrack" aria-hidden="true"><div class="progressFill"></div></div>
+      <div id="progressMessage" class="desc">잠시만 기다려 주세요.</div>
+      <ol id="progressSteps" class="progressSteps"></ol>
+      <div class="dialogActions">
+        <button id="progressClose" type="button" hidden>닫기</button>
+      </div>
+    </div>
+  </dialog>
+  <!-- SOFTM-ADMIN 끝 -->
+
+  <main class="container">
+    <div class="top">
+      <div>
+        <h1>문제은행 관리자</h1>
+        <div class="desc">카테고리와 문제 회차를 테이블로 확인하고, 파일 배치 후 JSON 생성 상태를 점검합니다.</div>
+      </div>
+      <div class="actions">
+        <a class="button" href="./index.html">풀이 메인</a>
+        <button id="btnRefresh" class="primary">새로고침</button>
+        <button id="btnProcessGenerate" class="secondary">점검 후 JSON 재생성</button>
+      </div>
+    </div>
+
+    <section class="summaryGrid" id="counts"></section>
+
+    <div class="workspace">
+      <section class="panel">
+        <div class="panelHead">
+          <div>
+            <h2>카테고리 / 문제 관리</h2>
+            <div class="desc" id="catalogMeta">로딩 중</div>
+          </div>
+          <div class="row">
+            <button id="btnClearFilter" class="ghost">필터 초기화</button>
+          </div>
+        </div>
+        <div class="panelBody">
+          <div class="filterBar">
+            <input id="catalogSearch" placeholder="카테고리, 과목명, 파일명 검색" />
+            <select id="datasetFilter">
+              <option value="">전체 구분</option>
+            </select>
+            <select id="statusFilter">
+              <option value="">전체 상태</option>
+              <option value="published">게시</option>
+              <option value="unpublished">미게시</option>
+              <option value="warning">확인 필요</option>
+            </select>
+            <select id="categoryFilter">
+              <option value="">전체 카테고리</option>
+            </select>
+          </div>
+
+          <div class="splitTables">
+            <div class="stack">
+              <div class="row" style="justify-content:space-between">
+                <h3>카테고리</h3>
+                <span class="desc" id="categoryTableMeta"></span>
+              </div>
+              <div class="tableWrap">
+                <table id="categoryTable">
+                  <thead>
+                    <tr>
+                      <th>카테고리</th>
+                      <th>회차</th>
+                      <th>게시</th>
+                      <th>작업</th>
+                    </tr>
+                  </thead>
+                  <tbody id="categoryRows"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="stack">
+              <div class="row" style="justify-content:space-between">
+                <h3>문제 회차</h3>
+                <span class="desc" id="questionTableMeta"></span>
+              </div>
+              <div class="tableWrap">
+                <table id="questionTable">
+                  <thead>
+                    <tr>
+                      <th>상태</th>
+                      <th>문제 파일</th>
+                      <th>OCR 품질</th>
+                      <th>정답 진단</th>
+                      <th>문항</th>
+                      <th>작업</th>
+                    </tr>
+                  </thead>
+                  <tbody id="questionRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SOFTM-ADMIN 시작: 회차 상세/진단은 별도 페이지로 분리하고 메인은 목록과 운영 도구만 표시 - 2026-05-30 -->
+      <aside class="toolsPanel" aria-label="운영 도구">
+        <details class="panel sideUtility">
+          <summary>
+            <span>운영 도구</span>
+            <span class="desc">점검 · JSON · Git</span>
+          </summary>
+          <div class="panelBody stack">
+            <div class="utilityBlock">
+              <div class="row" style="justify-content:space-between">
+                <h3>운영 점검</h3>
+                <button id="btnProcessReport">프로세스 점검</button>
+              </div>
+              <div class="quickStats" id="processSummary"></div>
+              <div>
+                <h3>실행 환경</h3>
+                <div class="desc" id="processTools" style="margin-top:8px">점검 전</div>
+              </div>
+              <div>
+                <h3>미게시 회차</h3>
+                <div class="desc" id="processUnpublished" style="margin-top:8px">점검 전</div>
+              </div>
+              <div class="status" id="processStatus">대기 중</div>
+            </div>
+            <div class="utilityBlock">
+              <div class="row" style="justify-content:space-between">
+                <h3>JSON / Git</h3>
+                <div class="row">
+                  <button id="btnRebuild">전체 JSON 재생성</button><!-- SOFTM-GEN: 전체/부분 JSON 갱신 구분을 위해 버튼명을 명확화 - 2026-05-30 -->
+                  <button id="btnRebuildCategory">선택 카테고리 갱신</button>
+                  <button id="btnGit">Git 상태</button>
+                </div>
+              </div>
+              <div class="status" id="rebuildStatus">대기 중</div>
+              <div class="status" id="gitStatus">대기 중</div>
+            </div>
+          </div>
+        </details>
+      </aside>
+      <!-- SOFTM-ADMIN 끝 -->
+    </div>
+
+    <section class="panel sectionGap">
+      <div class="panelHead">
+        <div>
+          <h2>파일 / 업로드 관리</h2>
+          <div class="desc">파일 목록은 테이블에서 열람하고, 이름 변경과 직접 업로드는 로컬 관리자 서버에서 처리합니다.</div>
+        </div>
+      </div>
+      <div class="panelBody fileGrid">
+        <section class="stack">
+          <div class="row">
+            <input id="dirInput" value="pdf/방통대" style="flex:1; min-width:220px" />
+            <button id="btnList" class="primary">조회</button>
+            <button id="btnUp">상위</button>
+          </div>
+          <div class="row">
+            <input id="mkdirInput" placeholder="새 디렉토리 예: pdf/방통대/모바일앱프로그래밍" style="flex:1; min-width:260px" />
+            <button id="btnMkdir">디렉토리 생성</button>
+          </div>
+          <div class="tableWrap" style="max-height:420px">
+            <table>
+              <thead>
+                <tr>
+                  <th>이름</th>
+                  <th>종류</th>
+                  <th>크기</th>
+                  <th>수정일</th>
+                  <th>작업</th>
+                </tr>
+              </thead>
+              <tbody id="fileRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="stack">
+          <h3>업로드</h3>
+          <form id="uploadForm" class="stack">
+            <div class="field">
+              <label>업로드 모드</label>
+              <select name="mode" id="mode">
+                <option value="direct">직접 업로드</option>
+                <option value="knou-question">방통대 문제 import</option>
+                <option value="knou-answer">방통대 정답 import</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>파일</label>
+              <input type="file" name="file" required />
+            </div>
+            <div id="directFields" class="stack">
+              <div class="field">
+                <label>업로드 디렉토리</label>
+                <input name="targetDir" value="pdf/방통대/업로드" />
+              </div>
+              <div class="field">
+                <label>저장 파일명</label>
+                <input name="targetName" placeholder="비우면 원본명" />
+              </div>
+            </div>
+            <div id="importFields" class="stack" style="display:none">
+              <div class="grid3">
+                <div class="field"><label>연도</label><input name="year" placeholder="예: 2019" /></div>
+                <div class="field"><label>학기</label><input name="semester" placeholder="1 또는 2" /></div>
+                <div class="field">
+                  <label>시험유형</label>
+                  <select name="examType">
+                    <option value="">자동</option>
+                    <option value="final">기말</option>
+                    <option value="midterm">중간</option>
+                    <option value="substitute">출석대체</option>
+                    <option value="seasonal">계절</option>
+                  </select>
+                </div>
+              </div>
+              <div class="grid2">
+                <div class="field"><label>정답 scope</label><input name="scope" placeholder="all, grade1-2, face 등" /></div>
+                <div class="field"><label>정답 sourceId</label><input name="answerSourceId" placeholder="문제 import 시 연결" /></div>
+              </div>
+              <div class="grid2">
+                <div class="field"><label>교과목명</label><input name="course" placeholder="비우면 추론" /></div>
+                <div class="field"><label>학과명</label><input name="department" placeholder="예: 컴퓨터과학과" /></div>
+              </div>
+              <div class="grid2">
+                <div class="field"><label>학년</label><input name="grade" placeholder="예: 4" /></div>
+                <div class="field"><label>문항 수</label><input name="questionCount" placeholder="예: 35, 70, 100" /></div>
+              </div>
+            </div>
+            <button class="secondary" type="submit">업로드 실행</button>
+          </form>
+          <div class="status" id="uploadStatus">대기 중</div>
+        </section>
+      </div>
+    </section>
+
+    <details class="panel sectionGap">
+      <summary>최근 생성 파일</summary>
+      <div class="panelBody">
+        <div class="desc" id="processGenerated">점검 전</div>
+      </div>
+    </details>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = {
+      catalog: { categories: [], questions: [] },
+      selectedCategoryKey: "",
+      selectedQuestionKey: "",
+    };
+
+    function fmtSize(n){
+      const num = Number(n) || 0;
+      if (num > 1024 * 1024) return `${(num / 1024 / 1024).toFixed(1)} MB`;
+      if (num > 1024) return `${(num / 1024).toFixed(1)} KB`;
+      return `${num} B`;
+    }
+
+    function escapeHtml(value){
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function normalizePath(value){
+      return String(value || "").replace(/^\.\//, "").replace(/^quiz\//, "");
+    }
+
+    function fileNameFromPath(value){
+      const normalized = normalizePath(value);
+      const parts = normalized.split(/[\\/]/).filter(Boolean);
+      return parts.length ? parts[parts.length - 1] : "";
+    }
+
+    function folderNameFromPath(value){
+      const normalized = normalizePath(value);
+      const parts = normalized.split(/[\\/]/).filter(Boolean);
+      parts.pop();
+      return parts.join("/");
+    }
+    // SOFTM-ADMIN: 회차 목록을 등록명 대신 실제 문제 파일명 기준으로 표시하기 위한 경로 유틸 추가 - 2026-05-30
+
+    async function api(path, options = {}){
+      const res = await fetch(path, { cache: "no-store", ...options });
+      const type = res.headers.get("content-type") || "";
+      if (!type.includes("application/json")) {
+        throw new Error("관리 기능은 Node 관리자 서버에서만 가능합니다. npm run admin 실행 후 http://localhost:8787/admin.html 로 접속하세요.");
+      }
+      const data = await res.json();
+      if (!res.ok || data.ok === false) throw new Error(data.message || "요청 실패");
+      return data;
+    }
+
+    /* SOFTM-ADMIN 시작: 완료/오류/취소 정보를 우측 하단 토스트로 안내 - 2026-05-30 */
+    function showToast(message, options = {}){
+      const region = $("toastRegion");
+      const toast = document.createElement("div");
+      const tone = options.tone || "info";
+      toast.className = `toast ${tone}`;
+      toast.setAttribute("role", tone === "error" ? "alert" : "status");
+      toast.innerHTML = `
+        <div>
+          <div class="toastTitle">${escapeHtml(options.title || (tone === "error" ? "오류" : tone === "warn" ? "확인 필요" : "알림"))}</div>
+          <div class="toastMessage">${escapeHtml(message)}</div>
+        </div>
+        <button class="toastClose" type="button" aria-label="알림 닫기">×</button>
+      `;
+      const close = () => toast.remove();
+      toast.querySelector(".toastClose").addEventListener("click", close);
+      region.appendChild(toast);
+      const timeout = Number(options.timeout || (tone === "error" ? 7000 : 4200));
+      window.setTimeout(close, timeout);
+    }
+    /* SOFTM-ADMIN 끝 */
+
+    /* SOFTM-ADMIN 시작: 중요 처리 확인 다이얼로그와 공통 진행 표시 제어 추가 - 2026-05-30 */
+    function showConfirmDialog(options = {}){
+      return new Promise((resolve) => {
+        const dialog = $("confirmDialog");
+        const inputWrap = $("confirmInputWrap");
+        const input = $("confirmInput");
+        const ok = $("confirmOk");
+        const cancel = $("confirmCancel");
+        $("confirmTitle").textContent = options.title || "확인";
+        $("confirmMessage").textContent = options.message || "";
+        $("confirmInputLabel").textContent = options.inputLabel || "입력";
+        input.value = options.inputValue || "";
+        input.placeholder = options.inputPlaceholder || "";
+        inputWrap.hidden = !options.inputLabel;
+        ok.textContent = options.confirmText || "확인";
+        ok.className = options.danger ? "danger" : "primary";
+
+        const cleanup = () => {
+          ok.removeEventListener("click", onOk);
+          cancel.removeEventListener("click", onCancel);
+          dialog.removeEventListener("cancel", onCancel);
+        };
+        const closeWith = (value) => {
+          cleanup();
+          dialog.close();
+          if (value === null && options.cancelToast !== false) showToast("작업을 취소했습니다.", { title: "취소", tone: "warn", timeout: 2600 });
+          resolve(value);
+        };
+        const onOk = () => {
+          const value = options.inputLabel ? input.value.trim() : true;
+          closeWith(value || null);
+        };
+        const onCancel = (event) => {
+          if (event) event.preventDefault();
+          closeWith(null);
+        };
+        ok.addEventListener("click", onOk);
+        cancel.addEventListener("click", onCancel);
+        dialog.addEventListener("cancel", onCancel);
+        dialog.showModal();
+        if (options.inputLabel) input.focus();
+        else ok.focus();
+      });
+    }
+
+    function openProgressDialog(title, steps = [], message = "처리 중입니다. 잠시만 기다려 주세요."){
+      $("progressTitle").textContent = title;
+      $("progressMessage").textContent = message;
+      $("progressClose").hidden = true;
+      $("progressSteps").innerHTML = steps.map((step, idx) => (
+        `<li data-step="${idx}">${escapeHtml(step)}</li>`
+      )).join("");
+      const dialog = $("progressDialog");
+      if (!dialog.open) dialog.showModal();
+    }
+
+    function setProgressStep(index, status){
+      const item = document.querySelector(`#progressSteps li[data-step="${index}"]`);
+      if (!item) return;
+      item.classList.remove("running", "done", "failed");
+      if (status) item.classList.add(status);
+    }
+
+    function setProgressMessage(message){
+      $("progressMessage").textContent = message;
+    }
+
+    async function withProgress(options, runner){
+      const steps = options.steps || [];
+      openProgressDialog(options.title || "처리 중", steps, options.message);
+      try{
+        const result = await runner({
+          step(index, status = "running", message = ""){
+            setProgressStep(index, status);
+            if (message) setProgressMessage(message);
+          },
+          message: setProgressMessage,
+        });
+        steps.forEach((_step, idx) => setProgressStep(idx, "done"));
+        setProgressMessage(options.doneMessage || "완료했습니다.");
+        if (options.toast !== false) showToast(options.doneMessage || "완료했습니다.", { title: options.toastTitle || "완료", tone: "ok" });
+        setTimeout(() => {
+          if ($("progressDialog").open) $("progressDialog").close();
+        }, 450);
+        return result;
+      }catch(err){
+        const running = [...document.querySelectorAll("#progressSteps li")].findIndex((item) => item.classList.contains("running"));
+        if (running >= 0) setProgressStep(running, "failed");
+        setProgressMessage(err?.message || String(err));
+        $("progressClose").hidden = false;
+        showToast(err?.message || String(err), { title: options.errorTitle || "처리 실패", tone: "error" });
+        throw err;
+      }
+    }
+    /* SOFTM-ADMIN 끝 */
+
+    function categoryKey(item){
+      return `${item.dataset}:${item.catNo}`;
+    }
+
+    function questionKey(item){
+      return `${item.dataset}:${item.questionNo}`;
+    }
+
+    function statusPill(item){
+      if (item.published) return `<span class="pill ok">게시</span>`;
+      if (item.issue && item.issue !== "정상") return `<span class="pill warn">${escapeHtml(item.issue)}</span>`;
+      return `<span class="pill warn">미게시</span>`;
+    }
+
+    function diagPill(status, tone = "ok"){
+      const normalized = status || "미확인";
+      return `<span class="pill ${tone || (normalized === "정상" ? "ok" : "warn")}">${escapeHtml(normalized)}</span>`;
+    }
+
+    function warningText(warnings){
+      const list = Array.isArray(warnings) ? warnings.filter(Boolean) : [];
+      return list.length ? list.slice(0, 3).map((item) => `- ${item}`).join("\n") : "특이사항 없음";
+    }
+
+    function makeCategoryUrl(item){
+      const q = new URLSearchParams({ catNo: item.catNo, category: item.catNm });
+      if (item.dataset === "knou") q.set("dataset", "knou");
+      return `./category.html?${q.toString()}`;
+    }
+
+    function makeQuizUrl(item){
+      const q = new URLSearchParams({
+        dataset: item.dataset,
+        category: item.catNm,
+        catNo: item.catNo,
+        exam: item.questionNm,
+        questionNo: item.questionNo,
+        question: normalizePath(item.questionPdf),
+        answer: normalizePath(item.answerPdf),
+      });
+      if (item.correctJson) q.set("correct", normalizePath(item.correctJson));
+      if (item.questionCount) q.set("questionCount", item.questionCount);
+      if (item.questionStartNo) q.set("questionStartNo", item.questionStartNo);
+      if (item.questionEndNo) q.set("questionEndNo", item.questionEndNo);
+      if (item.answerSourceId) q.set("answerSourceId", item.answerSourceId);
+      return `./quiz.html?${q.toString()}`;
+    }
+
+    function makeAdminDetailUrl(item){
+      const q = new URLSearchParams({
+        dataset: item.dataset || "default",
+        questionNo: item.questionNo || "",
+      });
+      return `./admin-detail.html?${q.toString()}`;
+    }
+    // SOFTM-ADMIN: 회차 상세/진단 페이지로 이동하는 관리자 URL 생성 추가 - 2026-05-30
+
+    function renderCounts(data){
+      const labels = {
+        groups: "그룹",
+        categories: "카테고리",
+        questions: "문제 회차",
+        publishedQuestions: "게시 회차",
+        knouGroups: "방통대 학과",
+        knouCategories: "방통대 교과목",
+        knouQuestions: "방통대 회차",
+        knouAnswerSources: "방통대 정답표",
+      };
+      $("counts").innerHTML = Object.entries(data.counts || {}).map(([key, value]) => `
+        <div class="countBox"><strong>${Number(value || 0).toLocaleString()}</strong><span>${labels[key] || key}</span></div>
+      `).join("");
+    }
+
+    function categoryDescendantKeys(key){
+      if (!key) return new Set();
+      const [dataset, catNo] = key.split(":");
+      const out = new Set([key]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const category of state.catalog.categories) {
+          const current = categoryKey(category);
+          const parent = `${category.dataset}:${category.parentCatNo || ""}`;
+          if (category.dataset === dataset && category.parentCatNo && out.has(parent) && !out.has(current)) {
+            out.add(current);
+            changed = true;
+          }
+        }
+      }
+      return out;
+    }
+
+    function catalogFilters(){
+      return {
+        text: $("catalogSearch").value.trim().toLowerCase(),
+        dataset: $("datasetFilter").value,
+        status: $("statusFilter").value,
+        categoryKey: $("categoryFilter").value || state.selectedCategoryKey,
+      };
+    }
+
+    function matchesText(item, text){
+      if (!text) return true;
+      return [
+        item.datasetLabel,
+        item.gNm,
+        item.catNm,
+        item.fullName,
+        item.categoryFullName,
+        item.questionNm,
+        item.questionPdf,
+        item.answerPdf,
+        item.correctJson,
+        item.year,
+        item.semester,
+        item.examType,
+      ].some((value) => String(value || "").toLowerCase().includes(text));
+    }
+
+    function matchesStatus(item, status){
+      if (!status) return true;
+      if (status === "published") return Boolean(item.published || item.published > 0);
+      if (status === "unpublished") return Boolean(item.unpublished || !item.published);
+        if (status === "warning") return (item.issue && item.issue !== "정상") || item.needsOcr || item.answerIssue;
+      return true;
+    }
+
+    function filteredCategories(){
+      const filters = catalogFilters();
+      return state.catalog.categories.filter((item) => {
+        if (filters.dataset && item.dataset !== filters.dataset) return false;
+        if (!matchesText(item, filters.text)) return false;
+        if (filters.status === "published" && item.published <= 0) return false;
+        if (filters.status === "unpublished" && item.unpublished <= 0) return false;
+        if (filters.status === "warning" && item.unpublished <= 0 && Number(item.ocrWarning || 0) <= 0) return false;
+        return true;
+      });
+    }
+
+    function filteredQuestions(){
+      const filters = catalogFilters();
+      const selectedKeys = categoryDescendantKeys(filters.categoryKey);
+      return state.catalog.questions.filter((item) => {
+        if (filters.dataset && item.dataset !== filters.dataset) return false;
+        if (selectedKeys.size && !selectedKeys.has(categoryKey(item))) return false;
+        if (!matchesText(item, filters.text)) return false;
+        if (filters.status === "published" && !item.published) return false;
+        if (filters.status === "unpublished" && item.published) return false;
+        if (filters.status === "warning" && !((item.issue && item.issue !== "정상") || item.needsOcr || item.answerIssue)) return false;
+        return true;
+      });
+    }
+
+    function renderCatalogFilters(){
+      const datasets = [...new Map(state.catalog.categories.map((item) => [item.dataset, item.datasetLabel])).entries()];
+      $("datasetFilter").innerHTML = `<option value="">전체 구분</option>${datasets.map(([value, label]) => `
+        <option value="${escapeHtml(value)}">${escapeHtml(label)}</option>
+      `).join("")}`;
+      $("categoryFilter").innerHTML = `<option value="">전체 카테고리</option>${state.catalog.categories.map((item) => `
+        <option value="${escapeHtml(categoryKey(item))}">${escapeHtml(item.fullName || item.catNm)} (${item.questionTotal})</option>
+      `).join("")}`;
+    }
+
+    function renderCategoryTable(){
+      const rows = filteredCategories();
+      $("categoryTableMeta").textContent = `${rows.length.toLocaleString()}개`;
+      if (!rows.length) {
+        $("categoryRows").innerHTML = `<tr><td class="empty" colspan="4">카테고리가 없습니다.</td></tr>`;
+        return;
+      }
+      $("categoryRows").innerHTML = rows.map((item) => {
+        const key = categoryKey(item);
+        const selected = key === state.selectedCategoryKey;
+        return `
+          <tr class="selectableRow${selected ? " selected" : ""}" tabindex="0" data-category-key="${escapeHtml(key)}" aria-selected="${selected ? "true" : "false"}">
+            <td>
+              <div class="cellTitle">${escapeHtml(item.fullName || item.catNm)}</div>
+              <div class="cellSub">${escapeHtml(item.datasetLabel)} · ${escapeHtml(item.catPath || "")}</div>
+            </td>
+            <td>${item.questionTotal}</td>
+            <td>
+              <span class="pill ok">${item.published}</span>
+              <span class="pill ${item.unpublished ? "warn" : "ok"}">${item.unpublished}</span>
+            </td>
+            <td class="row">
+              <a class="button" href="${makeCategoryUrl(item)}">사이트</a>
+              <button type="button" class="secondary" data-rebuild-category="${escapeHtml(key)}" ${item.dataset !== "default" ? "disabled" : ""} title="${escapeHtml(item.dataset !== "default" ? "기본 PDF 문제은행 카테고리만 부분 갱신할 수 있습니다." : "이 카테고리의 question/correct JSON만 갱신합니다.")}">JSON 갱신</button>
+            </td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function renderQuestionTable(){
+      const rows = filteredQuestions();
+      $("questionTableMeta").textContent = `${rows.length.toLocaleString()}개`;
+      if (!rows.length) {
+        $("questionRows").innerHTML = `<tr><td class="empty" colspan="6">문제 회차가 없습니다.</td></tr>`;
+        return;
+      }
+      if (!rows.some((item) => questionKey(item) === state.selectedQuestionKey)) {
+        state.selectedQuestionKey = questionKey(rows[0]);
+      }
+      $("questionRows").innerHTML = rows.map((item) => {
+        const key = questionKey(item);
+        const selected = key === state.selectedQuestionKey;
+        const questionFileName = fileNameFromPath(item.questionPdf) || item.questionNm || "-";
+        const questionFolder = folderNameFromPath(item.questionPdf);
+        const quizLink = item.questionPdf ? `<a class="button primary" href="${makeQuizUrl(item)}">풀이</a>` : `<span class="button disabled">풀이</span>`;
+        const detailLink = `<a class="button secondary" href="${makeAdminDetailUrl(item)}">상세/진단</a>`;
+        const counts = [
+          item.questionCount ? `문제 ${item.questionCount}` : "",
+          item.questionStartNo && item.questionEndNo ? `${item.questionStartNo}-${item.questionEndNo}` : "",
+        ].filter(Boolean).join(" · ");
+        const answerState = item.correctJson ? "correct.json" : (item.answerPdf || item.answerSourceId ? "정답 매핑" : "없음");
+        return `
+          <tr class="selectableRow${selected ? " selected" : ""}" tabindex="0" data-question-key="${escapeHtml(key)}" aria-selected="${selected ? "true" : "false"}">
+            <td>${statusPill(item)}<div class="cellSub">${escapeHtml(item.issue || "")}</div></td>
+            <td>
+              <div class="cellTitle">${escapeHtml(questionFileName)}</div>
+              <div class="cellSub">${escapeHtml(item.catNm)} · ${escapeHtml(item.datasetLabel)} · ${escapeHtml(item.gNm || "")}</div>
+              <div class="pathCell">${escapeHtml(questionFolder)}</div>
+            </td>
+            <td>
+              ${diagPill(item.questionDiagStatus, item.questionDiagTone)}
+              <div class="cellSub">${escapeHtml(item.ocrWarnings?.[0] || "OCR은 보조 품질 지표입니다.")}</div>
+            </td>
+            <td>
+              ${diagPill(item.answerDiagStatus, item.answerDiagTone)}
+              <div class="cellSub">${escapeHtml(item.answerDiagWarnings?.[0] || answerState)}</div>
+            </td>
+            <td>${escapeHtml(counts || "-")}</td>
+            <td class="row">${quizLink}${detailLink}</td>
+          </tr>
+        `;
+      }).join("");
+      markSelectedQuestionRow();
+    }
+
+    function renderCatalog(){
+      renderCategoryTable();
+      renderQuestionTable();
+    }
+    // SOFTM-OCR: 관리자 목록에서 게시 상태와 OCR 품질 경고를 분리해 OCR 경고가 있어도 풀이 가능 회차는 게시로 표시 - 2026-05-30
+
+    function markSelectedQuestionRow(){
+      document.querySelectorAll("#questionRows tr[data-question-key]").forEach((row) => {
+        const selected = row.dataset.questionKey === state.selectedQuestionKey;
+        row.classList.toggle("selected", selected);
+        row.setAttribute("aria-selected", selected ? "true" : "false");
+      });
+    }
+
+    function selectedQuestion(){
+      return state.catalog.questions.find((item) => questionKey(item) === state.selectedQuestionKey) || null;
+    }
+
+    function selectedCategory(){
+      const key = state.selectedCategoryKey || $("categoryFilter").value;
+      return state.catalog.categories.find((item) => categoryKey(item) === key) || null;
+    }
+
+    function selectQuestionRow(key){
+      if (!key) return;
+      state.selectedQuestionKey = key;
+      markSelectedQuestionRow();
+    }
+    // SOFTM-ADMIN: 메인 목록은 행 선택 표시만 유지하고 상세/진단은 별도 페이지로 이동 - 2026-05-30
+
+    function markSelectedCategoryRow(){
+      document.querySelectorAll("#categoryRows tr[data-category-key]").forEach((row) => {
+        const selected = row.dataset.categoryKey === state.selectedCategoryKey;
+        row.classList.toggle("selected", selected);
+        row.setAttribute("aria-selected", selected ? "true" : "false");
+      });
+    }
+
+    function selectCategoryRow(key){
+      if (!key || key === state.selectedCategoryKey) return;
+      state.selectedCategoryKey = key;
+      $("categoryFilter").value = key;
+      markSelectedCategoryRow();
+      renderQuestionTable();
+    }
+    // SOFTM-ADMIN: 카테고리 선택 버튼 대신 행 포커스/클릭으로 선택 상태를 표시하도록 변경 - 2026-05-29
+    // SOFTM-GEN: 선택 카테고리 단위 JSON 갱신에서 사용할 현재 카테고리 조회 유틸 추가 - 2026-05-30
+
+    async function loadCatalog(){
+      const data = await api("/api/admin/catalog");
+      state.catalog = {
+        categories: Array.isArray(data.categories) ? data.categories : [],
+        questions: Array.isArray(data.questions) ? data.questions : [],
+      };
+      renderCatalogFilters();
+      renderCatalog();
+      $("catalogMeta").textContent = `카테고리 ${state.catalog.categories.length.toLocaleString()}개, 문제 ${state.catalog.questions.length.toLocaleString()}개`;
+    }
+
+    function renderProcessReport(data){
+      const items = [
+        ["문제 PDF", data.files.questionFiles, ""],
+        ["정답 파일", data.files.answerFiles, ""],
+        ["correct.json", data.files.correctFiles, ""],
+        ["게시", data.manifest.published, "ok"],
+        ["미게시", data.manifest.unpublished, data.manifest.unpublished ? "warn" : "ok"],
+      ];
+      $("processSummary").innerHTML = items.map(([label, value, tone]) => `
+        <div class="countBox"><strong>${Number(value || 0).toLocaleString()}</strong><span>${escapeHtml(label)}</span></div>
+      `).join("");
+      const scriptHtml = data.scripts.map((item) => (
+        `<span class="pill ${item.exists ? "ok" : "warn"}">${escapeHtml(item.path)} ${item.exists ? "OK" : "없음"}</span>`
+      )).join("");
+      const toolHtml = data.tools.map((item) => (
+        `<span class="pill ${item.ok ? "ok" : "warn"}">${escapeHtml(item.name)} ${item.ok ? "OK" : "없음"}</span>`
+      )).join("");
+      $("processTools").innerHTML = `${scriptHtml}<br>${toolHtml}`;
+      $("processUnpublished").innerHTML = data.unpublished.length
+        ? data.unpublished.slice(0, 6).map((item) => `<div style="margin-bottom:6px"><strong>${escapeHtml(item.category)}</strong> · ${escapeHtml(item.questionNm)}<br><span class="desc">${escapeHtml(item.reason)}</span></div>`).join("")
+        : `<span class="pill ok">미게시 회차 없음</span>`;
+      $("processGenerated").innerHTML = data.generatedFiles.slice(0, 16).map((item) => {
+        const time = item.mtime ? new Date(item.mtime).toLocaleString() : "없음";
+        return `<div>${item.exists ? "•" : "×"} ${escapeHtml(item.path)} <span class="desc">${escapeHtml(time)}</span></div>`;
+      }).join("");
+      $("processStatus").textContent = [
+        "점검 완료",
+        ...data.nextSteps.map((step, idx) => `${idx + 1}. ${step}`),
+      ].join("\n");
+    }
+
+    async function loadProcessReport(options = {}){
+      const run = async (progress) => {
+        $("processStatus").textContent = "프로세스 점검 중...";
+        if (progress) progress.step(0, "running", "파일 수, 게시 상태, 실행 도구를 확인하고 있습니다.");
+        const data = await api("/api/admin/process-report");
+        if (progress) progress.step(0, "done");
+        if (progress) progress.step(1, "running", "점검 결과를 화면에 반영하고 있습니다.");
+        renderProcessReport(data);
+        if (progress) progress.step(1, "done");
+        return data;
+      };
+      if (!options.showProgress) return await run();
+      return await withProgress({
+        title: "등록 상태 확인",
+        steps: ["파일/도구 상태 확인", "결과 표시"],
+        doneMessage: "등록 상태 확인이 완료되었습니다.",
+      }, run);
+    }
+
+    /* SOFTM-OCR 시작: 문제/정답 PDF 텍스트 레이어 진단과 OCR 적용 동작 추가 - 2026-05-29 */
+    function renderPdfDiagnostics(data, role = "PDF"){
+      const warnings = data.warnings && data.warnings.length
+        ? data.warnings.map((item) => `- ${item}`).join("\n")
+        : "- OCR 위험 신호 없음";
+      const sample = data.textSample ? `\n\n[텍스트 샘플]\n${data.textSample}` : "";
+      $("pdfDiagnoseStatus").textContent = [
+        `[${role}] ${data.path}`,
+        `페이지: ${data.pages || "-"} / 페이지 크기: ${data.pageSize || "-"}`,
+        `텍스트: ${Number(data.textChars || 0).toLocaleString()}자 / 페이지당 ${Number(data.charsPerPage || 0).toLocaleString()}자`,
+        `한글: ${Number(data.koreanChars || 0).toLocaleString()}자 / 예상 문항: ${data.expectedQuestionCount || "-"}`,
+        `문항번호 감지: ${Number(data.questionLabels || 0).toLocaleString()}개 / 고유 ${Number(data.uniqueQuestionLabels || 0).toLocaleString()}개 / 범위 ${data.questionLabelMin || "-"}~${data.questionLabelMax || "-"}`,
+        `선택지 기호 감지: ${Number(data.choiceLabels || 0).toLocaleString()}개`,
+        `OCR 사본: ${data.ocrCopyPath || "없음"} / 권장 사본: ${data.suggestedOcrPath || ""}`,
+        "",
+        warnings,
+        data.textError ? `\n[오류]\n${data.textError}` : "",
+        sample,
+      ].filter(Boolean).join("\n");
+      $("pdfDiagnoseStatus").classList.toggle("warn", Boolean(data.needsOcr));
+    }
+
+    function selectPdfTarget(path, role = "PDF"){
+      const target = normalizePath(path);
+      if (!target) {
+        showToast("선택할 PDF 경로가 없습니다.", { title: "PDF 선택 실패", tone: "warn" });
+        return "";
+      }
+      $("pdfTargetPath").value = target;
+      $("pdfTargetPath").dataset.questionKey = state.selectedQuestionKey || "";
+      $("pdfTargetPath").dataset.pdfRole = role;
+      $("pdfTargetHelp").textContent = `${role} PDF를 아래 미리보기에 표시했습니다. 새 탭으로 크게 보거나 PDF 진단을 실행할 수 있습니다.`;
+      $("pdfPreviewFrame").src = `./${target}`;
+      $("pdfPreviewFrame").hidden = false;
+      $("pdfDiagnoseStatus").classList.remove("warn");
+      $("pdfDiagnoseStatus").textContent = `[${role} PDF 보기]\n${target}\n\n원본 PDF를 미리보기로 표시했습니다. 아직 진단하지 않았습니다.`;
+      showToast(`${role} PDF를 미리보기로 표시했습니다.`, { title: "PDF 보기", tone: "ok", timeout: 2600 });
+      return target;
+    }
+
+    function setDefaultPdfTargetFromSelectedQuestion(reason = "선택 회차"){
+      const item = selectedQuestion();
+      const target = normalizePath(item?.questionPdf);
+      if (!target) return "";
+      $("pdfTargetPath").value = target;
+      $("pdfTargetPath").dataset.questionKey = state.selectedQuestionKey || "";
+      $("pdfTargetPath").dataset.pdfRole = "문제";
+      $("pdfTargetHelp").textContent = `${reason}의 문제 PDF가 기본 작업 대상으로 설정되었습니다. 정답 PDF를 대상으로 보려면 정답 보기 또는 정답 진단을 먼저 누르세요.`;
+      $("pdfDiagnoseStatus").classList.remove("warn");
+      $("pdfDiagnoseStatus").textContent = `[문제 PDF 기본 대상]\n${target}\n\nPDF 진단과 OCR 적용은 이 파일을 대상으로 실행됩니다.`;
+      return target;
+    }
+
+    function ensurePdfTargetForAction(actionLabel){
+      const current = normalizePath($("pdfTargetPath").value);
+      if (current) return current;
+      const fallback = setDefaultPdfTargetFromSelectedQuestion(`${actionLabel} 대상`);
+      if (fallback) {
+        showToast(`선택 회차의 문제 PDF를 ${actionLabel} 대상으로 설정했습니다.`, { title: "PDF 자동 선택", tone: "ok", timeout: 2600 });
+      }
+      return fallback;
+    }
+    // SOFTM-ADMIN: 회차 선택만으로 PDF 진단/OCR 대상이 자동 지정되도록 보정 - 2026-05-30
+
+    function openSelectedPdf(){
+      const target = ensurePdfTargetForAction("열기");
+      if (!target) {
+        showToast("열 PDF를 먼저 선택하세요.", { title: "PDF 선택 필요", tone: "warn" });
+        return;
+      }
+      const opened = window.open(`./${target}`, "_blank", "noopener");
+      if (opened) {
+        showToast("선택한 PDF를 새 탭으로 열었습니다.", { title: "PDF 열기", tone: "ok" });
+      } else {
+        showToast("새 탭이 차단되었을 수 있습니다. 브라우저 팝업 설정을 확인하세요.", { title: "PDF 열기 실패", tone: "warn" });
+      }
+    }
+    // SOFTM-ADMIN: 문제/정답 버튼 클릭 시 PDF 미리보기와 토스트를 표시하도록 개선 - 2026-05-30
+
+    async function diagnosePdf(path, role = "PDF", options = {}){
+      const target = normalizePath(path) || ensurePdfTargetForAction("진단");
+      if (!target) {
+        $("pdfDiagnoseStatus").textContent = "진단할 PDF를 선택하세요.";
+        showToast("진단할 PDF를 먼저 선택하세요.", { title: "PDF 선택 필요", tone: "warn" });
+        return;
+      }
+      const activeRole = role === "PDF" ? ($("pdfTargetPath").dataset.pdfRole || "PDF") : role;
+      const run = async (progress) => {
+        $("pdfTargetPath").value = target;
+        $("pdfTargetPath").dataset.questionKey = state.selectedQuestionKey || "";
+        $("pdfTargetPath").dataset.pdfRole = activeRole;
+        $("pdfDiagnoseStatus").textContent = `${activeRole} PDF 진단 중...`;
+        if (progress) progress.step(0, "running", "PDF 메타데이터와 텍스트 레이어를 읽고 있습니다.");
+        const data = await api(`/api/admin/pdf-info?path=${encodeURIComponent(target)}`);
+        if (progress) progress.step(0, "done");
+        if (progress) progress.step(1, "running", "진단 결과를 표시하고 있습니다.");
+        renderPdfDiagnostics(data, activeRole);
+        if (progress) progress.step(1, "done");
+        return data;
+      };
+      if (!options.showProgress) return await run();
+      return await withProgress({
+        title: `${activeRole} PDF 진단`,
+        steps: ["PDF 분석", "결과 표시"],
+        doneMessage: "PDF 진단이 완료되었습니다.",
+      }, run);
+    }
+
+    async function runOcrForTarget(){
+      const target = ensurePdfTargetForAction("OCR");
+      if (!target) {
+        $("pdfDiagnoseStatus").textContent = "OCR을 적용할 PDF를 선택하세요.";
+        showToast("OCR을 적용할 PDF를 먼저 선택하세요.", { title: "PDF 선택 필요", tone: "warn" });
+        return;
+      }
+      const outputMode = $("ocrOutputMode").value;
+      const confirmed = await showConfirmDialog({
+        title: "OCR 적용 확인",
+        message: outputMode === "replace"
+          ? `원본 PDF를 백업한 뒤 OCR 적용본으로 교체합니다.\n\n대상: ${target}`
+          : `_ocr.pdf 사본을 생성합니다.\n\n대상: ${target}`,
+        confirmText: "OCR 적용",
+        danger: outputMode === "replace",
+      });
+      if (!confirmed) return;
+      await withProgress({
+        title: "OCR 적용",
+        steps: ["OCR 실행", "결과 진단", "목록 새로고침"],
+        message: "OCR 적용 중입니다. 파일 크기와 페이지 수에 따라 시간이 걸릴 수 있습니다.",
+        doneMessage: "OCR 적용이 완료되었습니다.",
+      }, async (progress) => {
+        $("pdfDiagnoseStatus").textContent = "OCR 적용 중입니다. 파일 크기와 페이지 수에 따라 시간이 걸릴 수 있습니다.";
+        progress.step(0, "running", "ocrmypdf로 OCR 적용본을 생성하고 있습니다.");
+        const data = await api("/api/admin/ocr", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            path: target,
+            ocrMode: $("ocrMode").value,
+            outputMode,
+          }),
+        });
+        progress.step(0, "done");
+        progress.step(1, "running", "OCR 결과 PDF를 다시 진단하고 있습니다.");
+        const tail = [
+          `OCR 완료: ${data.output}`,
+          data.backup ? `백업: ${data.backup}` : "",
+          data.stderr ? `\n[ocrmypdf]\n${data.stderr}` : "",
+        ].filter(Boolean).join("\n");
+        renderPdfDiagnostics(data.diagnostics, "OCR 결과");
+        $("pdfDiagnoseStatus").textContent = `${tail}\n\n${$("pdfDiagnoseStatus").textContent}`;
+        progress.step(1, "done");
+        progress.step(2, "running", "관리자 목록을 갱신하고 있습니다.");
+        await refreshAll({ keepListDir: true });
+        progress.step(2, "done");
+      });
+    }
+    /* SOFTM-OCR 끝 */
+
+    async function loadState(){
+      const data = await api("/api/admin/state");
+      renderCounts(data);
+    }
+
+    async function loadList(dir = $("dirInput").value){
+      const data = await api(`/api/admin/list?dir=${encodeURIComponent(dir || "pdf")}`);
+      $("dirInput").value = data.cwd;
+      $("btnUp").dataset.parent = data.parent || "";
+      $("fileRows").innerHTML = data.entries.length ? data.entries.map((item) => `
+        <tr>
+          <td>
+            <div class="cellTitle">${item.type === "dir" ? "DIR" : "FILE"} · ${escapeHtml(item.name)}</div>
+            <div class="pathCell">${escapeHtml(item.path)}</div>
+          </td>
+          <td>${escapeHtml(item.type)}</td>
+          <td>${item.type === "file" ? fmtSize(item.size) : ""}</td>
+          <td>${new Date(item.mtime).toLocaleString()}</td>
+          <td class="row">
+            ${item.type === "dir" ? `<button data-open="${escapeHtml(item.path)}">열기</button>` : `<a class="button" href="./${escapeHtml(item.path)}" target="_blank">보기</a>`}
+            <button data-rename="${escapeHtml(item.path)}">이름 변경</button>
+          </td>
+        </tr>
+      `).join("") : `<tr><td class="empty" colspan="5">파일이 없습니다.</td></tr>`;
+    }
+
+    async function loadGitStatus(){
+      const data = await api("/api/admin/git-status");
+      $("gitStatus").textContent = data.status || data.error || "변경사항 없음";
+    }
+
+    async function executeRebuild(progress){
+      $("rebuildStatus").textContent = "JSON 재생성 중...";
+      if (progress) progress.step(0, "running", "gen_category.py → gen_question.py → gen_correct.py 순서로 실행합니다.");
+      const data = await api("/api/admin/rebuild", { method: "POST" });
+      $("rebuildStatus").textContent = data.output || "완료";
+      if (progress) progress.step(0, "done");
+      if (progress) progress.step(1, "running", "재생성된 JSON과 Git 상태를 다시 읽고 있습니다.");
+      await refreshAll({ keepListDir: true });
+      if (progress) progress.step(1, "done");
+      return data;
+    }
+
+    async function rebuildManifest(options = {}){
+      if (options.confirm !== false) {
+        const confirmed = await showConfirmDialog({
+          title: "JSON 재생성 확인",
+          message: "pdf 디렉토리 기준으로 category/question/correct JSON을 다시 생성합니다.\n\n기존 JSON 파일이 갱신될 수 있습니다.",
+          confirmText: "JSON 재생성",
+        });
+        if (!confirmed) return;
+      }
+      return await withProgress({
+        title: "JSON 재생성",
+        steps: ["생성 스크립트 실행", "상태 새로고침"],
+        doneMessage: "JSON 재생성이 완료되었습니다.",
+      }, executeRebuild);
+    }
+
+    async function executeCategoryRebuild(category, progress){
+      $("rebuildStatus").textContent = `${category.fullName || category.catNm} JSON 갱신 중...`;
+      if (progress) progress.step(0, "running", "선택 카테고리의 문제 파일과 정답 매핑을 다시 읽고 있습니다.");
+      const data = await api("/api/admin/rebuild-category", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          dataset: category.dataset,
+          catNo: category.catNo,
+          categoryPath: normalizePath(category.catPath),
+        }),
+      });
+      $("rebuildStatus").textContent = data.output || "선택 카테고리 JSON 갱신 완료";
+      if (progress) progress.step(0, "done");
+      if (progress) progress.step(1, "running", "갱신된 목록과 Git 상태를 다시 읽고 있습니다.");
+      await refreshAll({ keepListDir: true });
+      if (progress) progress.step(1, "done");
+      return data;
+    }
+
+    async function rebuildCategoryManifest(categoryOrKey = "", options = {}){
+      const category = typeof categoryOrKey === "string" && categoryOrKey
+        ? state.catalog.categories.find((item) => categoryKey(item) === categoryOrKey)
+        : (categoryOrKey || selectedCategory());
+      if (!category) {
+        showToast("먼저 카테고리 행을 선택하세요.", { title: "카테고리 선택 필요", tone: "warn" });
+        return;
+      }
+      if (category.dataset !== "default") {
+        showToast("카테고리 단위 JSON 갱신은 기본 PDF 문제은행만 지원합니다.", { title: "지원 범위 확인", tone: "warn" });
+        return;
+      }
+      state.selectedCategoryKey = categoryKey(category);
+      $("categoryFilter").value = state.selectedCategoryKey;
+      renderCatalog();
+      if (options.confirm !== false) {
+        const confirmed = await showConfirmDialog({
+          title: "선택 카테고리 JSON 갱신",
+          message: `${category.fullName || category.catNm} 카테고리의 question/correct JSON만 다시 생성합니다.\n\n새 카테고리나 새 하위 디렉토리를 추가한 경우에는 전체 JSON 재생성을 실행하세요.`,
+          confirmText: "카테고리 갱신",
+        });
+        if (!confirmed) return;
+      }
+      return await withProgress({
+        title: "선택 카테고리 JSON 갱신",
+        steps: ["카테고리 생성 스크립트 실행", "상태 새로고침"],
+        doneMessage: "선택 카테고리 JSON 갱신이 완료되었습니다.",
+      }, (progress) => executeCategoryRebuild(category, progress));
+    }
+    // SOFTM-GEN: 전체 재생성과 별도로 선택 카테고리의 question/correct JSON만 갱신하는 화면 동작 추가 - 2026-05-30
+
+    async function runManagedProcess(){
+      const confirmed = await showConfirmDialog({
+        title: "점검 후 JSON 재생성",
+        message: "등록 상태를 확인한 뒤 JSON을 다시 생성합니다.\n\npdf 파일 배치, 정답 매핑, correct.json 상태가 화면에 다시 반영됩니다.",
+        confirmText: "점검 후 재생성",
+      });
+      if (!confirmed) return;
+      await withProgress({
+        title: "점검 후 JSON 재생성",
+        steps: ["등록 상태 점검", "JSON 재생성", "최종 상태 표시"],
+        doneMessage: "점검과 JSON 재생성이 완료되었습니다.",
+      }, async (progress) => {
+        $("processStatus").textContent = "사전 점검 후 JSON 재생성 중...";
+        progress.step(0, "running", "현재 파일/정답/도구 상태를 점검하고 있습니다.");
+        await loadProcessReport();
+        progress.step(0, "done");
+        progress.step(1, "running", "JSON 생성 스크립트를 실행하고 있습니다.");
+        const data = await api("/api/admin/rebuild", { method: "POST" });
+        $("rebuildStatus").textContent = data.output || "완료";
+        progress.step(1, "done");
+        progress.step(2, "running", "최종 상태를 다시 읽고 있습니다.");
+        await refreshAll({ keepListDir: true });
+        $("processStatus").textContent = `${$("processStatus").textContent}\n\nJSON 재생성까지 완료했습니다. 미게시 회차와 Git 상태를 확인하세요.`;
+        progress.step(2, "done");
+      });
+    }
+
+    async function refreshAll(options = {}){
+      const listDirValue = options.keepListDir ? $("dirInput").value : undefined;
+      await Promise.all([
+        loadState(),
+        loadCatalog(),
+        loadProcessReport(),
+        loadGitStatus(),
+      ]);
+      await loadList(listDirValue || $("dirInput").value);
+    }
+
+    function setOffline(message){
+      $("catalogMeta").textContent = message;
+      $("processStatus").textContent = message;
+      $("gitStatus").textContent = message;
+      showToast(message, { title: "관리 서버 확인 필요", tone: "error" });
+      document.querySelectorAll("button").forEach((button) => {
+        if (button.id !== "btnRefresh") button.disabled = true;
+      });
+    }
+
+    $("categoryRows").addEventListener("click", (e) => {
+      const rebuildButton = e.target.closest("[data-rebuild-category]");
+      if (rebuildButton) {
+        e.preventDefault();
+        e.stopPropagation();
+        rebuildCategoryManifest(rebuildButton.dataset.rebuildCategory).catch((err) => {
+          $("rebuildStatus").textContent = err.message;
+        });
+        return;
+      }
+      const row = e.target.closest("tr[data-category-key]");
+      if (row) selectCategoryRow(row.dataset.categoryKey);
+    });
+
+    $("categoryRows").addEventListener("focusin", (e) => {
+      const row = e.target.closest("tr[data-category-key]");
+      if (row) selectCategoryRow(row.dataset.categoryKey);
+    });
+
+    $("categoryRows").addEventListener("keydown", (e) => {
+      if (!["Enter", " "].includes(e.key)) return;
+      const row = e.target.closest("tr[data-category-key]");
+      if (!row || e.target.closest("a, button")) return;
+      e.preventDefault();
+      selectCategoryRow(row.dataset.categoryKey);
+    });
+
+    $("questionRows").addEventListener("click", async (e) => {
+      const row = e.target.closest("tr[data-question-key]");
+      if (!row || e.target.closest("a, button")) return;
+      selectQuestionRow(row.dataset.questionKey);
+    });
+
+    $("questionRows").addEventListener("focusin", (e) => {
+      const row = e.target.closest("tr[data-question-key]");
+      if (row) selectQuestionRow(row.dataset.questionKey);
+    });
+
+    $("questionRows").addEventListener("keydown", (e) => {
+      if (!["Enter", " "].includes(e.key)) return;
+      const row = e.target.closest("tr[data-question-key]");
+      if (!row || e.target.closest("a, button")) return;
+      e.preventDefault();
+      selectQuestionRow(row.dataset.questionKey);
+    });
+
+    $("fileRows").addEventListener("click", async (e) => {
+      const open = e.target.dataset.open;
+      const rename = e.target.dataset.rename;
+      if (open) {
+        await loadList(open);
+        return;
+      }
+      if (rename) {
+        const next = await showConfirmDialog({
+          title: "이름 변경 확인",
+          message: "파일 또는 디렉토리 경로를 변경합니다.\n\n기존 경로를 참조하는 JSON이 있으면 이후 JSON 재생성이 필요할 수 있습니다.",
+          inputLabel: "새 경로",
+          inputValue: rename,
+          confirmText: "이름 변경",
+        });
+        if (!next || next === rename) return;
+        await withProgress({
+          title: "이름 변경",
+          steps: ["경로 변경", "목록 새로고침"],
+          doneMessage: "이름 변경이 완료되었습니다.",
+        }, async (progress) => {
+          progress.step(0, "running", "파일 또는 디렉토리 경로를 변경하고 있습니다.");
+          await api("/api/admin/rename", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ from: rename, to: next }),
+          });
+          progress.step(0, "done");
+          progress.step(1, "running", "관리자 목록을 갱신하고 있습니다.");
+          await refreshAll({ keepListDir: true });
+          progress.step(1, "done");
+        });
+      }
+    });
+
+    ["catalogSearch", "datasetFilter", "statusFilter", "categoryFilter"].forEach((id) => {
+      $(id).addEventListener("input", () => {
+        if (id === "categoryFilter") state.selectedCategoryKey = $(id).value;
+        renderCatalog();
+      });
+      $(id).addEventListener("change", () => {
+        if (id === "categoryFilter") state.selectedCategoryKey = $(id).value;
+        renderCatalog();
+      });
+    });
+
+    $("btnClearFilter").addEventListener("click", () => {
+      $("catalogSearch").value = "";
+      $("datasetFilter").value = "";
+      $("statusFilter").value = "";
+      $("categoryFilter").value = "";
+      state.selectedCategoryKey = "";
+      renderCatalog();
+    });
+
+    $("btnRefresh").addEventListener("click", async () => {
+      try{ await refreshAll({ keepListDir: true }); }catch(err){ setOffline(err.message); }
+    });
+    $("btnList").addEventListener("click", () => loadList());
+    $("btnGit").addEventListener("click", () => withProgress({
+      title: "Git 상태 확인",
+      steps: ["Git 변경 상태 조회"],
+      doneMessage: "Git 상태 확인이 완료되었습니다.",
+    }, async (progress) => {
+      progress.step(0, "running", "git status --short 결과를 읽고 있습니다.");
+      await loadGitStatus();
+      progress.step(0, "done");
+    }).catch((err) => { $("gitStatus").textContent = err.message; }));
+    $("btnRebuild").addEventListener("click", rebuildManifest);
+    $("btnRebuildCategory").addEventListener("click", () => rebuildCategoryManifest().catch((err) => { $("rebuildStatus").textContent = err.message; }));
+    $("btnProcessReport").addEventListener("click", () => loadProcessReport({ showProgress: true }).catch((err) => { $("processStatus").textContent = err.message; }));
+    $("btnProcessGenerate").addEventListener("click", runManagedProcess);
+    // SOFTM-ADMIN: PDF 보기/진단/OCR 버튼은 admin-detail.html 별도 페이지로 이전 - 2026-05-30
+    $("progressClose").addEventListener("click", () => {
+      if ($("progressDialog").open) $("progressDialog").close();
+    });
+    $("btnUp").addEventListener("click", () => {
+      const parent = $("btnUp").dataset.parent;
+      if (parent) loadList(parent);
+    });
+    $("btnMkdir").addEventListener("click", async () => {
+      const dir = $("mkdirInput").value.trim();
+      if (!dir) return;
+      await withProgress({
+        title: "디렉토리 생성",
+        steps: ["디렉토리 생성", "목록 새로고침"],
+        doneMessage: "디렉토리 생성이 완료되었습니다.",
+      }, async (progress) => {
+        progress.step(0, "running", `${dir} 경로를 생성하고 있습니다.`);
+        await api("/api/admin/mkdir", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ dir }),
+        });
+        progress.step(0, "done");
+        $("mkdirInput").value = "";
+        progress.step(1, "running", "관리자 목록을 갱신하고 있습니다.");
+        await refreshAll({ keepListDir: true });
+        progress.step(1, "done");
+      });
+    });
+
+    $("mode").addEventListener("change", () => {
+      const direct = $("mode").value === "direct";
+      $("directFields").style.display = direct ? "" : "none";
+      $("importFields").style.display = direct ? "none" : "";
+    });
+
+    $("uploadForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try{
+        const form = e.currentTarget;
+        const formData = new FormData(form);
+        const file = formData.get("file");
+        const confirmed = await showConfirmDialog({
+          title: "업로드 실행 확인",
+          message: `파일을 업로드하고 관리자 데이터를 갱신합니다.\n\n파일: ${file?.name || "선택 파일"}\n모드: ${formData.get("mode") || "direct"}`,
+          confirmText: "업로드 실행",
+        });
+        if (!confirmed) return;
+        await withProgress({
+          title: "업로드 실행",
+          steps: ["파일 업로드", "상태 새로고침"],
+          doneMessage: "업로드가 완료되었습니다.",
+        }, async (progress) => {
+          $("uploadStatus").textContent = "업로드 중...";
+          progress.step(0, "running", "파일을 서버로 업로드하고 있습니다.");
+          const data = await api("/api/admin/upload", { method: "POST", body: formData });
+          $("uploadStatus").textContent = data.output || `완료: ${data.file || data.mode}`;
+          progress.step(0, "done");
+          progress.step(1, "running", "관리자 목록과 Git 상태를 갱신하고 있습니다.");
+          await refreshAll({ keepListDir: true });
+          progress.step(1, "done");
+        });
+      }catch(err){
+        $("uploadStatus").textContent = err.message;
+      }
+    });
+
+    refreshAll().catch((err) => setOffline(err.message));
+  </script>
+  <!-- SOFTM-ADMIN 끝 -->
+</body>
+</html>

@@ -155,6 +155,7 @@
 
   <script>
     const params = new URLSearchParams(location.search);
+    const DATASET = params.get("dataset") === "knou" ? "knou" : "default"; // SOFTM-KNOU: 방통대 manifest 분기 기준 추가 - 2026-05-29
     const categoryName = params.get("category") || "농산물품질관리사";
     const categoryNo = params.get("catNo") || "";
     const ADFIT_UNITS = {
@@ -189,23 +190,74 @@
 
     function examStatus(exam) {
       const hasQ = Boolean(normalizePdfPath(exam.questionPdf));
-      const hasA = Boolean(normalizePdfPath(exam.answerPdf));
-      if (hasQ && hasA) return "문제/정답 세트 준비 완료";
-      if (hasQ && !hasA) return "정답 PDF 없음";
-      if (!hasQ && hasA) return "문제 PDF 없음";
+      const hasA = Boolean(normalizePdfPath(exam.answerPdf) || String(exam.answerSourceId || "").trim());
+      const published = isPublishedQuestion(exam);
+      if (hasQ && published) return "퍼블리싱 완료";
+      if (hasQ && hasA && !published) return "정답 JSON 없음";
+      if (hasQ && !hasA) return "정답 파일 없음";
+      if (!hasQ && (hasA || published)) return "문제 PDF 없음";
       return "파일 누락";
     }
+
+    function isPublishedQuestion(row) {
+      if (String(row?.correctJson || "").trim()) return true;
+      if (String(row?.answerSourceId || "").trim()) return true;
+      if (Object.prototype.hasOwnProperty.call(row || {}, "published")) {
+        return row?.published === true || String(row?.published) === "true";
+      }
+      return Boolean(normalizePdfPath(row?.answerPdf) || String(row?.answerSourceId || "").trim());
+    }
+    // SOFTM-OCR: 카테고리 회차 목록은 OCR 품질과 분리해 correct.json/정답 원본 기준으로 표시 - 2026-05-30
+
+    function makeCategoryUrl(category) {
+      const q = new URLSearchParams({
+        catNo: category.catNo,
+        category: category.catNm,
+      });
+      if (DATASET === "knou") q.set("dataset", "knou");
+      return `./category.html?${q.toString()}`;
+    }
+
+    function collectDescendantCatNos(categories, catNo) {
+      const out = new Set([String(catNo)]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const category of categories || []) {
+          const parent = String(category.parentCatNo || "");
+          const current = String(category.catNo || "");
+          if (parent && out.has(parent) && !out.has(current)) {
+            out.add(current);
+            changed = true;
+          }
+        }
+      }
+      return out;
+    }
+    // SOFTM-GEN: correctJson 기반 퍼블리싱 상태와 하위 카테고리 이동 지원 - 2026-05-29
 
     function makeQuizUrl(exam) {
       const question = normalizePdfPath(exam.questionPdf);
       const answer = normalizePdfPath(exam.answerPdf);
       const q = new URLSearchParams({
+        dataset: DATASET,
         category: exam.catNm || categoryName,
+        catNo: exam.catNo || categoryNo,
         exam: exam.questionNm,
         questionNo: exam.questionNo || "",
         question,
         answer,
       });
+      /* SOFTM-KNOU 시작: 방통대 정답 원본 인덱스 참조값 전달 - 2026-05-29 */
+      if (exam.answerSourceId) q.set("answerSourceId", exam.answerSourceId);
+      if (exam.answerSubject) q.set("answerSubject", exam.answerSubject);
+      if (exam.grade) q.set("grade", exam.grade);
+      if (exam.questionCount) q.set("questionCount", exam.questionCount);
+      if (exam.questionStartNo) q.set("questionStartNo", exam.questionStartNo); // SOFTM-KNOU: PDF 인쇄 문항 시작 번호 전달 - 2026-05-29
+      if (exam.questionEndNo) q.set("questionEndNo", exam.questionEndNo); // SOFTM-KNOU: PDF 인쇄 문항 종료 번호 전달 - 2026-05-29
+      if (exam.choiceCount) q.set("choiceCount", exam.choiceCount);
+      /* SOFTM-KNOU 끝 */
+      if (exam.correctJson) q.set("correct", normalizePdfPath(exam.correctJson)); // SOFTM-GEN: 디렉토리별 correct.json을 quiz로 전달 - 2026-05-29
       return `./quiz.html?${q.toString()}`;
     }
 
@@ -223,32 +275,56 @@
       title.textContent = categoryName;
 
       try {
+        /* SOFTM-KNOU 시작: dataset별 manifest 선택 로딩 - 2026-05-29 */
+        const categoryPath = DATASET === "knou" ? "./json/knou_category.json" : "./json/category.json";
+        const questionPath = DATASET === "knou" ? "./json/knou_question.json" : "./json/question.json";
         const [categories, questions] = await Promise.all([
-          fetchJson("./json/category.json"),
-          fetchJson("./json/question.json"),
+          fetchJson(categoryPath),
+          fetchJson(questionPath),
         ]);
+        /* SOFTM-KNOU 끝 */
         const category = (categories || []).find((c) =>
           (categoryNo && String(c.catNo) === String(categoryNo)) ||
           (!categoryNo && String(c.catNm) === String(categoryName))
         );
         const catNo = category ? category.catNo : categoryNo;
+        const children = (categories || [])
+          .filter((c) => String(c.parentCatNo || "") === String(catNo))
+          .sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0));
         const exams = (questions || [])
           .filter((q) => String(q.catNo) === String(catNo))
+          .filter((q) => isPublishedQuestion(q))
           .sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0));
-        const readyCount = exams.filter((e) => normalizePdfPath(e.questionPdf) && normalizePdfPath(e.answerPdf)).length;
+        const readyCount = exams.filter((e) => normalizePdfPath(e.questionPdf) && isPublishedQuestion(e)).length;
 
-        meta.textContent = `총 ${exams.length}개 회차 · 풀이 가능 ${readyCount}개`;
+        meta.textContent = `하위 카테고리 ${children.length}개 · 퍼블리싱 회차 ${readyCount}개`;
         list.innerHTML = "";
 
-        if (exams.length === 0) {
-          list.innerHTML = '<article class="empty">등록된 회차가 없습니다. 해당 카테고리 폴더에 PDF를 넣고 manifest를 다시 생성하세요.</article>';
+        if (children.length === 0 && exams.length === 0) {
+          list.innerHTML = '<article class="empty">퍼블리싱된 회차가 없습니다. 정답 JSON(correct.json)을 생성한 뒤 manifest를 다시 생성하세요.</article>';
           return;
+        }
+
+        for (const child of children) {
+          const childCatNos = collectDescendantCatNos(categories, child.catNo);
+          const childExams = (questions || []).filter((q) => childCatNos.has(String(q.catNo)));
+          const childReady = childExams.filter((q) => normalizePdfPath(q.questionPdf) && isPublishedQuestion(q)).length;
+          const card = document.createElement("article");
+          card.className = "exam";
+          card.innerHTML = `
+            <h2 class="name">${child.catNm}</h2>
+            <p class="status">퍼블리싱 회차 ${childReady}개</p>
+            <div class="row">
+              <a class="btn ${childReady ? "" : "disabled"}" href="${makeCategoryUrl(child)}">하위 목록 보기</a>
+            </div>
+          `;
+          list.appendChild(card);
         }
 
         for (const exam of exams) {
           const questionPath = normalizePdfPath(exam.questionPdf);
           const answerPath = normalizePdfPath(exam.answerPdf);
-          const ready = Boolean(questionPath && answerPath);
+          const ready = Boolean(questionPath && isPublishedQuestion(exam));
 
           const card = document.createElement("article");
           card.className = "exam";
@@ -256,6 +332,7 @@
           const quizUrl = makeQuizUrl(exam);
           const qLink = questionPath ? `./${encodeURI(questionPath)}` : "#";
           const aLink = answerPath ? `./${encodeURI(answerPath)}` : "#";
+          const answerLabel = DATASET === "knou" ? "정답 파일" : "정답 PDF"; // SOFTM-KNOU: HWP 정답표도 표시 가능하도록 라벨 분리 - 2026-05-29
 
           card.innerHTML = `
             <h2 class="name">${exam.questionNm}</h2>
@@ -263,7 +340,7 @@
             <div class="row">
               <a class="btn ${ready ? "" : "disabled"}" href="${quizUrl}">풀이 시작</a>
               <a class="btn secondary ${questionPath ? "" : "disabled"}" href="${qLink}" target="_blank">문제 PDF</a>
-              <a class="btn secondary ${answerPath ? "" : "disabled"}" href="${aLink}" target="_blank">정답 PDF</a>
+              <a class="btn secondary ${answerPath ? "" : "disabled"}" href="${aLink}" target="_blank">${answerLabel}</a>
             </div>
           `;
 

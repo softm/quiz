@@ -1,0 +1,1567 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>회차 상세 / 진단</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --panel-soft: #f9fbfc;
+      --ink: #1f2933;
+      --muted: #66727f;
+      --line: #d8e0e6;
+      --accent: #256d7b;
+      --accent-2: #3858a6;
+      --ok: #17654f;
+      --warn: #8a5a14;
+      --danger: #b93838;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Pretendard", "SUIT", "Noto Sans KR", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    a { color: inherit; text-decoration: none; }
+    button, .button {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--ink);
+      padding: 8px 10px;
+      font-size: 13px;
+      line-height: 1.1;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    button.primary, .button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.secondary, .button.secondary { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
+    button.danger, .button.danger { color: var(--danger); }
+    button:disabled, .button.disabled { opacity: .48; cursor: not-allowed; pointer-events: none; }
+    input, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--ink);
+      padding: 9px 10px;
+      font-size: 13px;
+    }
+    .container {
+      width: min(1380px, 94vw);
+      margin: 0 auto;
+      padding: 24px 0 48px;
+    }
+    .top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    h1 { margin: 0; font-size: 26px; letter-spacing: 0; }
+    h2 { margin: 0; font-size: 17px; letter-spacing: 0; }
+    h3 { margin: 0; font-size: 14px; letter-spacing: 0; }
+    .desc { color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .top .desc { margin-top: 7px; }
+    .actions, .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 8px 18px rgba(31,41,51,.04);
+    }
+    .panelHead {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .panelBody { padding: 16px; }
+    .stack { display: grid; gap: 12px; }
+    .field { display: grid; gap: 5px; }
+    .field label { color: var(--muted); font-size: 12px; }
+    .detailLayout {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(420px, .75fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .previewPanel {
+      position: sticky;
+      top: 14px;
+      align-self: start;
+    }
+    .summaryGrid, .diagGrid, .grid2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .summaryGrid {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 6px;
+      align-items: start;
+    }
+    .diagGrid {
+      grid-template-columns: repeat(2, minmax(240px, 1fr));
+      gap: 6px;
+    }
+    .summaryBox, .diagBox {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 8px 10px;
+      min-height: 0;
+    }
+    .summaryBox {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr);
+      gap: 6px;
+      align-items: baseline;
+    }
+    .summaryBox strong, .diagBox strong { display: block; font-size: 13px; }
+    .summaryBox strong {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .summaryBox span, .diagBox .small {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .summaryBox span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--ink);
+      font-size: 13px;
+      word-break: normal;
+    }
+    .diagBox .small { margin-top: 6px; }
+    /* SOFTM-ADMIN: 회차 정보 요약을 세로 카드 나열에서 촘촘한 라벨/값 그리드로 압축 - 2026-05-30 */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 8px;
+      margin: 0 5px 5px 0;
+      font-size: 12px;
+      background: #fff;
+      color: var(--muted);
+    }
+    .pill.ok { color: var(--ok); border-color: #b7d8ce; background: #f0faf6; }
+    .pill.warn { color: var(--warn); border-color: #eed6a7; background: #fff8e8; }
+    .pill.danger { color: var(--danger); border-color: #e7b9b9; background: #fff5f5; }
+    .status {
+      padding: 10px;
+      border-radius: 8px;
+      background: #eef5f6;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .status.warn { background: #fff8e8; color: var(--warn); }
+    .summaryGrid > .status { grid-column: 1 / -1; }
+    .status .actions { margin-top: 8px; }
+    /* SOFTM-ADMIN: OCR 파생 회차에서 원본 회차 이동 액션을 한 화면에 표시 - 2026-05-30 */
+    /* SOFTM-ADMIN 시작: PDF 진단 결과를 판정/지표/경고/샘플 구조로 표시 - 2026-05-30 */
+    .diagnosisResult {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--panel-soft);
+      color: var(--ink);
+      white-space: normal;
+      word-break: normal;
+    }
+    .diagnosisResult.warn {
+      border-color: #eed6a7;
+      background: #fff8e8;
+    }
+    .diagnosisHeadline {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    .diagnosisTitle {
+      margin: 0;
+      font-size: 15px;
+    }
+    .diagnosisMessage {
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-weight: 700;
+      line-height: 1.45;
+      border: 1px solid var(--line);
+      background: #eef5f6;
+      color: var(--ok);
+    }
+    .diagnosisMessage.warn {
+      border-color: #eed6a7;
+      background: #fff2d6;
+      color: var(--warn);
+    }
+    .metricGrid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(150px, 1fr));
+      gap: 6px;
+      align-items: start;
+      grid-auto-rows: minmax(0, auto);
+    }
+    .metricBox {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 7px 9px;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr);
+      gap: 2px 8px;
+      align-items: baseline;
+    }
+    .metricBox strong {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 15px;
+      line-height: 1.2;
+    }
+    .metricLabel {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .metricHelp {
+      grid-column: 1 / -1;
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.25;
+    }
+    /* SOFTM-ADMIN: PDF 진단 지표 카드를 행형 소형 블록으로 압축하고 긴 경로는 말줄임 처리 - 2026-05-30 */
+    .warningList {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--warn);
+      line-height: 1.55;
+    }
+    .sampleBlock {
+      max-height: 220px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    /* SOFTM-ADMIN 끝 */
+    .pdfPreview {
+      width: 100%;
+      height: calc(100vh - 210px);
+      min-height: 460px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+    }
+    .pdfPreview[hidden] { display: none; }
+    .toastRegion {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 20;
+      display: grid;
+      gap: 8px;
+      width: min(380px, calc(100vw - 36px));
+      pointer-events: none;
+    }
+    .toast {
+      pointer-events: auto;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: start;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--accent);
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px;
+      box-shadow: 0 16px 34px rgba(31,41,51,.18);
+    }
+    .toast.ok { border-left-color: var(--ok); }
+    .toast.warn { border-left-color: var(--warn); }
+    .toast.error { border-left-color: var(--danger); }
+    .toastTitle { font-weight: 700; font-size: 13px; }
+    .toastMessage { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.45; white-space: pre-wrap; }
+    .toastClose { border: 0; padding: 2px 4px; background: transparent; color: var(--muted); font-size: 16px; line-height: 1; }
+    dialog {
+      border: 0;
+      border-radius: 10px;
+      padding: 0;
+      width: min(520px, 92vw);
+      color: var(--ink);
+      box-shadow: 0 22px 60px rgba(31,41,51,.24);
+    }
+    dialog::backdrop { background: rgba(20,28,36,.42); }
+    .dialogCard { padding: 18px; display: grid; gap: 14px; }
+    .dialogTitle { margin: 0; font-size: 18px; }
+    .dialogMessage { margin: 0; white-space: pre-wrap; }
+    .dialogActions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+    .pdfTabs {
+      display: inline-flex;
+      gap: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .pdfTab {
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      min-width: 96px;
+    }
+    .pdfTab[aria-selected="true"] {
+      background: var(--accent);
+      color: #fff;
+    }
+    .pdfTab:disabled {
+      opacity: .45;
+      cursor: not-allowed;
+    }
+    .progressTrack {
+      position: relative;
+      height: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #e7edf1;
+    }
+    .progressFill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 42%;
+      border-radius: inherit;
+      background: var(--accent);
+      animation: progressSlide 1.1s ease-in-out infinite;
+    }
+    .progressTrack.determinate .progressFill {
+      width: var(--progress-value, 0%);
+      animation: none;
+      transform: none;
+      transition: width .2s ease;
+    }
+    @keyframes progressSlide {
+      0% { transform: translateX(-110%); }
+      100% { transform: translateX(240%); }
+    }
+    .progressSteps {
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 7px;
+      list-style: none;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .progressSteps li { display: flex; align-items: center; gap: 8px; }
+    .progressSteps li::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--line);
+      flex: 0 0 auto;
+    }
+    .progressSteps li.running { color: var(--ink); font-weight: 700; }
+    .progressSteps li.running::before { background: var(--accent); }
+    .progressSteps li.done::before { background: var(--ok); }
+    .progressSteps li.failed { color: var(--danger); }
+    .progressSteps li.failed::before { background: var(--danger); }
+    .progressLog {
+      max-height: 220px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    @media (max-width: 1080px) {
+      .detailLayout, .grid2 { grid-template-columns: 1fr; }
+      .previewPanel { position: static; }
+      .pdfPreview { height: 60vh; min-height: 360px; }
+    }
+    @media (max-width: 760px) {
+      .summaryGrid, .diagGrid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .metricGrid { grid-template-columns: 1fr; }
+      .metricBox { grid-template-columns: 68px minmax(0, 1fr); }
+    }
+    /* SOFTM-ADMIN: 상세 레이아웃이 단일 컬럼이어도 진단 지표는 좁은 모바일 전까지 다열로 유지 - 2026-05-30 */
+  </style>
+</head>
+<body>
+  <!-- SOFTM-ADMIN 시작: 회차 상세/진단/OCR 전용 관리자 페이지 추가 - 2026-05-30 -->
+  <div id="toastRegion" class="toastRegion" aria-live="polite" aria-atomic="false"></div>
+
+  <dialog id="confirmDialog">
+    <div class="dialogCard">
+      <h2 id="confirmTitle" class="dialogTitle">확인</h2>
+      <p id="confirmMessage" class="dialogMessage desc"></p>
+      <div class="dialogActions">
+        <button id="confirmCancel" type="button">취소</button>
+        <button id="confirmOk" type="button" class="primary">확인</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="progressDialog">
+    <div class="dialogCard">
+      <h2 id="progressTitle" class="dialogTitle">처리 중</h2>
+      <div id="progressTrack" class="progressTrack" aria-hidden="true"><div id="progressFill" class="progressFill"></div></div>
+      <div id="progressMessage" class="desc">잠시만 기다려 주세요.</div>
+      <ol id="progressSteps" class="progressSteps"></ol>
+      <pre id="progressLog" class="progressLog" hidden></pre>
+      <div class="dialogActions">
+        <button id="progressCancel" type="button" hidden>취소</button>
+        <button id="progressClose" type="button" hidden>닫기</button>
+      </div>
+    </div>
+  </dialog>
+
+  <main class="container">
+    <div class="top">
+      <div>
+        <h1>회차 상세 / 진단</h1>
+        <div class="desc" id="pageMeta">회차 정보를 불러오는 중입니다.</div>
+      </div>
+      <div class="actions">
+        <a class="button" href="./admin.html">목록으로</a>
+        <a class="button primary disabled" id="quizLink" href="#">풀이</a>
+      </div>
+    </div>
+
+    <div class="detailLayout">
+      <section class="stack">
+        <section class="panel">
+          <div class="panelHead">
+            <div>
+              <h2>회차 정보</h2>
+              <div class="desc">원본 문제와 정답 연결 상태를 확인합니다.</div>
+            </div>
+          </div>
+          <div class="panelBody stack">
+            <div class="summaryGrid" id="summaryGrid"></div>
+            <div class="diagGrid">
+              <div class="diagBox" id="questionDiag">
+                <strong>문제 진단</strong>
+                <span class="small">로딩 중</span>
+              </div>
+              <div class="diagBox" id="answerDiag">
+                <strong>정답 진단</strong>
+                <span class="small">로딩 중</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panelHead">
+            <div>
+              <h2>PDF 진단 / OCR</h2>
+              <div class="desc">문제 PDF 또는 정답 PDF를 선택해 텍스트 추출 상태를 점검하고 OCR을 적용합니다.</div>
+            </div>
+          </div>
+          <div class="panelBody stack">
+            <div class="row">
+              <div class="pdfTabs" role="tablist" aria-label="PDF 전환">
+                <button id="btnQuestionPdf" class="pdfTab" type="button" role="tab" aria-selected="true">문제 PDF</button>
+                <button id="btnAnswerPdf" class="pdfTab" type="button" role="tab" aria-selected="false">정답 PDF</button>
+              </div>
+              <button id="btnOpenPdf">새 탭으로 열기</button>
+              <button id="btnPdfDiagnose">PDF 진단</button>
+            </div>
+            <div class="field">
+              <label>대상 PDF</label>
+              <input id="pdfTargetPath" />
+            </div>
+            <div class="grid2">
+              <div class="field">
+                <label>OCR 방식</label>
+                <select id="ocrMode">
+                  <option value="redo">기존 OCR 재작성</option>
+                  <option value="force">전체 강제 OCR</option>
+                  <option value="skip">텍스트 없는 페이지만 OCR</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>적용 방식</label>
+                <select id="ocrOutputMode">
+                  <option value="copy">_ocr.pdf 사본 생성</option>
+                  <option value="replace">원본 백업 후 교체</option>
+                </select>
+                <!-- SOFTM-OCR: OCR 기본 적용 방식을 원본 교체 대신 _ocr.pdf 사본 생성으로 복원 - 2026-05-30 -->
+              </div>
+            </div>
+            <div class="row">
+              <button id="btnRunAnchorOcr" class="primary">문제·문항 위치맵 생성</button>
+              <button id="btnCheckAnchorMap">위치맵 확인</button>
+              <button id="btnRunOcr" class="secondary">보조 OCR 실행</button>
+              <button id="btnReload">다시 읽기</button>
+            </div>
+            <!-- SOFTM-위치맵: 풀이용 문제·문항 위치맵 생성/검증 버튼을 전체 OCR보다 앞에 배치 - 2026-05-30 -->
+            <div class="status" id="pdfDiagnoseStatus">대기 중</div>
+          </div>
+        </section>
+      </section>
+
+      <aside class="panel previewPanel">
+        <div class="panelHead">
+          <div>
+            <h2>PDF 미리보기</h2>
+            <div class="desc" id="pdfTargetHelp">문제 PDF를 기본 대상으로 표시합니다.</div>
+          </div>
+        </div>
+        <div class="panelBody">
+          <iframe id="pdfPreviewFrame" class="pdfPreview" title="선택한 PDF 미리보기" hidden></iframe>
+          <div class="status" id="emptyPreview">PDF를 불러오는 중입니다.</div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const params = new URLSearchParams(location.search);
+    const state = {
+      catalog: { questions: [] },
+      dataset: params.get("dataset") || "default",
+      questionNo: params.get("questionNo") || "",
+      item: null,
+      activeOcrJobId: "",
+    };
+
+    function escapeHtml(value){
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function normalizePath(value){
+      return String(value || "").replace(/^\.\//, "").replace(/^quiz\//, "");
+    }
+
+    function samePath(left, right){
+      const a = normalizePath(left);
+      const b = normalizePath(right);
+      return a === b || a.normalize("NFC") === b.normalize("NFC") || a.normalize("NFD") === b.normalize("NFD");
+    }
+    // SOFTM-OCR: 한글 파일명 NFC/NFD 차이에도 실행 중 OCR 작업을 찾도록 경로 비교 보정 - 2026-05-30
+
+    function isDerivedPdfPath(value){
+      const name = fileNameFromPath(value).normalize("NFC");
+      const stem = name.replace(/\.[^.]+$/, "").replace(/\s+/g, "");
+      return name.startsWith(".") || /_(?:ocr_failed(?:_\d{14})?|ocr_rejected(?:_\d{14})?|ocr_fixed|ocrfixed|ocr|fixed|original(?:_\d{14}|\d{14})?)$/i.test(stem);
+    }
+
+    function originalCandidateForDerivedPdf(value){
+      const target = normalizePath(value);
+      const parts = target.split("/");
+      const name = parts.pop() || "";
+      const originalName = name.normalize("NFC").replace(/_(?:ocr_failed(?:_\d{14})?|ocr_rejected(?:_\d{14})?|ocr_fixed|ocrfixed|ocr|fixed|original(?:_\d{14}|\d{14})?)(\.[^.]+)$/i, "$1");
+      if (!originalName || originalName === name) return "";
+      return [...parts, originalName].join("/");
+    }
+    // SOFTM-OCR: OCR 파생 PDF를 다시 OCR 대상으로 선택하지 않도록 클라이언트 판정 추가 - 2026-05-30
+    // SOFTM-OCR: 실패/거절 OCR 산출물도 파생 PDF로 취급해 재OCR 대상에서 제외 - 2026-05-30
+
+    function fileNameFromPath(value){
+      const parts = normalizePath(value).split(/[\\/]/).filter(Boolean);
+      return parts.length ? parts[parts.length - 1] : "";
+    }
+
+    async function api(path, options = {}){
+      let res;
+      try{
+        res = await fetch(path, { cache: "no-store", ...options });
+      }catch(err){
+        throw new Error(`관리자 서버에 연결할 수 없습니다. npm run admin 서버 상태를 확인하세요. (${err?.message || err})`);
+      }
+      const type = res.headers.get("content-type") || "";
+      if (!type.includes("application/json")) {
+        throw new Error("관리 기능은 Node 관리자 서버에서만 가능합니다. npm run admin 실행 후 http://localhost:8787/admin.html 로 접속하세요.");
+      }
+      const data = await res.json();
+      if (!res.ok || data.ok === false) throw new Error(data.message || "요청 실패");
+      return data;
+    }
+    // SOFTM-ADMIN: fetch 실패를 관리자 서버 연결 오류로 명확히 표시 - 2026-05-30
+
+    function questionKey(item){
+      return `${item.dataset}:${item.questionNo}`;
+    }
+
+    function diagPill(status, tone = "ok"){
+      const normalized = status || "미확인";
+      return `<span class="pill ${tone || (normalized === "정상" ? "ok" : "warn")}">${escapeHtml(normalized)}</span>`;
+    }
+
+    function warningText(warnings){
+      const list = Array.isArray(warnings) ? warnings.filter(Boolean) : [];
+      return list.length ? list.slice(0, 5).map((item) => `- ${item}`).join("\n") : "특이사항 없음";
+    }
+
+    function makeQuizUrl(item){
+      const q = new URLSearchParams({
+        dataset: item.dataset,
+        category: item.catNm,
+        catNo: item.catNo,
+        exam: item.questionNm,
+        questionNo: item.questionNo,
+        question: normalizePath(item.questionPdf),
+        answer: normalizePath(item.answerPdf),
+      });
+      if (item.correctJson) q.set("correct", normalizePath(item.correctJson));
+      if (item.questionCount) q.set("questionCount", item.questionCount);
+      if (item.questionStartNo) q.set("questionStartNo", item.questionStartNo);
+      if (item.questionEndNo) q.set("questionEndNo", item.questionEndNo);
+      if (item.answerSourceId) q.set("answerSourceId", item.answerSourceId);
+      return `./quiz.html?${q.toString()}`;
+    }
+
+    function makeAnchorDebugQuizUrl(item){
+      const url = makeQuizUrl(item || state.item);
+      const [base, query = ""] = url.split("?");
+      const q = new URLSearchParams(query);
+      q.set("anchorDebug", "1");
+      return `${base}?${q.toString()}`;
+    }
+
+    function makeDetailUrl(item){
+      const q = new URLSearchParams({ dataset: item.dataset, questionNo: item.questionNo });
+      return `./admin-detail.html?${q.toString()}`;
+    }
+
+    function buildLocalJsonCandidates(pathValue){
+      const normalized = normalizePath(pathValue);
+      const candidates = [];
+      for (const raw of [normalized, normalized.normalize("NFC"), normalized.normalize("NFD")]){
+        const rel = raw.replace(/^\.\//, "");
+        if (!rel) continue;
+        const encoded = `./${encodeURI(rel)}`;
+        const plain = `./${rel}`;
+        if (!candidates.includes(encoded)) candidates.push(encoded);
+        if (!candidates.includes(plain)) candidates.push(plain);
+      }
+      return candidates;
+    }
+
+    async function loadLocalJson(pathValue){
+      for (const candidate of buildLocalJsonCandidates(pathValue)){
+        try{
+          const res = await fetch(candidate, { cache: "no-store" });
+          if (res.ok) return await res.json();
+        }catch(_){}
+      }
+      throw new Error(`JSON 파일을 읽을 수 없습니다: ${normalizePath(pathValue)}`);
+    }
+    // SOFTM-ANCHOR: 위치맵 JSON을 관리자 화면에서 직접 읽어 정상 여부를 검증하도록 로딩 헬퍼 추가 - 2026-05-30
+
+    function findQuestionByPdfPath(pdfPath){
+      const target = normalizePath(pdfPath);
+      if (!target) return null;
+      return (state.catalog.questions || []).find((row) => samePath(row.questionPdf, target)) || null;
+    }
+
+    function originalQuestionForDerived(itemOrPath){
+      const originalPath = typeof itemOrPath === "string"
+        ? originalCandidateForDerivedPdf(itemOrPath)
+        : normalizePath(itemOrPath?.originalCandidatePath) || originalCandidateForDerivedPdf(itemOrPath?.questionPdf);
+      const originalItem = findQuestionByPdfPath(originalPath);
+      return { originalPath, originalItem };
+    }
+
+    function derivedNoticeHtml(itemOrPath){
+      const target = typeof itemOrPath === "string" ? normalizePath(itemOrPath) : normalizePath(itemOrPath?.questionPdf);
+      const { originalPath, originalItem } = originalQuestionForDerived(itemOrPath);
+      const link = originalItem
+        ? `<a class="button primary" href="${escapeHtml(makeDetailUrl(originalItem))}">원본 회차 열기</a>`
+        : "";
+      const pathText = originalPath ? `\n원본 후보: ${escapeHtml(originalPath)}` : "";
+      return `
+        <div class="status warn">
+          OCR 결과/백업 PDF입니다. 이 파일은 문제 회차로 관리하지 않습니다.${pathText}
+          ${link ? `<div class="actions">${link}</div>` : ""}
+          ${target ? `<div class="desc">${escapeHtml(target)}</div>` : ""}
+        </div>
+      `;
+    }
+    // SOFTM-ADMIN: OCR 파생 파일에서 원본 회차를 찾아 바로 이동할 수 있도록 링크 생성 - 2026-05-30
+
+    function showToast(message, options = {}){
+      const region = $("toastRegion");
+      const toast = document.createElement("div");
+      const tone = options.tone || "info";
+      toast.className = `toast ${tone}`;
+      toast.setAttribute("role", tone === "error" ? "alert" : "status");
+      toast.innerHTML = `
+        <div>
+          <div class="toastTitle">${escapeHtml(options.title || (tone === "error" ? "오류" : tone === "warn" ? "확인 필요" : "알림"))}</div>
+          <div class="toastMessage">${escapeHtml(message)}</div>
+        </div>
+        <button class="toastClose" type="button" aria-label="알림 닫기">×</button>
+      `;
+      const close = () => toast.remove();
+      toast.querySelector(".toastClose").addEventListener("click", close);
+      region.appendChild(toast);
+      window.setTimeout(close, Number(options.timeout || (tone === "error" ? 7000 : 4200)));
+    }
+
+    function showConfirmDialog(options = {}){
+      return new Promise((resolve) => {
+        const dialog = $("confirmDialog");
+        const ok = $("confirmOk");
+        const cancel = $("confirmCancel");
+        $("confirmTitle").textContent = options.title || "확인";
+        $("confirmMessage").textContent = options.message || "";
+        ok.textContent = options.confirmText || "확인";
+        ok.className = options.danger ? "danger" : "primary";
+        const cleanup = () => {
+          ok.removeEventListener("click", onOk);
+          cancel.removeEventListener("click", onCancel);
+          dialog.removeEventListener("cancel", onCancel);
+        };
+        const closeWith = (value) => {
+          cleanup();
+          dialog.close();
+          if (!value && options.cancelToast !== false) showToast("작업을 취소했습니다.", { title: "취소", tone: "warn", timeout: 2600 });
+          resolve(value);
+        };
+        const onOk = () => closeWith(true);
+        const onCancel = (event) => {
+          if (event) event.preventDefault();
+          closeWith(false);
+        };
+        ok.addEventListener("click", onOk);
+        cancel.addEventListener("click", onCancel);
+        dialog.addEventListener("cancel", onCancel);
+        dialog.showModal();
+        ok.focus();
+      });
+    }
+
+    function openProgressDialog(title, steps = [], message = "처리 중입니다. 잠시만 기다려 주세요."){
+      $("progressTitle").textContent = title;
+      $("progressMessage").textContent = message;
+      $("progressClose").hidden = true;
+      $("progressCancel").hidden = true;
+      $("progressLog").hidden = true;
+      $("progressLog").textContent = "";
+      $("progressTrack").classList.remove("determinate");
+      $("progressFill").style.setProperty("--progress-value", "0%");
+      $("progressSteps").innerHTML = steps.map((step, idx) => `<li data-step="${idx}">${escapeHtml(step)}</li>`).join("");
+      if (!$("progressDialog").open) $("progressDialog").showModal();
+    }
+
+    function setProgressStep(index, status){
+      const item = document.querySelector(`#progressSteps li[data-step="${index}"]`);
+      if (!item) return;
+      item.classList.remove("running", "done", "failed");
+      if (status) item.classList.add(status);
+    }
+
+    function setProgressPercent(value){
+      const percent = Math.max(0, Math.min(100, Number(value || 0)));
+      $("progressTrack").classList.add("determinate");
+      $("progressFill").style.setProperty("--progress-value", `${percent}%`);
+    }
+
+    function setProgressLog(text){
+      const value = String(text || "").trim();
+      $("progressLog").hidden = !value;
+      $("progressLog").textContent = value;
+      if (value) $("progressLog").scrollTop = $("progressLog").scrollHeight;
+    }
+
+    async function withProgress(options, runner){
+      const steps = options.steps || [];
+      openProgressDialog(options.title || "처리 중", steps, options.message);
+      try{
+        const result = await runner({
+          step(index, status = "running", message = ""){
+            setProgressStep(index, status);
+            if (message) $("progressMessage").textContent = message;
+          },
+        });
+        steps.forEach((_step, idx) => setProgressStep(idx, "done"));
+        $("progressMessage").textContent = options.doneMessage || "완료했습니다.";
+        if (options.toast !== false) showToast(options.doneMessage || "완료했습니다.", { title: options.toastTitle || "완료", tone: "ok" });
+        setTimeout(() => {
+          if ($("progressDialog").open) $("progressDialog").close();
+        }, 450);
+        return result;
+      }catch(err){
+        const running = [...document.querySelectorAll("#progressSteps li")].findIndex((item) => item.classList.contains("running"));
+        if (running >= 0) setProgressStep(running, "failed");
+        $("progressMessage").textContent = err?.message || String(err);
+        $("progressCancel").hidden = true;
+        state.activeOcrJobId = "";
+        $("progressClose").hidden = false;
+        showToast(err?.message || String(err), { title: options.errorTitle || "처리 실패", tone: "error" });
+        throw err;
+      }
+    }
+
+    function renderQuestion(){
+      const item = state.item;
+      if (!item) {
+        $("pageMeta").textContent = "회차를 찾을 수 없습니다.";
+        $("summaryGrid").innerHTML = `<div class="status warn">목록에서 다시 선택하세요.</div>`;
+        return;
+      }
+      $("pageMeta").textContent = `${item.catNm} · ${item.datasetLabel} · ${item.questionNo}`;
+      $("quizLink").href = makeQuizUrl(item);
+      $("quizLink").classList.remove("disabled");
+      $("summaryGrid").innerHTML = [
+        ["문제 파일", fileNameFromPath(item.questionPdf) || item.questionNm || "-"],
+        ["등록명", item.questionNm || "-"],
+        ["분류", `${item.catNm || "-"} · ${item.gNm || "-"}`],
+        ["풀이 상태", item.published ? "게시 가능" : (item.issue || "미게시")],
+        ["문항", item.questionCount ? `${item.questionCount}문항` : "-"],
+        ["정답", item.correctJson || item.answerPdf || item.answerSourceId || "없음"],
+        ["위치맵", item.anchorMap ? `${Math.round(Number(item.anchorConfidence || 0) * 100)}% · ${item.anchorStatus || "위치맵 생성"}` : "없음"],
+      ].map(([label, value]) => `<div class="summaryBox" title="${escapeHtml(`${label}: ${value}`)}"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></div>`).join("")
+        + (item.derivedPdf || isDerivedPdfPath(item.questionPdf) ? derivedNoticeHtml(item) : "");
+      // SOFTM-ADMIN: 회차 요약값은 말줄임 표시하고 전체 값은 툴팁으로 확인하도록 보정 - 2026-05-30
+      // SOFTM-위치맵: 회차 상세에서 문제·문항 위치맵 생성 여부와 신뢰도를 바로 확인하도록 요약 표시 - 2026-05-30
+      $("questionDiag").innerHTML = `
+        <strong>문제 진단 ${diagPill(item.published ? "풀이 가능" : (item.issue || "미게시"), item.published ? "ok" : "warn")}</strong>
+        <span class="small">문제·문항 위치맵: ${escapeHtml(item.anchorMap ? `${item.anchorStatus || "생성됨"} · ${Math.round(Number(item.anchorConfidence || 0) * 100)}%` : "없음")}\nOCR 텍스트: ${escapeHtml(item.questionDiagStatus || "미확인")}${item.published && item.needsOcr ? "\nOCR 품질 경고가 있어도 원본 PDF와 정답 JSON으로 풀이 가능합니다." : ""}\n${escapeHtml(warningText(item.anchorWarnings || []))}</span>
+      `;
+      // SOFTM-OCR: 상세 화면에서 풀이 가능 상태와 OCR 텍스트 품질 경고를 분리해 표시 - 2026-05-30
+      $("answerDiag").innerHTML = `
+        <strong>정답 진단 ${diagPill(item.answerDiagStatus, item.answerDiagTone)}</strong>
+        <span class="small">정답쌍 ${Number(item.answerPairs || 0).toLocaleString()}개 / 텍스트 ${Number(item.answerTextChars || 0).toLocaleString()}자\n${escapeHtml(warningText(item.answerDiagWarnings))}</span>
+      `;
+      $("btnAnswerPdf").disabled = !item.answerPdf;
+      $("btnAnswerPdf").setAttribute("aria-disabled", item.answerPdf ? "false" : "true");
+      if (!$("pdfTargetPath").value) selectPdfTarget(item.questionPdf, "문제", { silent: true });
+    }
+
+    async function loadQuestion(options = {}){
+      const data = await api("/api/admin/catalog");
+      state.catalog = { questions: Array.isArray(data.questions) ? data.questions : [] };
+      state.item = state.catalog.questions.find((item) => item.dataset === state.dataset && item.questionNo === state.questionNo) || null;
+      if (!options.keepTarget) $("pdfTargetPath").value = "";
+      renderQuestion();
+    }
+
+    function setPdfTabRole(role){
+      const active = role === "정답" ? "answer" : "question";
+      $("btnQuestionPdf").setAttribute("aria-selected", active === "question" ? "true" : "false");
+      $("btnAnswerPdf").setAttribute("aria-selected", active === "answer" ? "true" : "false");
+    }
+
+    function selectPdfTarget(path, role = "PDF", options = {}){
+      const target = normalizePath(path);
+      if (!target) {
+        showToast("선택할 PDF 경로가 없습니다.", { title: "PDF 선택 실패", tone: "warn" });
+        return "";
+      }
+      setPdfTabRole(role);
+      $("pdfTargetPath").value = target;
+      $("pdfTargetPath").dataset.pdfRole = role;
+      $("pdfTargetHelp").textContent = `${role} PDF를 미리보기로 표시했습니다.`;
+      $("pdfPreviewFrame").src = `./${target}`;
+      $("pdfPreviewFrame").hidden = false;
+      $("emptyPreview").hidden = true;
+      $("pdfDiagnoseStatus").classList.remove("warn");
+      if (isDerivedPdfPath(target)) {
+        $("pdfDiagnoseStatus").classList.add("warn");
+        $("pdfDiagnoseStatus").innerHTML = `<div class="status">[${escapeHtml(role)} PDF 보기]</div>${derivedNoticeHtml(target)}`;
+      } else {
+        $("pdfDiagnoseStatus").textContent = `[${role} PDF 보기]\n${target}\n\n문제·문항 위치맵 생성, PDF 진단 또는 보조 OCR을 실행할 수 있습니다.`;
+      }
+      if (!options.silent) showToast(`${role} PDF를 미리보기로 표시했습니다.`, { title: "PDF 보기", tone: "ok", timeout: 2600 });
+      return target;
+    }
+    // SOFTM-ADMIN: 문제 PDF와 정답 PDF를 탭처럼 전환하며 현재 대상을 표시 - 2026-05-30
+
+    function ensurePdfTargetForAction(actionLabel){
+      const current = normalizePath($("pdfTargetPath").value);
+      if (current) return current;
+      const fallback = normalizePath(state.item?.questionPdf);
+      if (fallback) {
+        selectPdfTarget(fallback, "문제", { silent: true });
+        showToast(`문제 PDF를 ${actionLabel} 대상으로 설정했습니다.`, { title: "PDF 자동 선택", tone: "ok", timeout: 2600 });
+      }
+      return fallback;
+    }
+
+    function openSelectedPdf(){
+      const target = ensurePdfTargetForAction("열기");
+      if (!target) {
+        showToast("열 PDF를 먼저 선택하세요.", { title: "PDF 선택 필요", tone: "warn" });
+        return;
+      }
+      const opened = window.open(`./${target}`, "_blank", "noopener");
+      if (!opened) showToast("새 탭이 차단되었을 수 있습니다.", { title: "PDF 열기 실패", tone: "warn" });
+    }
+
+    function formatNumber(value){
+      return Number(value || 0).toLocaleString();
+    }
+
+    function sleep(ms){
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    function formatDuration(ms){
+      const seconds = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+      const min = Math.floor(seconds / 60);
+      const sec = seconds % 60;
+      return min ? `${min}분 ${sec.toString().padStart(2, "0")}초` : `${sec}초`;
+    }
+
+    function diagnosisVerdict(data){
+      if (data.needsOcr) {
+        return {
+          label: "OCR 품질 경고",
+          tone: "warn",
+          message: "OCR 텍스트 품질 확인이 필요합니다.",
+          detail: "이 경고는 검색/텍스트 레이어 품질 기준입니다. 원본 PDF와 정답 JSON이 있으면 풀이 게시를 막지 않습니다.",
+        };
+      }
+      return {
+        label: "OCR 품질 정상",
+        tone: "ok",
+        message: "OCR 텍스트 품질 기준은 정상입니다.",
+        detail: "문항번호와 선택지 위치 인식 기준을 통과했습니다. 본문 OCR 텍스트는 검색/보조용이라 원문과 100% 일치하지 않을 수 있습니다.",
+      };
+    }
+
+    function renderPdfDiagnostics(data, role = "PDF", options = {}){
+      const verdict = diagnosisVerdict(data);
+      const warnings = Array.isArray(data.warnings) ? data.warnings.filter(Boolean) : [];
+      const managementWarnings = Array.isArray(data.managementWarnings) ? data.managementWarnings.filter(Boolean) : [];
+      const metricRows = [
+        ["페이지", data.pages || "-", data.pageSize || "크기 정보 없음"],
+        ["텍스트", `${formatNumber(data.textChars)}자`, `페이지당 ${formatNumber(data.charsPerPage)}자`],
+        ["한글", `${formatNumber(data.koreanChars)}자`, `예상 문항 ${data.expectedQuestionCount || "-"}개`],
+        ["문항번호", `${formatNumber(data.uniqueQuestionLabels)}개`, `총 ${formatNumber(data.questionLabels)}개 · 범위 ${data.questionLabelMin || "-"}~${data.questionLabelMax || "-"}`],
+        ["선택지 기호", `${formatNumber(data.choiceLabels)}개`, "정상 기호 감지 수"],
+        ["OCR 변형", `${formatNumber(data.choiceVariantLabels)}개`, "깨진 선택지 토큰"],
+        ["한글 분리", `${formatNumber(data.brokenHangulRuns)}개`, "음절 단위 분리 구간"],
+        ["OCR 사본", data.ocrCopyPath ? "있음" : "없음", data.ocrCopyPath || data.suggestedOcrPath || "-"],
+      ];
+      // SOFTM-ADMIN: OCR 결과가 생성됐더라도 선택지 깨짐/한글 분리 품질 지표를 별도 표시 - 2026-05-30
+      $("pdfDiagnoseStatus").innerHTML = `
+        <div class="diagnosisResult ${verdict.tone === "warn" ? "warn" : ""}">
+          <div class="diagnosisHeadline">
+            <div>
+              <h3 class="diagnosisTitle">${escapeHtml(role)} 진단 결과: ${diagPill(verdict.label, verdict.tone)}</h3>
+              <div class="desc">${escapeHtml(verdict.detail)}</div>
+            </div>
+            <div class="desc">${escapeHtml(data.path || "")}</div>
+          </div>
+          <div class="diagnosisMessage ${verdict.tone === "warn" ? "warn" : ""}">${escapeHtml(verdict.message)}</div>
+          <div class="metricGrid">
+            ${metricRows.map(([label, value, help]) => `
+              <div class="metricBox" title="${escapeHtml(`${label}: ${value} · ${help}`)}">
+                <span class="metricLabel">${escapeHtml(label)}</span>
+                <strong>${escapeHtml(value)}</strong>
+                <span class="metricHelp">${escapeHtml(help)}</span>
+              </div>
+            `).join("")}
+          </div>
+          <div>
+            <h3>OCR 품질 경고</h3>
+            ${warnings.length
+              ? `<ul class="warningList">${warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+              : `<div class="desc">OCR 위험 신호가 없습니다.</div>`}
+          </div>
+          <div class="diagnosisMessage">
+            ${escapeHtml(data.needsOcr ? "OCR 품질 경고는 보조 진단입니다. 원본 PDF와 정답 JSON이 연결된 회차는 그대로 풀이할 수 있습니다." : "OCR 품질은 정상이며, 풀이 가능 여부는 정답 JSON 연결 상태로 별도 판단합니다.")}
+          </div>
+          ${managementWarnings.length ? `
+            <div>
+              <h3>관리 안내</h3>
+              <ul class="warningList">${managementWarnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+            </div>
+          ` : ""}
+          ${data.textError ? `<div><h3>오류</h3><div class="status warn">${escapeHtml(data.textError)}</div></div>` : ""}
+          ${data.textSample ? `<div><h3>텍스트 샘플</h3><div class="sampleBlock">${escapeHtml(data.textSample)}</div></div>` : ""}
+        </div>
+      `;
+      $("pdfDiagnoseStatus").classList.toggle("warn", Boolean(data.needsOcr));
+      if (options.toast !== false) {
+        showToast(verdict.message, {
+          title: verdict.label,
+          tone: verdict.tone === "warn" ? "warn" : "ok",
+          timeout: verdict.tone === "warn" ? 5200 : 3200,
+        });
+      }
+    }
+    // SOFTM-OCR: PDF 진단 결과에서 OCR 품질 경고와 풀이 가능 여부를 분리해 안내 - 2026-05-30
+    // SOFTM-ADMIN: OCR 품질 경고와 파생 파일 관리 안내를 분리해 결과 메시지 혼선을 제거 - 2026-05-30
+
+    async function diagnosePdf(path, role = "PDF", options = {}){
+      const target = normalizePath(path) || ensurePdfTargetForAction("진단");
+      if (!target) {
+        $("pdfDiagnoseStatus").textContent = "진단할 PDF를 선택하세요.";
+        showToast("진단할 PDF를 먼저 선택하세요.", { title: "PDF 선택 필요", tone: "warn" });
+        return;
+      }
+      const activeRole = role === "PDF" ? ($("pdfTargetPath").dataset.pdfRole || "PDF") : role;
+      const run = async (progress) => {
+        $("pdfTargetPath").value = target;
+        $("pdfTargetPath").dataset.pdfRole = activeRole;
+        $("pdfDiagnoseStatus").textContent = `${activeRole} PDF 진단 중...`;
+        if (progress) progress.step(0, "running", "PDF 메타데이터와 텍스트 레이어를 읽고 있습니다.");
+        const data = await api(`/api/admin/pdf-info?path=${encodeURIComponent(target)}`);
+        if (progress) progress.step(0, "done");
+        if (progress) progress.step(1, "running", "진단 결과를 표시하고 있습니다.");
+        renderPdfDiagnostics(data, activeRole);
+        if (progress) progress.step(1, "done");
+        return data;
+      };
+      if (!options.showProgress) return await run();
+      return await withProgress({
+        title: `${activeRole} PDF 진단`,
+        steps: ["PDF 분석", "결과 표시"],
+        doneMessage: "PDF 진단이 완료되었습니다.",
+      }, run);
+    }
+
+    function renderAnchorOcrResult(data){
+      const confidence = Math.round(Number(data.confidence || 0) * 100);
+      const warnings = Array.isArray(data.warnings) ? data.warnings.filter(Boolean) : [];
+      $("pdfDiagnoseStatus").classList.toggle("warn", warnings.length > 0 || Number(data.confidence || 0) < 0.32);
+      $("pdfDiagnoseStatus").innerHTML = `
+        <div class="diagnosisResult ${warnings.length ? "warn" : ""}">
+          <div class="diagnosisHeadline">
+            <div>
+              <h3 class="diagnosisTitle">문제·문항 위치맵: ${diagPill(data.status || "생성 완료", warnings.length ? "warn" : "ok")}</h3>
+              <div class="desc">감지 ${formatNumber(data.detected)}개 / 원시 후보 ${formatNumber(data.rawDetected)}개 · 신뢰도 ${confidence}% · ${formatDuration(data.elapsedMs)}</div>
+            </div>
+            <div class="desc">${escapeHtml(data.output || "")}</div>
+          </div>
+          <div class="diagnosisMessage">
+            생성된 위치맵 JSON은 풀이 화면의 한문제 보기와 문항 이동에 우선 사용됩니다. PDF 원본과 게시 상태는 변경하지 않습니다.
+          </div>
+          ${warnings.length
+            ? `<div><h3>확인 필요</h3><ul class="warningList">${warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>`
+            : `<div class="desc">위치맵 경고가 없습니다.</div>`}
+          ${data.stdout ? `<div><h3>실행 로그</h3><div class="sampleBlock">${escapeHtml(data.stdout.trim().split(/\r?\n/).slice(-24).join("\n"))}</div></div>` : ""}
+        </div>
+      `;
+    }
+
+    function analyzeAnchorMap(data){
+      const questionCount = Number(data.questionCount || state.item?.questionCount || 0);
+      const pageMap = Array.isArray(data.questionPageMap) ? data.questionPageMap : [];
+      const topMap = Array.isArray(data.questionTopRatioMap) ? data.questionTopRatioMap : [];
+      const printedMap = Array.isArray(data.printedQuestionNoMap) ? data.printedQuestionNoMap : [];
+      const anchors = Array.isArray(data.anchors) ? data.anchors : [];
+      const choiceCount = Math.max(1, Math.min(5, Number(data.choiceCount || state.item?.choiceCount || 4) || 4));
+      const choiceMap = data.choiceAnchorMap && typeof data.choiceAnchorMap === "object" ? data.choiceAnchorMap : {};
+      const detectedQs = new Set(anchors.map((item) => Number(item.q)).filter((q) => Number.isFinite(q)));
+      const missing = [];
+      const choiceMissing = [];
+      let choiceMapped = 0;
+      for (let q = 1; q <= questionCount; q += 1){
+        if (!detectedQs.has(q)) missing.push(q);
+        const choices = Array.isArray(choiceMap[String(q)]) ? choiceMap[String(q)] : [];
+        const validChoices = new Set(choices.filter((item) => isReliableAnchorChoice(item, choiceCount)).map((item) => Number(item.choice)));
+        choiceMapped += validChoices.size;
+        if (validChoices.size < choiceCount) choiceMissing.push(q);
+      }
+      const pageRows = new Map();
+      for (let q = 1; q <= questionCount; q += 1){
+        const page = Number(pageMap[q]);
+        if (!Number.isFinite(page)) continue;
+        const row = pageRows.get(page) || { page, mapped: 0, detected: 0 };
+        row.mapped += 1;
+        pageRows.set(page, row);
+      }
+      for (const item of anchors){
+        const page = Number(item.page);
+        if (!Number.isFinite(page)) continue;
+        const row = pageRows.get(page) || { page, mapped: 0, detected: 0 };
+        row.detected += 1;
+        pageRows.set(page, row);
+      }
+      const orderIssues = [];
+      let prevPage = 0;
+      let prevY = -1;
+      for (let q = 1; q <= questionCount; q += 1){
+        const page = Number(pageMap[q]);
+        const y = Number(topMap[q]);
+        if (!Number.isFinite(page) || !Number.isFinite(y)) {
+          orderIssues.push(`${q}번 위치값 없음`);
+          continue;
+        }
+        if (page < prevPage || (page === prevPage && y + 0.004 < prevY)) {
+          orderIssues.push(`${q}번 위치가 이전 문항보다 앞에 있음`);
+        }
+        prevPage = page;
+        prevY = y;
+      }
+      const warnings = [
+        ...(Array.isArray(data.warnings) ? data.warnings : []),
+        ...(pageMap.length < questionCount + 1 ? ["questionPageMap 길이가 문항 수보다 짧습니다."] : []),
+        ...(topMap.length < questionCount + 1 ? ["questionTopRatioMap 길이가 문항 수보다 짧습니다."] : []),
+        ...(choiceMapped < questionCount * choiceCount ? [`선택지 위치맵이 부족합니다(${choiceMapped}/${questionCount * choiceCount}).`] : []),
+        ...orderIssues.slice(0, 5),
+      ].filter(Boolean);
+      const confidence = Number(data.confidence || 0);
+      return {
+        questionCount,
+        questionStartNo: Number(data.questionStartNo || printedMap[1] || 1),
+        questionEndNo: Number(data.questionEndNo || printedMap[questionCount] || questionCount),
+        anchors,
+        detected: detectedQs.size,
+        missing,
+        choiceCount,
+        choiceMapped,
+        choiceMissing,
+        pageRows: [...pageRows.values()].sort((a, b) => a.page - b.page),
+        warnings,
+        confidence,
+        ok: confidence >= 0.32 && warnings.length === 0 && pageMap.length >= questionCount + 1 && topMap.length >= questionCount + 1,
+      };
+    }
+
+    function isReliableAnchorChoice(item, choiceCount){
+      if (!item || typeof item !== "object") return false;
+      const source = String(item.source || "").toLowerCase();
+      if (source.includes("geometry") || source.includes("fill")) return false;
+      const choice = Number(item.choice);
+      const x = Number(item.xRatio);
+      const y = Number(item.yRatio);
+      const confidence = item.confidence == null ? 1 : Number(item.confidence);
+      return Number.isInteger(choice)
+        && choice >= 1
+        && choice <= choiceCount
+        && Number.isFinite(x)
+        && x >= 0
+        && x <= 1
+        && Number.isFinite(y)
+        && y >= 0
+        && y <= 1
+        && (!Number.isFinite(confidence) || confidence >= 0.45);
+    }
+    // SOFTM-위치맵: 위치맵 확인 결과에 문제 시작 위치뿐 아니라 선택지 1~5 좌표 누락 여부도 함께 표시 - 2026-05-30
+    // SOFTM-위치맵: 예전 위치맵의 기하 추정/채움 좌표는 관리자 검증에서도 실제 선택지 좌표로 집계하지 않음 - 2026-05-30
+
+    function renderAnchorMapCheck(data, pathValue){
+      const report = analyzeAnchorMap(data);
+      const confidence = Math.round(report.confidence * 100);
+      const missingText = report.missing.length
+        ? `${report.missing.slice(0, 30).join(", ")}${report.missing.length > 30 ? ` 외 ${report.missing.length - 30}개` : ""}`
+        : "없음";
+      const pageText = report.pageRows.map((row) => `${row.page}p: 감지 ${row.detected} / 매핑 ${row.mapped}`).join("\n") || "-";
+      const printedRangeText = Number.isFinite(report.questionStartNo) && Number.isFinite(report.questionEndNo)
+        ? `${formatNumber(report.questionStartNo)}~${formatNumber(report.questionEndNo)}번`
+        : "-";
+      const choiceMissingText = report.choiceMissing.length
+        ? `${report.choiceMissing.slice(0, 30).join(", ")}${report.choiceMissing.length > 30 ? ` 외 ${report.choiceMissing.length - 30}개` : ""}`
+        : "없음";
+      const sampleText = report.anchors.slice(0, 16)
+        .map((item) => `${item.q}번 -> ${item.page}p y ${Math.round(Number(item.yRatio || 0) * 1000) / 10}% (${item.text || ""})`)
+        .join("\n") || "-";
+      $("pdfDiagnoseStatus").classList.toggle("warn", !report.ok);
+      $("pdfDiagnoseStatus").innerHTML = `
+        <div class="diagnosisResult ${report.ok ? "" : "warn"}">
+          <div class="diagnosisHeadline">
+            <div>
+              <h3 class="diagnosisTitle">위치맵 확인: ${diagPill(report.ok ? "정상" : "확인 필요", report.ok ? "ok" : "warn")}</h3>
+              <div class="desc">감지 ${formatNumber(report.detected)} / 문항 ${formatNumber(report.questionCount)} · 신뢰도 ${confidence}%</div>
+            </div>
+            <a class="button primary" href="${escapeHtml(makeAnchorDebugQuizUrl(state.item))}" target="_blank" rel="noopener">풀이화면 위치 확인</a>
+          </div>
+          <div class="metricGrid">
+            <div class="metricBox"><span class="metricLabel">위치맵</span><strong>${escapeHtml(report.ok ? "정상" : "확인 필요")}</strong><span class="metricHelp">${escapeHtml(normalizePath(pathValue))}</span></div>
+            <div class="metricBox"><span class="metricLabel">감지 문제</span><strong>${formatNumber(report.detected)}개</strong><span class="metricHelp">PDF 이미지 분석으로 잡힌 문제번호</span></div>
+            <div class="metricBox"><span class="metricLabel">인쇄 번호</span><strong>${escapeHtml(printedRangeText)}</strong><span class="metricHelp">앱 1번이 PDF ${formatNumber(report.questionStartNo || 1)}번일 수 있음</span></div>
+            <div class="metricBox"><span class="metricLabel">보간 문항</span><strong>${formatNumber(report.missing.length)}개</strong><span class="metricHelp">직접 감지 실패 후 앞뒤 좌표로 보완</span></div>
+            <div class="metricBox"><span class="metricLabel">선택지 위치</span><strong>${formatNumber(report.choiceMapped)}개</strong><span class="metricHelp">문항당 1~${formatNumber(report.choiceCount)}번 좌표</span></div>
+            <div class="metricBox"><span class="metricLabel">페이지</span><strong>${formatNumber(data.pageCount)}p</strong><span class="metricHelp">PDF 기준 페이지 수</span></div>
+          </div>
+          <div>
+            <h3>구조 점검</h3>
+            ${report.warnings.length
+              ? `<ul class="warningList">${report.warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+              : `<div class="desc">구조 경고가 없습니다.</div>`}
+          </div>
+          <div><h3>직접 감지 실패/보간 문항</h3><div class="sampleBlock">${escapeHtml(missingText)}</div></div>
+          <div><h3>선택지 위치 누락 문항</h3><div class="sampleBlock">${escapeHtml(choiceMissingText)}</div></div>
+          <div><h3>페이지별 감지/매핑</h3><div class="sampleBlock">${escapeHtml(pageText)}</div></div>
+          <div><h3>감지 샘플</h3><div class="sampleBlock">${escapeHtml(sampleText)}</div></div>
+        </div>
+      `;
+      showToast(report.ok ? "위치맵 구조가 정상입니다. 풀이화면 위치 확인으로 실제 PDF 위 좌표를 확인하세요." : "위치맵 확인이 필요합니다.", {
+        title: "위치맵 확인",
+        tone: report.ok ? "ok" : "warn",
+        timeout: 5200,
+      });
+    }
+
+    async function checkAnchorMapForCurrentQuestion(){
+      const item = state.item;
+      if (!item?.anchorMap) {
+        showToast("생성된 위치맵이 없습니다. 먼저 문제·문항 위치맵 생성을 실행하세요.", { title: "위치맵 없음", tone: "warn" });
+        $("pdfDiagnoseStatus").textContent = "위치맵이 없습니다. 문제·문항 위치맵 생성을 먼저 실행하세요.";
+        return;
+      }
+      await withProgress({
+        title: "위치맵 확인",
+        steps: ["위치맵 읽기", "구조 점검", "결과 표시"],
+        message: "저장된 문제·문항 위치맵을 읽고 있습니다.",
+        doneMessage: "위치맵 확인이 완료되었습니다.",
+      }, async (progress) => {
+        progress.step(0, "running", "위치맵 JSON을 읽고 있습니다.");
+        const data = await loadLocalJson(item.anchorMap);
+        progress.step(0, "done");
+        progress.step(1, "running", "문항 순서, 누락, 페이지별 매핑을 점검하고 있습니다.");
+        const report = analyzeAnchorMap(data);
+        progress.step(1, report.ok ? "done" : "running", report.ok ? "구조 경고가 없습니다." : "확인이 필요한 항목이 있습니다.");
+        progress.step(2, "running", "점검 결과를 화면에 표시하고 있습니다.");
+        renderAnchorMapCheck(data, item.anchorMap);
+        progress.step(2, "done");
+        return report;
+      });
+    }
+    // SOFTM-ANCHOR: 저장된 위치맵이 실제로 쓸 수 있는 구조인지 관리자에서 점검하고 풀이화면 오버레이로 연결 - 2026-05-30
+
+    async function runAnchorOcrForTarget(){
+      let target = ensurePdfTargetForAction("위치맵");
+      if (!target) {
+        $("pdfDiagnoseStatus").textContent = "문제·문항 위치맵을 생성할 문제 PDF를 선택하세요.";
+        showToast("문제·문항 위치맵을 생성할 문제 PDF를 먼저 선택하세요.", { title: "PDF 선택 필요", tone: "warn" });
+        return;
+      }
+      if (($("pdfTargetPath").dataset.pdfRole || "문제") !== "문제") {
+        showToast("문제·문항 위치맵은 문제 PDF에서만 생성합니다.", { title: "대상 확인", tone: "warn" });
+        target = selectPdfTarget(state.item?.questionPdf, "문제", { silent: true });
+      }
+      if (isDerivedPdfPath(target)) {
+        const original = originalCandidateForDerivedPdf(target);
+        const message = `문제·문항 위치맵은 원본 문제 PDF에서 생성하세요.${original ? `\n원본 후보: ${original}` : ""}`;
+        $("pdfDiagnoseStatus").classList.add("warn");
+        $("pdfDiagnoseStatus").innerHTML = derivedNoticeHtml(target);
+        showToast(message, { title: "위치맵 대상 확인", tone: "warn", timeout: 5200 });
+        return;
+      }
+      const confirmed = await showConfirmDialog({
+        title: "문제·문항 위치맵 생성",
+        message: `렌더된 PDF 이미지에서 문제 시작 위치와 선택지 1~5 위치를 계산해 풀이용 위치맵 JSON을 생성합니다.\n\n대상: ${target}\n\n원본 PDF는 변경하지 않습니다.`,
+        confirmText: "생성",
+      });
+      if (!confirmed) return;
+      $("btnRunAnchorOcr").disabled = true;
+      try{
+        await withProgress({
+          title: "문제·문항 위치맵 생성",
+          steps: ["문제 위치 분석", "문항 위치 저장", "회차 상태 갱신"],
+          message: "PDF 이미지에서 문제 시작 위치와 선택지 위치를 분석하고 있습니다.",
+          doneMessage: "문제·문항 위치맵이 생성되었습니다.",
+        }, async (progress) => {
+          progress.step(0, "running", "문제 PDF 이미지에서 문제번호 기준 위치를 분석하고 있습니다.");
+          const data = await api("/api/admin/anchor-ocr", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              dataset: state.dataset,
+              questionNo: state.questionNo,
+              path: target,
+            }),
+          });
+          progress.step(0, "done");
+          progress.step(1, "done", `위치맵 저장 완료: ${data.output || ""}`);
+          renderAnchorOcrResult(data);
+          progress.step(2, "running", "회차 상태를 다시 읽고 있습니다.");
+          await loadQuestion({ keepTarget: true });
+          progress.step(2, "done");
+          showToast(`문제·문항 위치맵 생성 완료 · 신뢰도 ${Math.round(Number(data.confidence || 0) * 100)}%`, { title: "위치맵 생성", tone: data.warnings?.length ? "warn" : "ok", timeout: 4200 });
+          return data;
+        });
+      } finally {
+        $("btnRunAnchorOcr").disabled = false;
+      }
+    }
+    // SOFTM-위치맵: 상세 화면에서 문제 PDF 이미지를 분석해 문제 시작 위치와 선택지 위치 JSON을 생성하는 흐름 추가 - 2026-05-30
+
+    function renderOcrJobStatus(job){
+      const logs = Array.isArray(job.logs) ? job.logs.slice(-30).join("\n") : "";
+      const progressLabel = `${Number(job.progress || 0)}%${job.progressEstimated ? "(추정)" : ""}`;
+      const isPostProcessing = job.status === "running" && job.pageCount && Number(job.processedPages || 0) >= Number(job.pageCount || 0);
+      const pageLabel = job.pageCount
+        ? (isPostProcessing ? `PDF 후처리 중 ${Number(job.processedPages || 0)}/${job.pageCount}` : (job.processedPages ? `페이지 ${Number(job.processedPages || 0)}/${job.pageCount}` : `페이지 로그 대기/${job.pageCount}`))
+        : "";
+      const waitMessage = job.waitingForLogs
+        ? `<div class="diagnosisMessage warn">ocrmypdf가 아직 페이지별 로그를 출력하지 않아 추정 진행률로 표시합니다.</div>`
+        : (isPostProcessing ? `<div class="diagnosisMessage warn">페이지 OCR은 끝났고 PDF 생성/최적화 후처리 중입니다. 이 구간은 로그 없이 시간이 늘어날 수 있습니다.</div>` : "");
+      const errorHtml = job.error ? `<div><h3>오류</h3><div class="status warn">${escapeHtml(job.error)}</div></div>` : "";
+      $("pdfDiagnoseStatus").innerHTML = `
+        <div class="diagnosisResult ${job.status === "failed" || job.status === "canceled" ? "warn" : ""}">
+          <div class="diagnosisHeadline">
+            <div>
+              <h3 class="diagnosisTitle">OCR 적용 상태: ${diagPill(job.statusText || job.status, job.status === "failed" || job.status === "canceled" ? "warn" : "ok")}</h3>
+              <div class="desc">진행률 ${progressLabel} · 경과 ${formatDuration(job.elapsedMs)}${pageLabel ? ` · ${pageLabel}` : ""}</div>
+            </div>
+            <div class="desc">${escapeHtml(job.output || "")}</div>
+          </div>
+          ${waitMessage}
+          ${errorHtml}
+          ${logs ? `<div><h3>최근 로그</h3><div class="sampleBlock">${escapeHtml(logs)}</div></div>` : ""}
+        </div>
+      `;
+    }
+
+    async function pollOcrJob(id, progress){
+      let statusFetchFailures = 0;
+      while (true) {
+        let job;
+        try{
+          job = await api(`/api/admin/ocr/status?id=${encodeURIComponent(id)}`);
+          statusFetchFailures = 0;
+        }catch(err){
+          statusFetchFailures += 1;
+          $("progressCancel").hidden = false;
+          const message = `${err.message}\n\nOCR 작업 상태를 다시 연결하는 중입니다. 취소를 누르면 현재 PDF 경로 기준으로 실행 중인 OCR 프로세스 종료를 요청합니다.`;
+          setProgressLog(message);
+          progress.step(0, "running", `관리자 서버 응답 대기 중 · 재시도 ${statusFetchFailures}회 · 취소 가능`);
+          if (statusFetchFailures >= 120) throw err;
+          await sleep(1500);
+          continue;
+        }
+        renderOcrJobStatus(job);
+        setProgressPercent(job.progress);
+        setProgressLog((job.logs || []).slice(-40).join("\n"));
+        const progressLabel = `${job.progress}%${job.progressEstimated ? "(추정)" : ""}`;
+        const isPostProcessing = job.status === "running" && job.pageCount && Number(job.processedPages || 0) >= Number(job.pageCount || 0);
+        const pageLabel = job.pageCount ? (isPostProcessing ? `PDF 후처리 중 ${job.processedPages}/${job.pageCount}` : (job.processedPages ? `페이지 ${job.processedPages}/${job.pageCount}` : `페이지 로그 대기/${job.pageCount}`)) : "";
+        const waitLabel = job.waitingForLogs ? " · OCR 로그 대기 중" : (isPostProcessing ? " · 출력 PDF 생성/최적화 중" : "");
+        progress.step(0, job.status === "failed" || job.status === "canceled" ? "failed" : "running", `OCR ${job.statusText} · 진행률 ${progressLabel} · 경과 ${formatDuration(job.elapsedMs)}${pageLabel ? ` · ${pageLabel}` : ""}${waitLabel}`);
+        if (job.status === "completed") return job;
+        if (job.status === "failed" || job.status === "canceled") {
+          throw new Error([
+            job.error || `OCR 작업이 ${job.statusText} 상태로 종료되었습니다.`,
+            job.stderr ? `\n[stderr]\n${job.stderr}` : "",
+            job.logs?.length ? `\n[최근 로그]\n${job.logs.slice(-30).join("\n")}` : "",
+          ].filter(Boolean).join("\n"));
+        }
+        await sleep(1500);
+      }
+    }
+    // SOFTM-OCR: OCR 로그가 늦게 도착하는 동안 추정 진행률과 로그 대기 상태 표시 - 2026-05-30
+    // SOFTM-OCR: OCR 상태 조회가 일시 실패해도 취소 버튼을 유지하고 재시도 - 2026-05-30
+
+    async function findCancelableOcrJobId(){
+      if (state.activeOcrJobId) return state.activeOcrJobId;
+      const target = normalizePath($("pdfTargetPath").value);
+      const data = await api("/api/admin/ocr/jobs");
+      const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+      const active = jobs
+        .filter((job) => ["running", "canceling"].includes(job.status))
+        .filter((job) => !target || samePath(job.source, target) || samePath(job.output, target))
+        .sort((a, b) => String(b.startedAt || "").localeCompare(String(a.startedAt || "")))[0];
+      if (active?.id) state.activeOcrJobId = active.id;
+      return active?.id || "";
+    }
+    // SOFTM-OCR: 화면 상태가 초기화되어도 서버의 실행 중 OCR 작업을 찾아 취소 - 2026-05-30
+
+    async function runOcrForTarget(){
+      const target = ensurePdfTargetForAction("OCR");
+      if (!target) {
+        $("pdfDiagnoseStatus").textContent = "OCR을 적용할 PDF를 선택하세요.";
+        showToast("OCR을 적용할 PDF를 먼저 선택하세요.", { title: "PDF 선택 필요", tone: "warn" });
+        return;
+      }
+      if (isDerivedPdfPath(target)) {
+        const original = originalCandidateForDerivedPdf(target);
+        const message = `OCR 결과/백업 PDF에는 다시 OCR을 적용하지 않습니다.${original ? `\n원본 PDF에서 실행하세요: ${original}` : "\n원본 문제 PDF를 선택한 뒤 실행하세요."}`;
+        $("pdfDiagnoseStatus").classList.add("warn");
+        $("pdfDiagnoseStatus").innerHTML = derivedNoticeHtml(target);
+        showToast(message, { title: "OCR 대상 확인", tone: "warn", timeout: 5200 });
+        return;
+      }
+      const outputMode = $("ocrOutputMode").value;
+      const targetRole = $("pdfTargetPath").dataset.pdfRole || "문제"; // SOFTM-OCR: OCR 결과에서도 기존 PDF 탭 역할 유지 - 2026-05-30
+      const precheck = await api(`/api/admin/pdf-info?path=${encodeURIComponent(target)}`);
+      renderPdfDiagnostics(precheck, `${targetRole} OCR 사전 진단`, { toast: false });
+      if (!precheck.needsOcr && $("ocrMode").value !== "force") {
+        const message = "이미 OCR 텍스트 품질 기준을 통과한 PDF입니다. 기본 OCR은 원본보다 품질이 낮은 _ocr.pdf를 만들 수 있어 실행하지 않습니다. 꼭 필요하면 OCR 방식을 '전체 강제 OCR'로 변경하세요.";
+        $("pdfDiagnoseStatus").insertAdjacentHTML("afterbegin", `<div class="diagnosisMessage warn">${escapeHtml(message)}</div>`);
+        showToast(message, { title: "OCR 재실행 보류", tone: "warn", timeout: 6200 });
+        return;
+      }
+      const forceNotice = !precheck.needsOcr
+        ? "\n\n주의: 현재 PDF는 OCR 텍스트 품질 기준을 통과했습니다. 강제 OCR은 본문 텍스트 품질을 낮출 수 있습니다."
+        : "";
+      const confirmed = await showConfirmDialog({
+        title: "OCR 적용 확인",
+        message: outputMode === "replace"
+          ? `원본 PDF를 백업한 뒤 OCR 적용본으로 교체합니다.\n\n대상: ${target}${forceNotice}`
+          : `_ocr.pdf 사본을 생성합니다.\n\n대상: ${target}${forceNotice}`,
+        confirmText: "OCR 적용",
+        danger: outputMode === "replace",
+      });
+      if (!confirmed) return;
+      $("btnRunOcr").disabled = true;
+      await withProgress({
+        title: "OCR 적용",
+        steps: ["OCR 실행", "결과 진단", "회차 상태 갱신"],
+        message: "OCR 작업을 시작하고 있습니다.",
+        doneMessage: "OCR 작업이 완료되었습니다.",
+        errorTitle: "OCR 품질 확인 필요",
+        toast: false,
+      }, async (progress) => {
+        state.activeOcrJobId = "";
+        $("pdfDiagnoseStatus").textContent = "OCR 작업을 시작하고 있습니다.";
+        progress.step(0, "running", "OCR 작업을 백그라운드로 시작하고 있습니다.");
+        const started = await api("/api/admin/ocr/start", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            path: target,
+            ocrMode: $("ocrMode").value,
+            outputMode,
+          }),
+        });
+        state.activeOcrJobId = started.id;
+        $("progressCancel").hidden = false;
+        renderOcrJobStatus(started);
+        if (started.reused) showToast("이미 실행 중인 OCR 작업에 연결했습니다.", { title: "OCR 진행 중", tone: "warn", timeout: 3600 });
+        try{
+          const job = await pollOcrJob(started.id, progress);
+          $("progressCancel").hidden = true;
+          progress.step(0, "done");
+          progress.step(1, "running", "OCR 결과 PDF를 다시 진단하고 있습니다.");
+          const data = job.result;
+          const qualityPassed = data.diagnostics && !data.diagnostics.needsOcr;
+          if (qualityPassed) {
+            selectPdfTarget(data.output, targetRole, { silent: true });
+          } else {
+            selectPdfTarget(target, targetRole, { silent: true });
+          }
+          const tail = [
+            qualityPassed ? `OCR 적용 완료: ${data.output}` : `OCR 결과 품질 미달(실패 산출물로 분리): ${data.output}`,
+            qualityPassed ? "" : `원본 PDF 유지: ${target}`,
+            qualityPassed ? "" : "품질 미달 OCR 사본은 게시/풀이에 사용하지 않습니다. 원본 PDF와 정답 JSON으로 풀이합니다.",
+            data.backup ? `백업: ${data.backup}` : "",
+            data.stderr ? `\n[${data.engine || "OCR"}]\n${data.stderr}` : "",
+          ].filter(Boolean).join("\n");
+          renderPdfDiagnostics(data.diagnostics, `${targetRole} OCR 결과`);
+          $("pdfDiagnoseStatus").insertAdjacentHTML("afterbegin", `<div class="status">${escapeHtml(tail)}</div>`);
+          progress.step(1, "done", qualityPassed ? "OCR 결과가 품질 기준을 통과했습니다." : "OCR 사본을 생성했지만 품질 미달로 실패 산출물에 보관했습니다.");
+          progress.step(2, "running", "회차 상태를 다시 읽고 있습니다.");
+          await loadQuestion({ keepTarget: true });
+          progress.step(2, "done");
+          if (qualityPassed) showToast("OCR PDF가 생성되고 품질 기준을 통과했습니다.", { title: "OCR 완료", tone: "ok" });
+          else showToast("OCR 사본은 품질 미달로 보관했습니다. 원본 PDF로 풀이 가능합니다.", { title: "OCR 품질 경고", tone: "warn", timeout: 6200 });
+        }finally{
+          state.activeOcrJobId = "";
+          $("progressCancel").hidden = true;
+          $("btnRunOcr").disabled = false;
+        }
+      });
+    }
+    // SOFTM-OCR: OCR 실행 중 진행률, 경과 시간, 최근 로그와 실패 메시지를 표시 - 2026-05-30
+    // SOFTM-OCR: 페이지 완료 후 PDF 후처리 단계와 중복 실행 연결 상태 표시 - 2026-05-30
+    // SOFTM-OCR: 정상 구조 PDF는 기본 OCR 재실행을 보류하고 강제 OCR 때만 품질 저하 경고를 표시 - 2026-05-30
+    // SOFTM-OCR: 품질 미달 OCR 산출물은 오류 종료가 아닌 실패 파일 보관으로 처리하고 풀이 가능 상태와 분리 - 2026-05-30
+    // SOFTM-OCR: OCR 실행 버튼을 보조 작업으로 명확히 표시해 게시/풀이 기준과 혼동되지 않도록 조정 - 2026-05-30
+
+    $("btnQuestionPdf").addEventListener("click", () => selectPdfTarget(state.item?.questionPdf, "문제"));
+    $("btnAnswerPdf").addEventListener("click", () => selectPdfTarget(state.item?.answerPdf, "정답"));
+    $("btnOpenPdf").addEventListener("click", openSelectedPdf);
+    $("btnPdfDiagnose").addEventListener("click", () => diagnosePdf("", "PDF", { showProgress: true }).catch((err) => {
+      if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
+    }));
+    $("btnRunOcr").addEventListener("click", () => runOcrForTarget().catch((err) => {
+      $("btnRunOcr").disabled = false;
+      if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
+    }));
+    $("btnRunAnchorOcr").addEventListener("click", () => runAnchorOcrForTarget().catch((err) => {
+      $("btnRunAnchorOcr").disabled = false;
+      if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
+      showToast(err.message, { title: "위치맵 생성 실패", tone: "error" });
+    }));
+    $("btnCheckAnchorMap").addEventListener("click", () => checkAnchorMapForCurrentQuestion().catch((err) => {
+      if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
+      showToast(err.message, { title: "위치맵 확인 실패", tone: "error" });
+    }));
+    // SOFTM-OCR: OCR 실패 시 진행 로그 카드가 단순 오류 문구로 덮이지 않도록 보정 - 2026-05-30
+    // SOFTM-위치맵: 위치맵 생성 버튼 오류도 토스트와 상태 영역에 명확히 표시 - 2026-05-30
+    $("btnReload").addEventListener("click", () => loadQuestion({ keepTarget: true }).catch((err) => showToast(err.message, { title: "다시 읽기 실패", tone: "error" })));
+    $("progressCancel").addEventListener("click", async () => {
+      const jobId = await findCancelableOcrJobId().catch(() => "");
+      const target = normalizePath($("pdfTargetPath").value);
+      $("progressMessage").textContent = "OCR 작업 취소를 요청했습니다.";
+      $("progressCancel").hidden = true;
+      try{
+        await api(jobId ? `/api/admin/ocr/cancel?id=${encodeURIComponent(jobId)}` : "/api/admin/ocr/cancel", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: jobId, path: target }),
+        });
+        showToast("OCR 작업 취소를 요청했습니다.", { title: "OCR 취소", tone: "ok", timeout: 2600 });
+      }catch(err){
+        showToast(err.message, { title: "OCR 취소 실패", tone: "error" });
+        $("progressCancel").hidden = false;
+      }
+    });
+    $("progressClose").addEventListener("click", () => $("progressDialog").close());
+
+    loadQuestion().catch((err) => {
+      $("pageMeta").textContent = err.message;
+      $("pdfDiagnoseStatus").textContent = err.message;
+      showToast(err.message, { title: "관리 서버 확인 필요", tone: "error" });
+    });
+    // SOFTM-ADMIN: 회차 상세 페이지에서 PDF 보기, 진단, OCR 적용을 전담하도록 구현 - 2026-05-30
+  </script>
+  <!-- SOFTM-ADMIN 끝 -->
+</body>
+</html>

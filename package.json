@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "admin": "node scripts/admin-server.mjs",
+    "generate": "python3 scripts/gen_category.py && python3 scripts/gen_question.py && python3 scripts/gen_correct.py",
+    "serve": "node scripts/admin-server.mjs"
+  }
+}

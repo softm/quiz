@@ -1,23 +1,42 @@
 [
   {
     "gNo": "01",
-    "gNm": "농업",
+    "gNm": "농산물품질관리사",
     "catNm": "농산물품질관리사",
     "catNo": "0001",
+    "parentCatNo": "",
+    "catPath": "quiz/pdf/농산물품질관리사",
+    "depth": 1,
     "seq": 1
   },
   {
-    "gNo": "01",
-    "gNm": "농업",
-    "catNm": "시설원예기사",
+    "gNo": "02",
+    "gNm": "농산물품질관리사 복사본",
+    "catNm": "농산물품질관리사 복사본",
     "catNo": "0002",
+    "parentCatNo": "",
+    "catPath": "quiz/pdf/농산물품질관리사 복사본",
+    "depth": 1,
     "seq": 2
   },
   {
-    "gNo": "01",
-    "gNm": "농업",
-    "catNm": "유기농업기사",
+    "gNo": "03",
+    "gNm": "방통대",
+    "catNm": "방통대",
     "catNo": "0003",
+    "parentCatNo": "",
+    "catPath": "quiz/pdf/방통대",
+    "depth": 1,
     "seq": 3
+  },
+  {
+    "gNo": "03",
+    "gNm": "방통대",
+    "catNm": "모바일앱프로그래밍",
+    "catNo": "0004",
+    "parentCatNo": "0003",
+    "catPath": "quiz/pdf/방통대/모바일앱프로그래밍",
+    "depth": 2,
+    "seq": 4
   }
 ]

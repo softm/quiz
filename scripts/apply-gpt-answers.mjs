@@ -57,7 +57,7 @@ function to100(arr) {
   return null;
 }
 
-function formatAnswersArray(answers, baseIndent = 2, perLine = 5) {
+function formatAnswersArray(answers, baseIndent = 2, perLine = 10) { // SOFTM-FORMAT: 정답 배열 기본 줄바꿈 단위를 10개로 변경 - 2026-05-29
   const indent = " ".repeat(baseIndent);
   const valueIndent = " ".repeat(baseIndent + 2);
   const last = answers.length - 1;
@@ -122,7 +122,7 @@ async function main() {
     `  "sourcePdf": ${JSON.stringify(String(next.sourcePdf || ""))},`,
     `  "generatedAt": ${JSON.stringify(String(next.generatedAt))},`,
     `  "count": 100,`,
-    `  "answers": ${formatAnswersArray(parsed, 2, 5)}`,
+    `  "answers": ${formatAnswersArray(parsed, 2, 10)}`, // SOFTM-FORMAT: GPT 반영 JSON answers를 10개 단위로 저장 - 2026-05-29
     "}"
   ].join("\n");
 
