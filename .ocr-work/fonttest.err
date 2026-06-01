@@ -1,0 +1,26 @@
+Traceback (most recent call last):
+  File "/Users/softm/Work/quiz/scripts/build-layered-ocr-pdf.py", line 125, in <module>
+    main()
+  File "/Users/softm/Work/quiz/scripts/build-layered-ocr-pdf.py", line 121, in main
+    build_pdf(args.work_dir, args.output_pdf, args.dpi, args.font)
+  File "/Users/softm/Work/quiz/scripts/build-layered-ocr-pdf.py", line 97, in build_pdf
+    pdf.add_font("KOR", "", font)
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/fpdf/deprecation.py", line 59, in wrapper
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/fpdf/fpdf.py", line 2576, in add_font
+    font_obj = TTFFont(
+               ^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/fpdf/fonts.py", line 480, in __init__
+    os2_table = self.ttfont["OS/2"]
+                ~~~~~~~~~~~^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/fontTools/ttLib/ttFont.py", line 808, in __getitem__
+    table = self._readTable(tag)
+            ^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/fontTools/ttLib/ttFont.py", line 816, in _readTable
+    data = self.reader[tag]
+           ~~~~~~~~~~~^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/fontTools/ttLib/sfnt.py", line 112, in __getitem__
+    entry = self.tables[Tag(tag)]
+            ~~~~~~~~~~~^^^^^^^^^^
+KeyError: 'OS/2'

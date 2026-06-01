@@ -128,7 +128,7 @@ def main():
         raise SystemExit("[ERR] json/question.json must be an array")
 
     parsed_cache = {}
-    published = 0
+    correct_ready = 0
     grouped = group_by_question_dir(questions)
     if args.category_path:
         target_path = resolve_category_path(args.category_path)
@@ -141,10 +141,11 @@ def main():
     for directory, rows in grouped.items():
         items = []
         for row in rows:
+            question_pdf_path = local_path(row.get("questionPdf"))
+            row["published"] = bool(question_pdf_path and question_pdf_path.exists())
             answer_path = local_path(row.get("answerPdf"))
             if not answer_path or not answer_path.exists():
                 row["correctJson"] = ""
-                row["published"] = False
                 continue
 
             cache_key = str(answer_path.resolve())
@@ -155,7 +156,6 @@ def main():
             count = answer_count(answers)
             if count == 0:
                 row["correctJson"] = ""
-                row["published"] = False
                 continue
 
             correct_path = directory / "correct.json"
@@ -185,9 +185,8 @@ def main():
             row["ocrStatus"] = ocr_status
             row["ocrPublished"] = ocr_ok
             row["ocrWarnings"] = ocr_warnings
-            row["published"] = True
-            published += 1
-            # SOFTM-OCR: 정답 JSON 생성 성공 시 게시 상태는 유지하고 OCR 품질은 보조 진단 필드로만 저장 - 2026-05-30
+            correct_ready += 1
+            # SOFTM-OCR: 정답 JSON 생성 성공 여부와 게시 상태를 분리하고 OCR 품질은 보조 진단 필드로만 저장 - 2026-05-30
             # SOFTM-정답: 정답표 인쇄 시작번호가 1이 아니어도 앱 내부 순서와 별도 메타로 저장 - 2026-05-30
 
         correct_payload = {
@@ -202,7 +201,7 @@ def main():
         write_json(directory / "question.json", rows, args.dry_run)
 
     scope = f" category={args.category_path}" if args.category_path else ""
-    print(f"[OK] correct_dirs={len(grouped)} published={published} answer_sources={len(parsed_cache)}{scope}")
+    print(f"[OK] correct_dirs={len(grouped)} correct_ready={correct_ready} answer_sources={len(parsed_cache)}{scope}")
 
 
 if __name__ == "__main__":

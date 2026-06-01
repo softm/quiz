@@ -181,7 +181,34 @@
       font-size: 13px;
       min-width: 720px;
     }
-    #categoryTable { min-width: 560px; }
+    #categoryTable {
+      min-width: 0;
+      table-layout: fixed;
+    }
+    #categoryTable th:nth-child(1), #categoryTable td:nth-child(1) { width: 46%; }
+    #categoryTable th:nth-child(2), #categoryTable td:nth-child(2) { width: 56px; }
+    #categoryTable th:nth-child(3), #categoryTable td:nth-child(3) { width: 72px; }
+    #categoryTable th:nth-child(4), #categoryTable td:nth-child(4) { width: 118px; }
+    #categoryTable td { min-width: 0; }
+    #categoryTable .cellTitle,
+    #categoryTable .cellSub {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: keep-all;
+    }
+    #categoryTable td.row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    #categoryTable td.row .button,
+    #categoryTable td.row button {
+      flex: 1 1 52px;
+      min-width: 0;
+      padding-inline: 7px;
+      text-align: center;
+    }
     th, td {
       border-bottom: 1px solid var(--line);
       padding: 9px 8px;
@@ -318,6 +345,7 @@
       color: var(--ink);
       box-shadow: 0 22px 60px rgba(31,41,51,.24);
     }
+    [hidden] { display: none !important; }
     dialog::backdrop { background: rgba(20,28,36,.42); }
     .dialogCard { padding: 18px; display: grid; gap: 14px; }
     .dialogTitle { margin: 0; font-size: 18px; }
@@ -499,7 +527,10 @@
             <div class="stack">
               <div class="row" style="justify-content:space-between">
                 <h3>카테고리</h3>
-                <span class="desc" id="categoryTableMeta"></span>
+                <div class="row">
+                  <span class="desc" id="categoryTableMeta"></span>
+                  <button id="btnRefreshCategories" class="secondary" type="button">카테고리 새로고침</button>
+                </div>
               </div>
               <div class="tableWrap">
                 <table id="categoryTable">
@@ -519,7 +550,10 @@
             <div class="stack">
               <div class="row" style="justify-content:space-between">
                 <h3>문제 회차</h3>
-                <span class="desc" id="questionTableMeta"></span>
+                <div class="row">
+                  <span class="desc" id="questionTableMeta"></span>
+                  <button id="btnRefreshQuestions" class="secondary" type="button">문제 회차 새로고침</button>
+                </div>
               </div>
               <div class="tableWrap">
                 <table id="questionTable">
@@ -529,6 +563,7 @@
                       <th>문제 파일</th>
                       <th>OCR 품질</th>
                       <th>정답 진단</th>
+                      <th>위치맵</th>
                       <th>문항</th>
                       <th>작업</th>
                     </tr>
@@ -570,6 +605,7 @@
                 <h3>JSON / Git</h3>
                 <div class="row">
                   <button id="btnRebuild">전체 JSON 재생성</button><!-- SOFTM-GEN: 전체/부분 JSON 갱신 구분을 위해 버튼명을 명확화 - 2026-05-30 -->
+                  <button id="btnSyncCategories" class="secondary">카테고리 정보 반영</button>
                   <button id="btnRebuildCategory">선택 카테고리 갱신</button>
                   <button id="btnGit">Git 상태</button>
                 </div>
@@ -687,10 +723,13 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
+    const ADMIN_LIST_STATE_KEY = "quizAdminListState:v1";
     const state = {
       catalog: { categories: [], questions: [] },
       selectedCategoryKey: "",
       selectedQuestionKey: "",
+      pendingListState: readAdminListState(),
+      listStateApplied: false,
     };
 
     function fmtSize(n){
@@ -773,6 +812,7 @@
         input.value = options.inputValue || "";
         input.placeholder = options.inputPlaceholder || "";
         inputWrap.hidden = !options.inputLabel;
+        inputWrap.style.display = options.inputLabel ? "" : "none";
         ok.textContent = options.confirmText || "확인";
         ok.className = options.danger ? "danger" : "primary";
 
@@ -865,18 +905,125 @@
 
     function statusPill(item){
       if (item.published) return `<span class="pill ok">게시</span>`;
-      if (item.issue && item.issue !== "정상") return `<span class="pill warn">${escapeHtml(item.issue)}</span>`;
+      if (item.issue && item.issue !== "정상" && item.issue !== "미게시") return `<span class="pill warn">비정상</span>`;
       return `<span class="pill warn">미게시</span>`;
     }
 
     function diagPill(status, tone = "ok"){
-      const normalized = status || "미확인";
+      const normalized = String(status || "미확인")
+        .replaceAll("OCR 품질 경고", "OCR")
+        .replaceAll("OCR 경고", "OCR")
+        .replaceAll("PDF 품질 경고", "PDF")
+        .replaceAll("PDF 경고", "PDF");
       return `<span class="pill ${tone || (normalized === "정상" ? "ok" : "warn")}">${escapeHtml(normalized)}</span>`;
     }
+
+    function anchorPill(item){
+      if (!item?.anchorMap) return `<span class="pill warn">없음</span>`;
+      const confidence = Math.round(Number(item.anchorConfidence || 0) * 100);
+      const warn = Array.isArray(item.anchorWarnings) && item.anchorWarnings.length > 0;
+      const tone = warn || confidence < 80 ? "warn" : "ok";
+      return `<span class="pill ${tone}">${confidence}%</span>`;
+    }
+
+    function formatAnchorGeneratedAt(value){
+      if (!value) return "";
+      const date = new Date(value);
+      if (!Number.isFinite(date.getTime())) return "";
+      const diffMs = Date.now() - date.getTime();
+      const absMs = Math.abs(diffMs);
+      const minute = 60 * 1000;
+      const hour = 60 * minute;
+      const day = 24 * hour;
+      if (absMs < minute) return "방금 전";
+      if (absMs < hour) return `${Math.max(1, Math.round(absMs / minute))}분 전`;
+      if (absMs < day) return `${Math.max(1, Math.round(absMs / hour))}시간 전`;
+      if (absMs < 30 * day) return `${Math.max(1, Math.round(absMs / day))}일 전`;
+      return `${Math.max(1, Math.round(absMs / (30 * day)))}개월 전`;
+    }
+
+    function formatAnchorGeneratedAtTitle(value){
+      if (!value) return "";
+      const date = new Date(value);
+      if (!Number.isFinite(date.getTime())) return "";
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function anchorCell(item){
+      const updated = formatAnchorGeneratedAt(item?.anchorGeneratedAt);
+      const updatedTitle = formatAnchorGeneratedAtTitle(item?.anchorGeneratedAt);
+      return `${anchorPill(item)}${updated ? `<div class="cellSub" title="${escapeHtml(updatedTitle)}">수정 ${escapeHtml(updated)}</div>` : ""}`;
+    }
+    // SOFTM-위치맵: 목록에서 위치맵 최종 수정시간(anchorGeneratedAt)을 신뢰도와 함께 표시 - 2026-06-01
 
     function warningText(warnings){
       const list = Array.isArray(warnings) ? warnings.filter(Boolean) : [];
       return list.length ? list.slice(0, 3).map((item) => `- ${item}`).join("\n") : "특이사항 없음";
+    }
+
+    function readAdminListState(){
+      const fromParams = new URLSearchParams(location.search);
+      const hasQueryState = ["search", "dataset", "status", "cat", "question"].some((key) => fromParams.has(key));
+      if (hasQueryState) {
+        return {
+          search: fromParams.get("search") || "",
+          dataset: fromParams.get("dataset") || "",
+          status: fromParams.get("status") || "",
+          categoryKey: fromParams.get("cat") || "",
+          questionKey: fromParams.get("question") || "",
+        };
+      }
+      try{
+        return JSON.parse(sessionStorage.getItem(ADMIN_LIST_STATE_KEY) || "{}") || {};
+      }catch(_){
+        return {};
+      }
+    }
+
+    function currentAdminListState(){
+      return {
+        search: $("catalogSearch").value || "",
+        dataset: $("datasetFilter").value || "",
+        status: $("statusFilter").value || "",
+        categoryKey: $("categoryFilter").value || state.selectedCategoryKey || "",
+        questionKey: state.selectedQuestionKey || "",
+      };
+    }
+
+    function writeAdminListState(){
+      try{
+        sessionStorage.setItem(ADMIN_LIST_STATE_KEY, JSON.stringify(currentAdminListState()));
+      }catch(_){}
+    }
+
+    function setSelectValue(id, value){
+      const el = $(id);
+      const safe = String(value || "");
+      el.value = [...el.options].some((option) => option.value === safe) ? safe : "";
+    }
+
+    function applyAdminListStateAfterFilterRender(){
+      const active = state.listStateApplied ? currentAdminListState() : (state.pendingListState || {});
+      $("catalogSearch").value = active.search || "";
+      setSelectValue("datasetFilter", active.dataset || "");
+      setSelectValue("statusFilter", active.status || "");
+      setSelectValue("categoryFilter", active.categoryKey || "");
+      state.selectedCategoryKey = $("categoryFilter").value;
+      if (active.questionKey) state.selectedQuestionKey = active.questionKey;
+      state.listStateApplied = true;
+    }
+
+    function makeAdminReturnUrl(overrides = {}){
+      const current = { ...currentAdminListState(), ...overrides };
+      const q = new URLSearchParams();
+      if (current.search) q.set("search", current.search);
+      if (current.dataset) q.set("dataset", current.dataset);
+      if (current.status) q.set("status", current.status);
+      if (current.categoryKey) q.set("cat", current.categoryKey);
+      if (current.questionKey) q.set("question", current.questionKey);
+      const query = q.toString();
+      return `./admin.html${query ? `?${query}` : ""}`;
     }
 
     function makeCategoryUrl(item){
@@ -903,11 +1050,21 @@
       return `./quiz.html?${q.toString()}`;
     }
 
+    function makeAnchorEditQuizUrl(item){
+      const url = makeQuizUrl(item);
+      const [base, query = ""] = url.split("?");
+      const q = new URLSearchParams(query);
+      q.set("anchorDebug", "1");
+      q.set("anchorEdit", "1");
+      return `${base}?${q.toString()}`;
+    }
+
     function makeAdminDetailUrl(item){
       const q = new URLSearchParams({
         dataset: item.dataset || "default",
         questionNo: item.questionNo || "",
       });
+      q.set("return", makeAdminReturnUrl({ questionKey: questionKey(item) }));
       return `./admin-detail.html?${q.toString()}`;
     }
     // SOFTM-ADMIN: 회차 상세/진단 페이지로 이동하는 관리자 URL 생성 추가 - 2026-05-30
@@ -1009,6 +1166,7 @@
     }
 
     function renderCatalogFilters(){
+      const active = state.listStateApplied ? currentAdminListState() : (state.pendingListState || {});
       const datasets = [...new Map(state.catalog.categories.map((item) => [item.dataset, item.datasetLabel])).entries()];
       $("datasetFilter").innerHTML = `<option value="">전체 구분</option>${datasets.map(([value, label]) => `
         <option value="${escapeHtml(value)}">${escapeHtml(label)}</option>
@@ -1016,6 +1174,13 @@
       $("categoryFilter").innerHTML = `<option value="">전체 카테고리</option>${state.catalog.categories.map((item) => `
         <option value="${escapeHtml(categoryKey(item))}">${escapeHtml(item.fullName || item.catNm)} (${item.questionTotal})</option>
       `).join("")}`;
+      $("catalogSearch").value = active.search || "";
+      setSelectValue("datasetFilter", active.dataset || "");
+      setSelectValue("statusFilter", active.status || "");
+      setSelectValue("categoryFilter", active.categoryKey || "");
+      state.selectedCategoryKey = $("categoryFilter").value;
+      if (active.questionKey) state.selectedQuestionKey = active.questionKey;
+      state.listStateApplied = true;
     }
 
     function renderCategoryTable(){
@@ -1040,8 +1205,8 @@
               <span class="pill ${item.unpublished ? "warn" : "ok"}">${item.unpublished}</span>
             </td>
             <td class="row">
-              <a class="button" href="${makeCategoryUrl(item)}">사이트</a>
-              <button type="button" class="secondary" data-rebuild-category="${escapeHtml(key)}" ${item.dataset !== "default" ? "disabled" : ""} title="${escapeHtml(item.dataset !== "default" ? "기본 PDF 문제은행 카테고리만 부분 갱신할 수 있습니다." : "이 카테고리의 question/correct JSON만 갱신합니다.")}">JSON 갱신</button>
+              <a class="button" href="${makeCategoryUrl(item)}">보기</a>
+              <button type="button" class="secondary" data-rebuild-category="${escapeHtml(key)}" ${item.dataset !== "default" ? "disabled" : ""} title="${escapeHtml(item.dataset !== "default" ? "기본 PDF 문제은행 카테고리만 부분 갱신할 수 있습니다." : "이 카테고리의 question/correct JSON만 갱신합니다.")}">JSON생성</button>
             </td>
           </tr>
         `;
@@ -1052,7 +1217,7 @@
       const rows = filteredQuestions();
       $("questionTableMeta").textContent = `${rows.length.toLocaleString()}개`;
       if (!rows.length) {
-        $("questionRows").innerHTML = `<tr><td class="empty" colspan="6">문제 회차가 없습니다.</td></tr>`;
+        $("questionRows").innerHTML = `<tr><td class="empty" colspan="7">문제 회차가 없습니다.</td></tr>`;
         return;
       }
       if (!rows.some((item) => questionKey(item) === state.selectedQuestionKey)) {
@@ -1063,31 +1228,35 @@
         const selected = key === state.selectedQuestionKey;
         const questionFileName = fileNameFromPath(item.questionPdf) || item.questionNm || "-";
         const questionFolder = folderNameFromPath(item.questionPdf);
-        const quizLink = item.questionPdf ? `<a class="button primary" href="${makeQuizUrl(item)}">풀이</a>` : `<span class="button disabled">풀이</span>`;
-        const detailLink = `<a class="button secondary" href="${makeAdminDetailUrl(item)}">상세/진단</a>`;
+        const quizUrl = item.questionPdf ? makeQuizUrl(item) : "";
+        const anchorDebugQuizUrl = quizUrl ? `${quizUrl}${quizUrl.includes("?") ? "&" : "?"}anchorDebug=1` : "";
+        const anchorEditQuizUrl = item.anchorMap ? makeAnchorEditQuizUrl(item) : "";
+        const quizBadge = quizUrl ? `<a class="pill ok" href="${quizUrl}" target="_blank" rel="noopener">풀이</a>` : `<span class="pill warn">풀이</span>`;
+        const positionQuizBadge = anchorDebugQuizUrl ? `<a class="pill ok" href="${anchorDebugQuizUrl}" target="_blank" rel="noopener">위치</a>` : `<span class="pill warn">위치</span>`;
+        const detailUrl = makeAdminDetailUrl(item);
+        const anchorMapLink = `<a class="button secondary" href="${detailUrl}">위치맵</a>`;
+        const anchorEditLink = anchorEditQuizUrl ? `<a class="button secondary" href="${anchorEditQuizUrl}" target="_blank" rel="noopener">앵커 편집</a>` : `<span class="button disabled" title="먼저 위치맵을 생성하세요.">앵커 편집</span>`;
         const counts = [
-          item.questionCount ? `문제 ${item.questionCount}` : "",
+          item.questionCount ? `${item.questionCount}` : "",
           item.questionStartNo && item.questionEndNo ? `${item.questionStartNo}-${item.questionEndNo}` : "",
         ].filter(Boolean).join(" · ");
-        const answerState = item.correctJson ? "correct.json" : (item.answerPdf || item.answerSourceId ? "정답 매핑" : "없음");
         return `
           <tr class="selectableRow${selected ? " selected" : ""}" tabindex="0" data-question-key="${escapeHtml(key)}" aria-selected="${selected ? "true" : "false"}">
-            <td>${statusPill(item)}<div class="cellSub">${escapeHtml(item.issue || "")}</div></td>
+            <td>${statusPill(item)}${item.issue && item.issue !== "정상" ? `<div class="cellSub">${escapeHtml(item.issue)}</div>` : ""}</td>
             <td>
-              <div class="cellTitle">${escapeHtml(questionFileName)}</div>
+              <div class="cellTitle"><a href="${detailUrl}">${escapeHtml(questionFileName)}</a> ${quizBadge} ${positionQuizBadge}</div>
               <div class="cellSub">${escapeHtml(item.catNm)} · ${escapeHtml(item.datasetLabel)} · ${escapeHtml(item.gNm || "")}</div>
               <div class="pathCell">${escapeHtml(questionFolder)}</div>
             </td>
             <td>
               ${diagPill(item.questionDiagStatus, item.questionDiagTone)}
-              <div class="cellSub">${escapeHtml(item.ocrWarnings?.[0] || "OCR은 보조 품질 지표입니다.")}</div>
             </td>
             <td>
               ${diagPill(item.answerDiagStatus, item.answerDiagTone)}
-              <div class="cellSub">${escapeHtml(item.answerDiagWarnings?.[0] || answerState)}</div>
             </td>
+            <td>${anchorCell(item)}</td>
             <td>${escapeHtml(counts || "-")}</td>
-            <td class="row">${quizLink}${detailLink}</td>
+            <td class="row">${anchorMapLink}${anchorEditLink}</td>
           </tr>
         `;
       }).join("");
@@ -1121,6 +1290,7 @@
       if (!key) return;
       state.selectedQuestionKey = key;
       markSelectedQuestionRow();
+      writeAdminListState();
     }
     // SOFTM-ADMIN: 메인 목록은 행 선택 표시만 유지하고 상세/진단은 별도 페이지로 이동 - 2026-05-30
 
@@ -1138,6 +1308,7 @@
       $("categoryFilter").value = key;
       markSelectedCategoryRow();
       renderQuestionTable();
+      writeAdminListState();
     }
     // SOFTM-ADMIN: 카테고리 선택 버튼 대신 행 포커스/클릭으로 선택 상태를 표시하도록 변경 - 2026-05-29
     // SOFTM-GEN: 선택 카테고리 단위 JSON 갱신에서 사용할 현재 카테고리 조회 유틸 추가 - 2026-05-30
@@ -1421,6 +1592,34 @@
       }, executeRebuild);
     }
 
+    async function executeCategorySync(progress){
+      $("rebuildStatus").textContent = "카테고리 정보 반영 중...";
+      if (progress) progress.step(0, "running", "pdf 디렉토리를 스캔해 새 카테고리를 반영하고 있습니다.");
+      const data = await api("/api/admin/sync-categories", { method: "POST" });
+      $("rebuildStatus").textContent = `카테고리 정보 반영 완료 · 카테고리 ${data.categories}개 · 신규 ${data.addedCategories}개`;
+      if (progress) progress.step(0, "done", `신규 카테고리 ${data.addedCategories}개`);
+      if (progress) progress.step(1, "running", "갱신된 카테고리 목록을 다시 읽고 있습니다.");
+      await refreshAll({ keepListDir: true });
+      if (progress) progress.step(1, "done");
+      return data;
+    }
+
+    async function syncCategoryInfo(options = {}){
+      if (options.confirm !== false) {
+        const confirmed = await showConfirmDialog({
+          title: "카테고리 정보 반영",
+          message: "pdf 하위 디렉토리를 다시 스캔해 category/group JSON에 반영합니다.\n\n기존 카테고리 번호는 유지하고, 새 디렉토리에만 새 번호를 부여합니다.\n문제 회차와 정답 정보는 이후 선택 카테고리 JSON생성 또는 전체 JSON 재생성으로 갱신하세요.",
+          confirmText: "반영",
+        });
+        if (!confirmed) return;
+      }
+      return await withProgress({
+        title: "카테고리 정보 반영",
+        steps: ["디렉토리 스캔", "상태 새로고침"],
+        doneMessage: "카테고리 정보 반영이 완료되었습니다.",
+      }, executeCategorySync);
+    }
+
     async function executeCategoryRebuild(category, progress){
       $("rebuildStatus").textContent = `${category.fullName || category.catNm} JSON 갱신 중...`;
       if (progress) progress.step(0, "running", "선택 카테고리의 문제 파일과 정답 매핑을 다시 읽고 있습니다.");
@@ -1459,7 +1658,7 @@
       if (options.confirm !== false) {
         const confirmed = await showConfirmDialog({
           title: "선택 카테고리 JSON 갱신",
-          message: `${category.fullName || category.catNm} 카테고리의 question/correct JSON만 다시 생성합니다.\n\n새 카테고리나 새 하위 디렉토리를 추가한 경우에는 전체 JSON 재생성을 실행하세요.`,
+          message: `${category.fullName || category.catNm} 카테고리의 question/correct JSON만 다시 생성합니다.\n\n새 카테고리나 새 하위 디렉토리를 추가한 경우에는 먼저 카테고리 정보 반영을 실행하세요.`,
           confirmText: "카테고리 갱신",
         });
         if (!confirmed) return;
@@ -1508,6 +1707,20 @@
         loadGitStatus(),
       ]);
       await loadList(listDirValue || $("dirInput").value);
+    }
+
+    async function refreshAllWithProgress(options = {}){
+      await withProgress({
+        title: "관리자 새로고침",
+        steps: ["관리자 데이터 조회", "목록 갱신"],
+        message: "관리자 상태와 목록을 다시 읽고 있습니다.",
+        doneMessage: "관리자 화면을 새로고침했습니다.",
+      }, async (progress) => {
+        progress.step(0, "running", "카테고리, 회차, 파일 상태를 조회하고 있습니다.");
+        await refreshAll(options);
+        progress.step(0, "done");
+        progress.step(1, "done", "화면 목록을 갱신했습니다.");
+      });
     }
 
     function setOffline(message){
@@ -1605,10 +1818,12 @@
       $(id).addEventListener("input", () => {
         if (id === "categoryFilter") state.selectedCategoryKey = $(id).value;
         renderCatalog();
+        writeAdminListState();
       });
       $(id).addEventListener("change", () => {
         if (id === "categoryFilter") state.selectedCategoryKey = $(id).value;
         renderCatalog();
+        writeAdminListState();
       });
     });
 
@@ -1619,10 +1834,11 @@
       $("categoryFilter").value = "";
       state.selectedCategoryKey = "";
       renderCatalog();
+      writeAdminListState();
     });
 
     $("btnRefresh").addEventListener("click", async () => {
-      try{ await refreshAll({ keepListDir: true }); }catch(err){ setOffline(err.message); }
+      try{ await refreshAllWithProgress({ keepListDir: true }); }catch(err){ setOffline(err.message); }
     });
     $("btnList").addEventListener("click", () => loadList());
     $("btnGit").addEventListener("click", () => withProgress({
@@ -1635,6 +1851,9 @@
       progress.step(0, "done");
     }).catch((err) => { $("gitStatus").textContent = err.message; }));
     $("btnRebuild").addEventListener("click", rebuildManifest);
+    $("btnSyncCategories").addEventListener("click", () => syncCategoryInfo().catch((err) => { $("rebuildStatus").textContent = err.message; }));
+    $("btnRefreshCategories").addEventListener("click", () => syncCategoryInfo().catch((err) => { $("rebuildStatus").textContent = err.message; }));
+    $("btnRefreshQuestions").addEventListener("click", () => rebuildCategoryManifest().catch((err) => { $("rebuildStatus").textContent = err.message; }));
     $("btnRebuildCategory").addEventListener("click", () => rebuildCategoryManifest().catch((err) => { $("rebuildStatus").textContent = err.message; }));
     $("btnProcessReport").addEventListener("click", () => loadProcessReport({ showProgress: true }).catch((err) => { $("processStatus").textContent = err.message; }));
     $("btnProcessGenerate").addEventListener("click", runManagedProcess);
@@ -1651,7 +1870,7 @@
       if (!dir) return;
       await withProgress({
         title: "디렉토리 생성",
-        steps: ["디렉토리 생성", "목록 새로고침"],
+        steps: ["디렉토리 생성", "카테고리 반영", "목록 새로고침"],
         doneMessage: "디렉토리 생성이 완료되었습니다.",
       }, async (progress) => {
         progress.step(0, "running", `${dir} 경로를 생성하고 있습니다.`);
@@ -1662,9 +1881,17 @@
         });
         progress.step(0, "done");
         $("mkdirInput").value = "";
-        progress.step(1, "running", "관리자 목록을 갱신하고 있습니다.");
+        progress.step(1, "running", "새 디렉토리를 카테고리 정보에 반영하고 있습니다.");
+        if (normalizePath(dir).startsWith("pdf/")) {
+          const data = await api("/api/admin/sync-categories", { method: "POST" });
+          $("rebuildStatus").textContent = `카테고리 정보 반영 완료 · 카테고리 ${data.categories}개 · 신규 ${data.addedCategories}개`;
+          progress.step(1, "done", `신규 카테고리 ${data.addedCategories}개`);
+        } else {
+          progress.step(1, "done", "pdf 하위 디렉토리가 아니어서 카테고리 반영을 생략했습니다.");
+        }
+        progress.step(2, "running", "관리자 목록을 갱신하고 있습니다.");
         await refreshAll({ keepListDir: true });
-        progress.step(1, "done");
+        progress.step(2, "done");
       });
     });
 

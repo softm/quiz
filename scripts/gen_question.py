@@ -154,7 +154,7 @@ def scan_questions(categories, dir_to_cat, existing_questions=None):
                 "questionPdf": question_manifest_path,
                 "answerPdf": manifest_path(answer_path) if answer_path else "",
                 "correctJson": correct_json,
-                "published": bool(correct_json),
+                "published": True,
                 "year": year,
                 "semester": semester,
                 "examType": exam_type,

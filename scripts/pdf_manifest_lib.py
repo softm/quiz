@@ -15,6 +15,7 @@ JSON_ROOT = ROOT / "json"
 ANSWER_DIR_NAMES = {"정답"}
 QUESTION_EXTS = {".pdf"}
 ANSWER_EXTS = {".pdf", ".hwp"}
+ANSWER_PARSE_CACHE = {}
 MULTI_ANSWER_MAP = {
     "A": [1, 2],
     "B": [1, 3],
@@ -106,11 +107,19 @@ def _format_json_value(value, indent=0, key_name=None):
 
 def write_json(path, data, dry_run=False):
     path = Path(path)
+    content = _format_json_value(data) + "\n"
     if dry_run:
         print(f"[DRY] write {rel_posix(path)}")
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_format_json_value(data) + "\n", encoding="utf-8")
+    if path.exists():
+        try:
+            if path.read_text(encoding="utf-8") == content:
+                print(f"[SKIP] unchanged {rel_posix(path)}")
+                return
+        except Exception:
+            pass
+    path.write_text(content, encoding="utf-8")
 
 
 def is_answer_dir(path):
@@ -278,6 +287,7 @@ def find_answer_from_roots(question_file):
     year, semester = extract_year_semester(q.name)
     exam_type = extract_exam_type(q.name)
     q_key = normalize_match_title(q.stem)
+    subject_hint = compact(q.parent.name)
     candidates = []
 
     for root in answer_roots_for(q.parent):
@@ -293,7 +303,10 @@ def find_answer_from_roots(question_file):
                         continue
                     a_year, a_semester = extract_year_semester(item.name)
                     if a_year == year and a_semester == semester:
-                        candidates.append((30 + (5 if exam_type and exam_type in rel_posix(item) else 0), item))
+                        score = 30 + (5 if exam_type and exam_type in rel_posix(item) else 0)
+                        if subject_hint and answer_file_contains_subject(item, subject_hint):
+                            score += 40
+                        candidates.append((score, item))
         else:
             for item in root.rglob("*"):
                 if not item.is_file() or not is_answer_file(item):
@@ -307,6 +320,23 @@ def find_answer_from_roots(question_file):
 
 def find_answer_file(question_file):
     return find_same_dir_answer(question_file) or find_answer_from_roots(question_file)
+
+
+def answer_file_contains_subject(path, subject_hint):
+    if not subject_hint:
+        return False
+    try:
+        key = str(Path(path).resolve())
+        if key not in ANSWER_PARSE_CACHE:
+            ANSWER_PARSE_CACHE[key] = parse_answer_file(path)
+        parsed = ANSWER_PARSE_CACHE.get(key) or {}
+        for row in parsed.get("subjects") or []:
+            subject = subject_key(row.get("subject"))
+            if subject and (subject == subject_hint or subject in subject_hint or subject_hint in subject):
+                return True
+    except Exception:
+        return False
+    return False
 
 
 def run_text_command(command):

@@ -90,8 +90,404 @@ async function writeJsonFile(rel, data){
 const pdfDiagnosticCache = new Map();
 
 function stripManifestPrefix(value){
+  if (Array.isArray(value)) value = value[0] || "";
   const raw = normalizeRelPath(value);
   return raw.replace(/^quiz\//, "");
+}
+
+async function readSmallJsonRequest(req, maxBytes = 2 * 1024 * 1024){
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of req){
+    total += chunk.length;
+    if (total > maxBytes) throw new Error("요청 본문이 너무 큽니다.");
+    chunks.push(chunk);
+  }
+  const text = Buffer.concat(chunks).toString("utf8").trim();
+  return text ? JSON.parse(text) : {};
+}
+
+function normalizeAnchorMapRelPath(value){
+  const rel = stripManifestPrefix(value);
+  if (!rel || !rel.startsWith("pdf/") || !/_anchor\.json$/i.test(rel)) {
+    throw new Error("위치맵 파일은 pdf 아래의 _anchor.json만 저장할 수 있습니다.");
+  }
+  return rel;
+}
+
+function finiteNumber(value, fallback = null){
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function clampRatio(value, fallback = 0){
+  const n = finiteNumber(value, fallback);
+  return Math.max(0, Math.min(1, Number(n)));
+}
+
+function cleanManualQuestionAnchor(value, q){
+  if (!value || typeof value !== "object") return null;
+  const page = Math.trunc(finiteNumber(value.page, 0));
+  const yRatio = clampRatio(value.yRatio ?? value.ratio, null);
+  const xRatio = clampRatio(value.xRatio, 0.05);
+  if (!page || !Number.isFinite(yRatio)) return null;
+  return {
+    ...value,
+    q,
+    label: value.label || q,
+    page,
+    ratio: yRatio,
+    yRatio,
+    xRatio,
+    wRatio: Math.max(0.001, Math.min(0.2, finiteNumber(value.wRatio, 0.02))),
+    hRatio: Math.max(0.001, Math.min(0.2, finiteNumber(value.hRatio, 0.018))),
+    source: "manual-anchor",
+    anchorMode: value.anchorMode || "center",
+    confidence: 1,
+  };
+}
+
+function cleanManualChoiceAnchor(value, q){
+  if (!value || typeof value !== "object") return null;
+  const page = Math.trunc(finiteNumber(value.page, 0));
+  const choice = Math.trunc(finiteNumber(value.choice, 0));
+  const xRatio = clampRatio(value.xRatio, null);
+  const yRatio = clampRatio(value.yRatio, null);
+  if (!page || !choice || !Number.isFinite(xRatio) || !Number.isFinite(yRatio)) return null;
+  return {
+    ...value,
+    q,
+    choice,
+    page,
+    xRatio,
+    yRatio,
+    wRatio: Math.max(0.001, Math.min(0.2, finiteNumber(value.wRatio, 0.018))),
+    hRatio: Math.max(0.001, Math.min(0.2, finiteNumber(value.hRatio, 0.018))),
+    source: "manual-anchor",
+    anchorMode: value.anchorMode || "center",
+    confidence: 1,
+  };
+}
+
+function cleanManualQuestionSegment(value){
+  if (!value || typeof value !== "object") return null;
+  const page = Math.trunc(finiteNumber(value.page, 0));
+  const top = clampRatio(value.top, null);
+  const bottom = clampRatio(value.bottom, null);
+  const left = clampRatio(value.left, 0);
+  const right = clampRatio(value.right, 1);
+  if (!page || !Number.isFinite(top) || !Number.isFinite(bottom) || bottom <= top || right <= left) return null;
+  return { page, top, bottom, left, right, source: "manual-anchor" };
+}
+
+function cloneJsonValue(value){
+  if (value == null) return null;
+  return JSON.parse(JSON.stringify(value));
+}
+
+function ensureManualAnchorBase(anchorData, patch = {}){
+  if (!anchorData._manualBase || typeof anchorData._manualBase !== "object") anchorData._manualBase = {};
+  for (const key of ["questionLabelMap", "questionPageMap", "questionTopRatioMap", "questionSegments", "choiceAnchorMap"]){
+    const values = patch[key];
+    if (!values || typeof values !== "object") continue;
+    if (!anchorData._manualBase[key] || typeof anchorData._manualBase[key] !== "object") anchorData._manualBase[key] = {};
+    for (const qKey of Object.keys(values)){
+      const q = Math.trunc(finiteNumber(qKey, 0));
+      if (q <= 0) continue;
+      const storeKey = String(q);
+      if (Object.prototype.hasOwnProperty.call(anchorData._manualBase[key], storeKey)) continue;
+      if (Array.isArray(anchorData[key])) anchorData._manualBase[key][storeKey] = cloneJsonValue(anchorData[key][q]);
+      else if (anchorData[key] && typeof anchorData[key] === "object") anchorData._manualBase[key][storeKey] = cloneJsonValue(anchorData[key][storeKey]);
+      else anchorData._manualBase[key][storeKey] = null;
+    }
+  }
+}
+
+function restoreManualAnchorBase(anchorData, reset = {}){
+  const q = Math.trunc(finiteNumber(reset.q, 0));
+  if (q <= 0) throw new Error("초기화할 문제 번호가 없습니다.");
+  const scope = reset.scope === "question" || reset.scope === "choice" ? reset.scope : "all";
+  const choice = Math.trunc(finiteNumber(reset.choice, 0));
+  const storeKey = String(q);
+  const base = anchorData._manualBase && typeof anchorData._manualBase === "object" ? anchorData._manualBase : {};
+  const questionKeys = ["questionLabelMap", "questionPageMap", "questionTopRatioMap", "questionSegments"];
+
+  const restoreWholeKey = (key) => {
+    const keyBase = base[key] && typeof base[key] === "object" ? base[key] : {};
+    if (!Object.prototype.hasOwnProperty.call(keyBase, storeKey)) return;
+    const value = cloneJsonValue(keyBase[storeKey]);
+    if (Array.isArray(anchorData[key])) {
+      if (value == null) delete anchorData[key][q];
+      else anchorData[key][q] = value;
+    } else {
+      if (!anchorData[key] || typeof anchorData[key] !== "object") anchorData[key] = {};
+      if (value == null) delete anchorData[key][storeKey];
+      else anchorData[key][storeKey] = value;
+    }
+    delete keyBase[storeKey];
+  };
+
+  if (scope === "all" || scope === "question") {
+    for (const key of questionKeys) restoreWholeKey(key);
+  }
+
+  if (scope === "all") {
+    restoreWholeKey("choiceAnchorMap");
+  } else if (scope === "choice") {
+    if (choice <= 0) throw new Error("초기화할 문항 번호가 없습니다.");
+    const keyBase = base.choiceAnchorMap && typeof base.choiceAnchorMap === "object" ? base.choiceAnchorMap : {};
+    if (Object.prototype.hasOwnProperty.call(keyBase, storeKey)) {
+      const baseList = Array.isArray(keyBase[storeKey]) ? cloneJsonValue(keyBase[storeKey]) : [];
+      const baseChoice = baseList.find((item) => Number(item?.choice) === choice) || null;
+      const currentList = Array.isArray(anchorData.choiceAnchorMap?.[storeKey]) ? cloneJsonValue(anchorData.choiceAnchorMap[storeKey]) : [];
+      const nextList = currentList.filter((item) => Number(item?.choice) !== choice);
+      if (baseChoice) nextList.push(baseChoice);
+      nextList.sort((a, b) => Number(a.choice) - Number(b.choice) || Number(a.yRatio) - Number(b.yRatio) || Number(a.xRatio) - Number(b.xRatio));
+      if (!anchorData.choiceAnchorMap || typeof anchorData.choiceAnchorMap !== "object") anchorData.choiceAnchorMap = {};
+      if (nextList.length) anchorData.choiceAnchorMap[storeKey] = nextList;
+      else delete anchorData.choiceAnchorMap[storeKey];
+      const currentJson = JSON.stringify(anchorData.choiceAnchorMap?.[storeKey] || null);
+      const baseJson = JSON.stringify(baseList.length ? baseList : null);
+      if (currentJson === baseJson) delete keyBase[storeKey];
+    }
+  }
+
+  if (anchorData._manualBase && typeof anchorData._manualBase === "object") {
+    for (const key of Object.keys(anchorData._manualBase)) {
+      if (anchorData._manualBase[key] && typeof anchorData._manualBase[key] === "object" && !Object.keys(anchorData._manualBase[key]).length) {
+        delete anchorData._manualBase[key];
+      }
+    }
+    if (!Object.keys(anchorData._manualBase).length) delete anchorData._manualBase;
+  }
+
+  const now = new Date().toISOString();
+  anchorData.manualEditedAt = now;
+  anchorData.generatedAt = now;
+  return anchorData;
+}
+
+function restoreAllManualAnchorBase(anchorData){
+  const base = anchorData?._manualBase && typeof anchorData._manualBase === "object" ? anchorData._manualBase : null;
+  let restored = 0;
+  if (base) {
+    for (const [key, values] of Object.entries(base)){
+      if (!values || typeof values !== "object") continue;
+      for (const [storeKey, rawValue] of Object.entries(values)){
+        const q = Math.trunc(finiteNumber(storeKey, 0));
+        if (q <= 0) continue;
+        const value = cloneJsonValue(rawValue);
+        if (Array.isArray(anchorData[key])) {
+          if (value == null) delete anchorData[key][q];
+          else anchorData[key][q] = value;
+        } else {
+          if (!anchorData[key] || typeof anchorData[key] !== "object") anchorData[key] = {};
+          if (value == null) delete anchorData[key][storeKey];
+          else anchorData[key][storeKey] = value;
+        }
+        restored += 1;
+      }
+    }
+    delete anchorData._manualBase;
+    delete anchorData.manualEditedAt;
+  } else {
+    const manualQuestionKeys = new Set();
+    const isManualValue = (value) => value && typeof value === "object" && String(value.source || "").includes("manual");
+    if (anchorData.questionLabelMap && typeof anchorData.questionLabelMap === "object") {
+      for (const [storeKey, value] of Object.entries(anchorData.questionLabelMap)) {
+        if (!isManualValue(value)) continue;
+        const q = Math.trunc(finiteNumber(storeKey, 0));
+        if (q > 0) manualQuestionKeys.add(String(q));
+        delete anchorData.questionLabelMap[storeKey];
+        restored += 1;
+      }
+    }
+    for (const storeKey of manualQuestionKeys) {
+      const q = Math.trunc(finiteNumber(storeKey, 0));
+      if (q > 0) {
+        if (Array.isArray(anchorData.questionPageMap)) delete anchorData.questionPageMap[q];
+        if (Array.isArray(anchorData.questionTopRatioMap)) delete anchorData.questionTopRatioMap[q];
+      }
+      if (anchorData.questionSegments && typeof anchorData.questionSegments === "object") delete anchorData.questionSegments[storeKey];
+    }
+    if (anchorData.questionSegments && typeof anchorData.questionSegments === "object") {
+      for (const [storeKey, value] of Object.entries(anchorData.questionSegments)) {
+        const list = Array.isArray(value) ? value : [value];
+        if (!list.some(isManualValue)) continue;
+        delete anchorData.questionSegments[storeKey];
+        restored += 1;
+      }
+    }
+    if (anchorData.choiceAnchorMap && typeof anchorData.choiceAnchorMap === "object") {
+      for (const [storeKey, value] of Object.entries(anchorData.choiceAnchorMap)) {
+        const list = Array.isArray(value) ? value : [];
+        const next = list.filter((item) => !isManualValue(item));
+        if (next.length === list.length) continue;
+        if (next.length) anchorData.choiceAnchorMap[storeKey] = next;
+        else delete anchorData.choiceAnchorMap[storeKey];
+        restored += list.length - next.length;
+      }
+    }
+    delete anchorData.manualEditedAt;
+  }
+  if (restored > 0) anchorData.generatedAt = new Date().toISOString();
+  return restored;
+}
+
+function applyManualAnchorPatch(anchorData, patch = {}){
+  if (!patch || typeof patch !== "object") throw new Error("저장할 위치맵 패치가 없습니다.");
+  ensureManualAnchorBase(anchorData, patch);
+
+  if (patch.questionLabelMap && typeof patch.questionLabelMap === "object"){
+    if (!anchorData.questionLabelMap || typeof anchorData.questionLabelMap !== "object") anchorData.questionLabelMap = {};
+    for (const [key, value] of Object.entries(patch.questionLabelMap)){
+      const q = Math.trunc(finiteNumber(key, 0));
+      if (q > 0 && value == null) {
+        delete anchorData.questionLabelMap[String(q)];
+        continue;
+      }
+      const cleaned = cleanManualQuestionAnchor(value, q);
+      if (q > 0 && cleaned) anchorData.questionLabelMap[String(q)] = cleaned;
+    }
+  }
+
+  if (patch.questionPageMap && typeof patch.questionPageMap === "object"){
+    if (!Array.isArray(anchorData.questionPageMap)) anchorData.questionPageMap = [];
+    for (const [key, value] of Object.entries(patch.questionPageMap)){
+      const q = Math.trunc(finiteNumber(key, 0));
+      if (q > 0 && value == null) {
+        delete anchorData.questionPageMap[q];
+        continue;
+      }
+      const page = Math.trunc(finiteNumber(value, 0));
+      if (q > 0 && page > 0) anchorData.questionPageMap[q] = page;
+    }
+  }
+
+  if (patch.questionTopRatioMap && typeof patch.questionTopRatioMap === "object"){
+    if (!Array.isArray(anchorData.questionTopRatioMap)) anchorData.questionTopRatioMap = [];
+    for (const [key, value] of Object.entries(patch.questionTopRatioMap)){
+      const q = Math.trunc(finiteNumber(key, 0));
+      if (q > 0 && value == null) {
+        delete anchorData.questionTopRatioMap[q];
+        continue;
+      }
+      const ratio = clampRatio(value, null);
+      if (q > 0 && Number.isFinite(ratio)) anchorData.questionTopRatioMap[q] = ratio;
+    }
+  }
+
+  if (patch.questionSegments && typeof patch.questionSegments === "object"){
+    if (!anchorData.questionSegments || typeof anchorData.questionSegments !== "object") anchorData.questionSegments = {};
+    for (const [key, value] of Object.entries(patch.questionSegments)){
+      const q = Math.trunc(finiteNumber(key, 0));
+      if (q > 0 && value == null) {
+        delete anchorData.questionSegments[String(q)];
+        continue;
+      }
+      const segments = (Array.isArray(value) ? value : [value]).map(cleanManualQuestionSegment).filter(Boolean);
+      if (q > 0 && segments.length) anchorData.questionSegments[String(q)] = segments;
+    }
+  }
+
+  if (patch.choiceAnchorMap && typeof patch.choiceAnchorMap === "object"){
+    if (!anchorData.choiceAnchorMap || typeof anchorData.choiceAnchorMap !== "object") anchorData.choiceAnchorMap = {};
+    for (const [key, value] of Object.entries(patch.choiceAnchorMap)){
+      const q = Math.trunc(finiteNumber(key, 0));
+      if (q > 0 && (value == null || (Array.isArray(value) && !value.length))) {
+        delete anchorData.choiceAnchorMap[String(q)];
+        continue;
+      }
+      const anchors = (Array.isArray(value) ? value : [value])
+        .map((item) => cleanManualChoiceAnchor(item, q))
+        .filter(Boolean)
+        .sort((a, b) => a.choice - b.choice || a.yRatio - b.yRatio || a.xRatio - b.xRatio);
+      if (q > 0 && anchors.length) anchorData.choiceAnchorMap[String(q)] = anchors;
+      else if (q > 0) delete anchorData.choiceAnchorMap[String(q)];
+    }
+  }
+
+  const now = new Date().toISOString();
+  anchorData.manualEditedAt = now;
+  anchorData.generatedAt = now;
+  return anchorData;
+}
+
+async function handleAnchorManualSave(req, res){
+  try{
+    const body = await readSmallJsonRequest(req);
+    const rel = normalizeAnchorMapRelPath(body.anchorMapPath || body.anchorMap || body.path);
+    const abs = assertManagedPath(rel);
+    const anchorData = JSON.parse(await fsp.readFile(abs, "utf8"));
+    if (anchorData.kind !== "question-anchor-map") throw new Error("question-anchor-map 형식이 아닙니다.");
+    if (body.resetManual && typeof body.resetManual === "object") {
+      restoreManualAnchorBase(anchorData, body.resetManual);
+    } else {
+      applyManualAnchorPatch(anchorData, body.patch || body);
+    }
+    await fsp.writeFile(abs, `${JSON.stringify(anchorData, null, 2)}\n`, "utf8");
+    sendJson(res, 200, { ok: true, anchorMap: rel, generatedAt: anchorData.generatedAt, manualEditedAt: anchorData.manualEditedAt, anchorData });
+  }catch(err){
+    sendJson(res, 400, { ok: false, error: err?.message || String(err) });
+  }
+}
+
+async function handleAnchorManualDelete(req, res){
+  try{
+    const body = await readSmallJsonRequest(req);
+    const rel = normalizeAnchorMapRelPath(body.anchorMapPath || body.anchorMap || body.path);
+    const abs = assertManagedPath(rel);
+    const anchorData = JSON.parse(await fsp.readFile(abs, "utf8"));
+    if (anchorData.kind !== "question-anchor-map") throw new Error("question-anchor-map 형식이 아닙니다.");
+    const restored = restoreAllManualAnchorBase(anchorData);
+    if (restored > 0) {
+      await fsp.writeFile(abs, `${JSON.stringify(anchorData, null, 2)}\n`, "utf8");
+      try{
+        const found = findQuestionManifestRow(body);
+        const fields = { anchorGeneratedAt: anchorData.generatedAt || new Date().toISOString() };
+        found.rows[found.index] = { ...found.rows[found.index], ...fields };
+        await writeJsonFile(found.manifestName, found.rows);
+        await updateCategoryQuestionManifest(found.row, fields);
+      }catch(_){}
+    }
+    sendJson(res, 200, {
+      ok: true,
+      anchorMap: rel,
+      restored,
+      generatedAt: anchorData.generatedAt || "",
+      manualEditedAt: anchorData.manualEditedAt || "",
+      message: restored > 0 ? "수정 앵커를 삭제하고 원래 위치맵 값으로 되돌렸습니다." : "삭제할 수정 앵커가 없습니다.",
+    });
+  }catch(err){
+    sendJson(res, 400, { ok: false, message: err?.message || String(err) });
+  }
+}
+
+function normalizeManagedPathList(value){
+  const values = Array.isArray(value) ? value : (value ? [value] : []);
+  return values
+    .flatMap((item) => Array.isArray(item) ? item : [item])
+    .map((item) => stripManifestPrefix(item))
+    .filter(Boolean);
+}
+
+function answerFileList(row = {}){
+  const seen = new Set();
+  const out = [];
+  for (const value of [
+    row.answerPdf,
+    row.answerPdfs,
+    row.answerFiles,
+    row.answerPdfList,
+    row.answerPdfPaths,
+  ]){
+    for (const rel of normalizeManagedPathList(value)){
+      if (seen.has(rel)) continue;
+      seen.add(rel);
+      out.push(rel);
+    }
+  }
+  return out;
 }
 
 function managedRelPath(value){
@@ -135,9 +531,10 @@ function manifestFileExists(value){
 }
 
 function manifestPublishedReady(row){
-  if (String(row?.correctJson || "").trim()) return true;
-  if (String(row?.answerSourceId || "").trim()) return true;
-  return row?.published === true || String(row?.published || "") === "true";
+  const questionPdf = stripManifestPrefix(row?.questionPdf);
+  if (!questionPdf) return false;
+  if (isDerivedPdfPath(questionPdf)) return false;
+  return manifestFileExists(questionPdf);
 }
 
 function questionAnswerCountIssue(row){
@@ -150,9 +547,9 @@ function questionAnswerCountIssue(row){
 }
 
 function isPublishedQuestion(row){
-  return manifestPublishedReady(row) && !questionAnswerCountIssue(row);
+  return manifestPublishedReady(row);
 }
-// SOFTM-OCR: 게시 기준에서 OCR 품질을 분리하고 correct.json/정답 원본 기준으로 풀이 가능 여부를 판정 - 2026-05-30
+// SOFTM-OCR: 게시 기준은 문제 PDF 존재 여부로 고정하고 정답/OCR 품질은 보조 진단으로 분리 - 2026-05-31
 
 function collectDescendantCatNos(categories, catNo){
   const out = new Set([String(catNo || "")]);
@@ -191,13 +588,32 @@ function questionIssue(row){
   if (!questionPdf) return "문제 PDF 없음";
   if (isDerivedPdfPath(questionPdf)) return "OCR 파생 파일";
   if (!manifestFileExists(questionPdf)) return "문제 파일 없음";
-  if (!answerPdf && !String(row?.answerSourceId || "").trim()) return "정답 매핑 없음";
-  if (answerPdf && !manifestFileExists(answerPdf)) return "정답 파일 없음";
-  if (!correctJson && !String(row?.answerSourceId || "").trim()) return "correct.json 없음";
-  if (correctJson && !manifestFileExists(correctJson)) return "correct.json 파일 없음";
-  const countIssue = questionAnswerCountIssue(row);
-  if (countIssue) return countIssue;
-  return isPublishedQuestion(row) ? "정상" : "미게시";
+  return "정상";
+}
+
+function inferAnchorMapPath(row){
+  const explicit = stripManifestPrefix(row?.anchorMap || "");
+  if (explicit && manifestFileExists(explicit)) return explicit;
+  const questionPdf = stripManifestPrefix(row?.questionPdf || "");
+  if (!/\.pdf$/i.test(questionPdf)) return explicit;
+  const inferred = questionPdf.replace(/\.pdf$/i, "_anchor.json");
+  return manifestFileExists(inferred) ? inferred : explicit;
+}
+
+function readAnchorMapMeta(relPath){
+  const rel = stripManifestPrefix(relPath);
+  if (!rel || !manifestFileExists(rel)) return {};
+  try{
+    const data = JSON.parse(fs.readFileSync(resolveWorkspacePath(rel), "utf8"));
+    return {
+      confidence: data.confidence,
+      warnings: Array.isArray(data.warnings) ? data.warnings : [],
+      generatedAt: data.generatedAt || "",
+      status: Number(data.confidence || 0) >= 0.32 ? "위치맵 생성" : "위치맵 확인 필요",
+    };
+  }catch(_){
+    return {};
+  }
 }
 
 async function cachedPdfDiagnostics(relPath, options = {}){
@@ -226,9 +642,9 @@ async function cachedPdfDiagnostics(relPath, options = {}){
 function ocrIssueFromDiagnostics(data){
   if (!data || !data.needsOcr) return "";
   const warnings = Array.isArray(data.warnings) ? data.warnings : [];
-  if (warnings.some((item) => String(item).includes("선택지 기호"))) return "OCR 품질 경고";
-  if (warnings.some((item) => String(item).includes("문항번호") || String(item).includes("문항 수"))) return "OCR 품질 경고";
-  return "PDF 품질 경고";
+  if (warnings.some((item) => String(item).includes("선택지 기호"))) return "OCR";
+  if (warnings.some((item) => String(item).includes("문항번호") || String(item).includes("문항 수"))) return "OCR";
+  return "PDF";
 }
 
 function diagTone(issue){
@@ -251,28 +667,34 @@ function questionDiagSummary(data){
 }
 
 function answerDiagSummary(row, data){
-  if (!row?.answerPdf && !String(row?.answerSourceId || "").trim()) {
+  const answerFiles = answerFileList(row);
+  if (!answerFiles.length && !String(row?.answerSourceId || "").trim()) {
     return { status: "정답 없음", tone: "warn", warnings: ["정답 파일 또는 정답 원본 ID가 연결되지 않았습니다."] };
   }
-  if (row?.answerPdf && !manifestFileExists(row.answerPdf)) {
+  const missing = answerFiles.filter((item) => !manifestFileExists(item));
+  if (answerFiles.length && missing.length === answerFiles.length) {
     return { status: "정답 파일 없음", tone: "warn", warnings: ["정답 파일 경로가 있지만 실제 파일을 찾을 수 없습니다."] };
   }
+  const baseWarnings = missing.length ? [`일부 정답 파일을 찾을 수 없습니다(${missing.length}/${answerFiles.length}).`] : [];
   if (data?.needsOcr) {
     return {
       status: "정답 확인 필요",
       tone: "warn",
-      warnings: data.warnings || [],
+      warnings: [...baseWarnings, ...(data.warnings || [])],
       textChars: data.textChars || 0,
       answerPairs: data.answerPairs || 0,
     };
   }
   if (row?.correctJson && manifestFileExists(row.correctJson)) {
-    return { status: "정상", tone: "ok", warnings: [], textChars: data?.textChars || 0, answerPairs: data?.answerPairs || 0 };
+    return { status: "정상", tone: "ok", warnings: baseWarnings, textChars: data?.textChars || 0, answerPairs: data?.answerPairs || 0 };
   }
   if (String(row?.answerSourceId || "").trim()) {
-    return { status: "정답 원본 연결", tone: "ok", warnings: [], textChars: data?.textChars || 0, answerPairs: data?.answerPairs || 0 };
+    return { status: "정답 원본 연결", tone: "ok", warnings: baseWarnings, textChars: data?.textChars || 0, answerPairs: data?.answerPairs || 0 };
   }
-  return { status: "correct.json 필요", tone: "warn", warnings: ["정답 파일은 있으나 correct.json 생성 상태가 아닙니다."], textChars: data?.textChars || 0, answerPairs: data?.answerPairs || 0 };
+  if (answerFiles.length) {
+    return { status: answerFiles.length > 1 ? `정답 파일 ${answerFiles.length}개 연결` : "정답 파일 연결", tone: "ok", warnings: baseWarnings, textChars: data?.textChars || 0, answerPairs: data?.answerPairs || 0 };
+  }
+  return { status: "정답 없음", tone: "warn", warnings: ["정답 파일 또는 정답 원본 ID가 연결되지 않았습니다."], textChars: data?.textChars || 0, answerPairs: data?.answerPairs || 0 };
 }
 
 async function buildCatalogDataset(dataset, datasetLabel, categories, questions){
@@ -285,14 +707,21 @@ async function buildCatalogDataset(dataset, datasetLabel, categories, questions)
     const manifestReady = isPublishedQuestion(row);
     const fileIssue = questionIssue(row);
     const diagnostics = manifestFileExists(row?.questionPdf || "") ? await cachedPdfDiagnostics(row.questionPdf, { docType: "question", meta: row }) : null;
-    const answerExt = path.extname(stripManifestPrefix(row?.answerPdf || "")).toLowerCase();
-    const answerDiagnostics = answerExt === ".pdf" && manifestFileExists(row?.answerPdf || "") ? await cachedPdfDiagnostics(row.answerPdf, { docType: "answer", meta: row }) : null;
+    const answerPdfs = answerFileList(row);
+    const primaryAnswerPdf = answerPdfs[0] || "";
+    const answerExt = path.extname(primaryAnswerPdf).toLowerCase();
+    const answerDiagnostics = answerExt === ".pdf" && manifestFileExists(primaryAnswerPdf) ? await cachedPdfDiagnostics(primaryAnswerPdf, { docType: "answer", meta: row }) : null;
     const questionDiag = questionDiagSummary(diagnostics);
-    const answerDiag = answerDiagSummary(row, answerDiagnostics);
+    const answerDiag = answerDiagSummary({ ...row, answerPdf: primaryAnswerPdf, answerPdfs }, answerDiagnostics);
+    const anchorMapPath = inferAnchorMapPath(row);
+    const anchorMeta = readAnchorMapMeta(anchorMapPath);
     const ocrIssue = questionDiag.status !== "정상" ? questionDiag.status : "";
-    const answerIssue = answerDiag.status !== "정상" && answerDiag.status !== "정답 원본 연결" ? answerDiag.status : "";
-    const published = manifestReady && (fileIssue === "정상" || fileIssue === "미게시");
-    const issue = (fileIssue !== "정상" && fileIssue !== "미게시") ? fileIssue : (answerIssue || fileIssue);
+    const countIssue = questionAnswerCountIssue(row);
+    const answerStatus = String(answerDiag.status || "");
+    const answerOk = ["정상", "정답 원본 연결", "정답 파일 연결"].includes(answerStatus) || /^정답 파일 \d+개 연결$/.test(answerStatus);
+    const answerIssue = countIssue || (!answerOk ? answerDiag.status : "");
+    const published = manifestReady && fileIssue === "정상";
+    const issue = fileIssue !== "정상" ? fileIssue : (answerIssue || fileIssue);
     const derivedPdf = isDerivedPdfPath(row?.questionPdf || "");
     const originalCandidatePath = derivedPdf ? originalCandidateForDerivedPdf(row?.questionPdf || "") : "";
     return {
@@ -308,7 +737,8 @@ async function buildCatalogDataset(dataset, datasetLabel, categories, questions)
       questionNo: row?.questionNo || "",
       questionNm: row?.questionNm || "",
       questionPdf: stripManifestPrefix(row?.questionPdf || ""),
-      answerPdf: stripManifestPrefix(row?.answerPdf || ""),
+      answerPdf: primaryAnswerPdf,
+      answerPdfs,
       correctJson: stripManifestPrefix(row?.correctJson || ""),
       year: row?.year || "",
       semester: row?.semester || "",
@@ -320,11 +750,11 @@ async function buildCatalogDataset(dataset, datasetLabel, categories, questions)
       answerStartNo: row?.answerStartNo || "",
       answerEndNo: row?.answerEndNo || "",
       choiceCount: row?.choiceCount || "",
-      anchorMap: stripManifestPrefix(row?.anchorMap || ""),
-      anchorStatus: row?.anchorStatus || "",
-      anchorConfidence: row?.anchorConfidence || "",
-      anchorWarnings: Array.isArray(row?.anchorWarnings) ? row.anchorWarnings : [],
-      anchorGeneratedAt: row?.anchorGeneratedAt || "",
+      anchorMap: anchorMapPath,
+      anchorStatus: row?.anchorStatus || anchorMeta.status || "",
+      anchorConfidence: row?.anchorConfidence || anchorMeta.confidence || "",
+      anchorWarnings: Array.isArray(row?.anchorWarnings) && row.anchorWarnings.length ? row.anchorWarnings : (anchorMeta.warnings || []),
+      anchorGeneratedAt: row?.anchorGeneratedAt || anchorMeta.generatedAt || "",
       answerSourceId: row?.answerSourceId || "",
       published,
       issue,
@@ -351,7 +781,7 @@ async function buildCatalogDataset(dataset, datasetLabel, categories, questions)
       answerTextChars: answerDiag.textChars || 0,
       answerPairs: answerDiag.answerPairs || 0,
       hasQuestionFile: manifestFileExists(row?.questionPdf || ""),
-      hasAnswerFile: row?.answerPdf ? manifestFileExists(row.answerPdf) : Boolean(row?.answerSourceId),
+      hasAnswerFile: answerPdfs.length ? answerPdfs.some((item) => manifestFileExists(item)) : Boolean(row?.answerSourceId),
       hasCorrectJson: row?.correctJson ? manifestFileExists(row.correctJson) : false,
       seq: Number(row?.seq || 0),
     };
@@ -1390,8 +1820,8 @@ async function handleAnchorOcr(req, res){
     anchorConfidence: Number(anchorData.confidence || 0),
     anchorWarnings: Array.isArray(anchorData.warnings) ? anchorData.warnings : [],
     anchorGeneratedAt: anchorData.generatedAt || new Date().toISOString(),
-    questionStartNo: row.questionStartNo || anchorData.questionStartNo || "",
-    questionEndNo: row.questionEndNo || anchorData.questionEndNo || "",
+    questionStartNo: anchorData.questionStartNo || row.questionStartNo || "",
+    questionEndNo: anchorData.questionEndNo || row.questionEndNo || "",
   };
   found.rows[found.index] = { ...found.rows[found.index], ...fields };
   await writeJsonFile(found.manifestName, found.rows);
@@ -1410,12 +1840,53 @@ async function handleAnchorOcr(req, res){
     choiceCount: anchorData.choiceCount || choiceCount,
     questionStartNo: anchorData.questionStartNo || "",
     questionEndNo: anchorData.questionEndNo || "",
+    generatedAt: fields.anchorGeneratedAt,
     elapsedMs: Date.now() - started,
     stdout: result.stdout,
     stderr: result.stderr,
   });
 }
 // SOFTM-위치맵: 전체 OCR PDF 대신 문제 시작 위치와 선택지 위치를 JSON으로 저장하고 manifest에 anchorMap 참조를 연결 - 2026-05-30
+
+async function handleAnchorDelete(req, res){
+  const body = JSON.parse((await readBody(req)).toString("utf8") || "{}");
+  const found = findQuestionManifestRow(body);
+  const row = found.row;
+  const explicit = stripManifestPrefix(row.anchorMap || "");
+  const inferred = anchorOutputRelForQuestion(row);
+  const candidates = [...new Set([explicit, inferred].filter(Boolean))]
+    .filter((rel) => rel.startsWith("pdf/") && /_anchor\.json$/i.test(rel));
+  const deleted = [];
+  for (const rel of candidates){
+    try{
+      const abs = resolveWorkspacePath(rel);
+      if (fs.existsSync(abs)) {
+        await fsp.unlink(abs);
+        deleted.push(rel);
+      }
+    }catch(err){
+      throw new Error(`위치맵 삭제 실패: ${rel} (${err?.message || err})`);
+    }
+  }
+  const fields = {
+    anchorMap: "",
+    anchorStatus: "",
+    anchorConfidence: "",
+    anchorWarnings: [],
+    anchorGeneratedAt: "",
+  };
+  found.rows[found.index] = { ...found.rows[found.index], ...fields };
+  await writeJsonFile(found.manifestName, found.rows);
+  await updateCategoryQuestionManifest(row, fields);
+  sendJson(res, 200, {
+    ok: true,
+    deleted,
+    manifestName: found.manifestName,
+    questionNo: row.questionNo || "",
+    message: deleted.length ? "위치맵을 삭제했습니다." : "삭제할 위치맵 파일은 없지만 manifest 연결은 제거했습니다.",
+  });
+}
+// SOFTM-위치맵: 생성된 _anchor.json과 manifest 연결을 확인 후 삭제하는 관리자 API 추가 - 2026-06-01
 
 async function processReport(){
   const questions = readJsonFile("question.json", []);
@@ -1477,6 +1948,127 @@ function runGenerateManifest(){
     promise.then(async (results) => [...results, await runOne(scriptName)])
   ), Promise.resolve([]));
 }
+
+function normalizedRelKey(value){
+  return stripManifestPrefix(value).normalize("NFC");
+}
+
+function nextPaddedNo(rows, key, width){
+  let max = 0;
+  for (const row of rows || []){
+    const n = Number(row?.[key] || 0);
+    if (Number.isFinite(n)) max = Math.max(max, Math.trunc(n));
+  }
+  return () => {
+    max += 1;
+    return String(max).padStart(width, "0");
+  };
+}
+
+function isAnswerDirPath(abs){
+  const pdfRoot = path.join(root, "pdf");
+  const rel = path.relative(pdfRoot, abs);
+  if (!rel || rel.startsWith("..")) return false;
+  return rel.split(path.sep).some((part) => part.normalize("NFC") === "정답");
+}
+
+function scanPdfCategoryDirs(){
+  const pdfRoot = path.join(root, "pdf");
+  const out = [];
+  const walk = (dir) => {
+    let entries = [];
+    try{
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    }catch(_){
+      return;
+    }
+    const dirs = entries
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith(".") && entry.name.normalize("NFC") !== "정답")
+      .sort((a, b) => a.name.normalize("NFC").localeCompare(b.name.normalize("NFC"), "ko"));
+    for (const entry of dirs){
+      const abs = path.join(dir, entry.name);
+      if (isAnswerDirPath(abs)) continue;
+      out.push(abs);
+      walk(abs);
+    }
+  };
+  walk(pdfRoot);
+  return out.sort((a, b) => {
+    const ar = path.relative(pdfRoot, a).split(path.sep).map((part) => part.normalize("NFC")).join("\u0000");
+    const br = path.relative(pdfRoot, b).split(path.sep).map((part) => part.normalize("NFC")).join("\u0000");
+    return ar.localeCompare(br, "ko");
+  });
+}
+
+async function syncCategoryManifest(){
+  const existingGroups = readJsonFile("group.json", []);
+  const existingCategories = readJsonFile("category.json", []);
+  const groupByName = new Map((Array.isArray(existingGroups) ? existingGroups : []).map((row) => [String(row?.gNm || "").normalize("NFC"), row]));
+  const categoryByPath = new Map((Array.isArray(existingCategories) ? existingCategories : []).map((row) => [normalizedRelKey(row?.catPath || ""), row]));
+  const nextGroupNo = nextPaddedNo(existingGroups, "gNo", 2);
+  const nextCatNo = nextPaddedNo(existingCategories, "catNo", 4);
+  const dirs = scanPdfCategoryDirs();
+  const groups = [];
+  const categories = [];
+  const rootToGroup = new Map();
+  const dirToCat = new Map();
+  const seenGroupNames = new Set();
+  let addedCategories = 0;
+  let addedGroups = 0;
+
+  for (const abs of dirs){
+    const relFromPdf = path.relative(path.join(root, "pdf"), abs).split(path.sep);
+    const rootName = String(relFromPdf[0] || "").normalize("NFC");
+    if (!rootToGroup.has(rootName)) {
+      let group = groupByName.get(rootName);
+      if (!group) {
+        group = { gNo: nextGroupNo(), gNm: rootName };
+        addedGroups += 1;
+      }
+      const normalizedGroup = {
+        gNo: String(group.gNo || nextGroupNo()),
+        gNm: rootName,
+        seq: groups.length + 1,
+      };
+      rootToGroup.set(rootName, normalizedGroup);
+      groups.push(normalizedGroup);
+      seenGroupNames.add(rootName);
+    }
+    const catPath = `quiz/${toRel(abs)}`;
+    const existing = categoryByPath.get(normalizedRelKey(catPath));
+    const parentCatNo = dirToCat.get(path.dirname(abs)) || "";
+    let catNo = existing?.catNo ? String(existing.catNo) : "";
+    if (!catNo) {
+      catNo = nextCatNo();
+      addedCategories += 1;
+    }
+    const row = {
+      gNo: rootToGroup.get(rootName).gNo,
+      gNm: rootName,
+      catNm: path.basename(abs).normalize("NFC"),
+      catNo,
+      parentCatNo,
+      catPath,
+      depth: relFromPdf.length,
+      seq: categories.length + 1,
+    };
+    dirToCat.set(abs, catNo);
+    categories.push(row);
+  }
+
+  const previousCategoryCount = Array.isArray(existingCategories) ? existingCategories.length : 0;
+  await writeJsonFile("group.json", groups);
+  await writeJsonFile("category.json", categories);
+  return {
+    ok: true,
+    groups: groups.length,
+    categories: categories.length,
+    addedGroups,
+    addedCategories,
+    removedCategories: Math.max(0, previousCategoryCount - categories.length + addedCategories),
+  };
+}
+// SOFTM-GEN: 새 pdf 디렉토리를 기존 catNo/gNo 보존 방식으로 category.json에 반영 - 2026-06-01
 
 function resolveRebuildCategory(body){
   const dataset = String(body.dataset || "default");
@@ -1619,6 +2211,23 @@ async function serveStatic(req, res, url){
   await serveFile(res, filePath);
 }
 
+async function handleAdminDownload(req, res, url){
+  const rel = stripManifestPrefix(url.searchParams.get("path") || "");
+  if (!rel) throw new Error("다운로드할 파일 경로가 없습니다.");
+  const filePath = assertManagedPath(rel);
+  const stat = await fsp.stat(filePath);
+  if (!stat.isFile()) throw new Error("파일만 다운로드할 수 있습니다.");
+  const ext = path.extname(filePath).toLowerCase();
+  const base = path.basename(filePath);
+  res.writeHead(200, {
+    "content-type": mimeTypes[ext] || "application/octet-stream",
+    "content-length": stat.size,
+    "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(base)}`,
+    "cache-control": "no-store",
+  });
+  fs.createReadStream(filePath).pipe(res);
+}
+
 const server = http.createServer(async (req, res) => {
   try{
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
@@ -1631,11 +2240,18 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/admin/ocr/jobs") return await handleOcrJobs(req, res);
     if (url.pathname === "/api/admin/ocr/cancel" && req.method === "POST") return await handleOcrCancel(req, res, url);
     if (url.pathname === "/api/admin/ocr" && req.method === "POST") return await handleOcr(req, res);
+    if (url.pathname === "/api/admin/anchor-manual" && req.method === "POST") return await handleAnchorManualSave(req, res);
+    if (url.pathname === "/api/admin/anchor-manual-delete" && req.method === "POST") return await handleAnchorManualDelete(req, res);
     if (url.pathname === "/api/admin/anchor-ocr" && req.method === "POST") return await handleAnchorOcr(req, res);
+    if (url.pathname === "/api/admin/anchor-delete" && req.method === "POST") return await handleAnchorDelete(req, res);
+    if (url.pathname === "/api/admin/download") return await handleAdminDownload(req, res, url);
     if (url.pathname === "/api/admin/git-status") return sendJson(res, 200, await gitStatus());
     if (url.pathname === "/api/admin/rebuild" && req.method === "POST") {
       const results = await runGenerateManifest();
       return sendJson(res, 200, { ok: true, output: results.map((row) => `$ ${row.scriptName}\n${row.stdout}${row.stderr || ""}`).join("\n") });
+    }
+    if (url.pathname === "/api/admin/sync-categories" && req.method === "POST") {
+      return sendJson(res, 200, await syncCategoryManifest());
     }
     if (url.pathname === "/api/admin/rebuild-category" && req.method === "POST") {
       const body = JSON.parse((await readBody(req)).toString("utf8") || "{}");

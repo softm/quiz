@@ -54,6 +54,11 @@
       padding: 9px 10px;
       font-size: 13px;
     }
+    select.inlineSelect {
+      width: auto;
+      max-width: min(420px, 100%);
+      min-width: 190px;
+    }
     .container {
       width: min(1380px, 94vw);
       margin: 0 auto;
@@ -474,7 +479,7 @@
         <div class="desc" id="pageMeta">회차 정보를 불러오는 중입니다.</div>
       </div>
       <div class="actions">
-        <a class="button" href="./admin.html">목록으로</a>
+        <a class="button" id="backLink" href="./admin.html">목록으로</a>
         <a class="button primary disabled" id="quizLink" href="#">풀이</a>
       </div>
     </div>
@@ -513,10 +518,13 @@
           <div class="panelBody stack">
             <div class="row">
               <div class="pdfTabs" role="tablist" aria-label="PDF 전환">
-                <button id="btnQuestionPdf" class="pdfTab" type="button" role="tab" aria-selected="true">문제 PDF</button>
-                <button id="btnAnswerPdf" class="pdfTab" type="button" role="tab" aria-selected="false">정답 PDF</button>
+              <button id="btnQuestionPdf" class="pdfTab" type="button" role="tab" aria-selected="true">문제 PDF</button>
+              <button id="btnAnswerPdf" class="pdfTab" type="button" role="tab" aria-selected="false">정답 PDF</button>
               </div>
               <button id="btnOpenPdf">새 탭으로 열기</button>
+              <button id="btnDownloadQuestionPdf">문제 PDF 다운로드</button>
+              <button id="btnDownloadAnswerPdf">정답 파일 다운로드</button>
+              <select id="answerFileSelect" class="inlineSelect" aria-label="정답 파일 선택" hidden></select>
               <button id="btnPdfDiagnose">PDF 진단</button>
             </div>
             <div class="field">
@@ -544,9 +552,14 @@
             <div class="row">
               <button id="btnRunAnchorOcr" class="primary">문제·문항 위치맵 생성</button>
               <button id="btnCheckAnchorMap">위치맵 확인</button>
+              <button id="btnDeleteAnchorMap" class="secondary">위치맵 삭제</button>
+              <button id="btnDeleteManualAnchor" class="danger" disabled title="수정된 앵커가 있을 때 활성화됩니다.">앵커 초기화</button>
+              <a id="anchorEditLink" class="button secondary disabled" href="#" target="_blank" rel="noopener">앵커 편집</a>
+              <a id="anchorDebugLink" class="button primary disabled" href="#" target="_blank" rel="noopener">풀이(위치)</a>
               <button id="btnRunOcr" class="secondary">보조 OCR 실행</button>
               <button id="btnReload">다시 읽기</button>
             </div>
+            <div id="anchorMapStatusInline" class="status">위치맵 상태 확인 중</div>
             <!-- SOFTM-위치맵: 풀이용 문제·문항 위치맵 생성/검증 버튼을 전체 OCR보다 앞에 배치 - 2026-05-30 -->
             <div class="status" id="pdfDiagnoseStatus">대기 중</div>
           </div>
@@ -577,7 +590,19 @@
       questionNo: params.get("questionNo") || "",
       item: null,
       activeOcrJobId: "",
+      returnUrl: safeReturnUrl(params.get("return") || ""),
     };
+
+    function safeReturnUrl(value){
+      const raw = String(value || "").trim();
+      if (!raw) return "./admin.html";
+      try{
+        const decoded = decodeURIComponent(raw);
+        if (/^\.\/admin\.html(?:\?|$)/.test(decoded) || /^admin\.html(?:\?|$)/.test(decoded)) return decoded.startsWith(".") ? decoded : `./${decoded}`;
+      }catch(_){}
+      if (/^\.\/admin\.html(?:\?|$)/.test(raw) || /^admin\.html(?:\?|$)/.test(raw)) return raw.startsWith(".") ? raw : `./${raw}`;
+      return "./admin.html";
+    }
 
     function escapeHtml(value){
       return String(value ?? "")
@@ -646,12 +671,163 @@
       return `<span class="pill ${tone || (normalized === "정상" ? "ok" : "warn")}">${escapeHtml(normalized)}</span>`;
     }
 
+    function anchorStatusPill(item){
+      if (!item?.anchorMap) return diagPill("위치맵 미생성", "warn");
+      const confidence = Math.round(Number(item.anchorConfidence || 0) * 100);
+      const hasWarning = Array.isArray(item.anchorWarnings) && item.anchorWarnings.length > 0;
+      const tone = hasWarning || confidence < 80 ? "warn" : "ok";
+      return diagPill(`위치맵 생성 ${confidence}%`, tone);
+    }
+
+    function formatAnchorGeneratedAt(value){
+      if (!value) return "";
+      const date = new Date(value);
+      if (!Number.isFinite(date.getTime())) return "";
+      const diffMs = Date.now() - date.getTime();
+      const absMs = Math.abs(diffMs);
+      const minute = 60 * 1000;
+      const hour = 60 * minute;
+      const day = 24 * hour;
+      if (absMs < minute) return "방금 전";
+      if (absMs < hour) return `${Math.max(1, Math.round(absMs / minute))}분 전`;
+      if (absMs < day) return `${Math.max(1, Math.round(absMs / hour))}시간 전`;
+      if (absMs < 30 * day) return `${Math.max(1, Math.round(absMs / day))}일 전`;
+      return `${Math.max(1, Math.round(absMs / (30 * day)))}개월 전`;
+    }
+
+    function formatAnchorGeneratedAtTitle(value){
+      if (!value) return "";
+      const date = new Date(value);
+      if (!Number.isFinite(date.getTime())) return "";
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function anchorUpdatedText(item){
+      const updated = formatAnchorGeneratedAt(item?.anchorGeneratedAt);
+      return updated ? ` · 최종 수정 ${updated}` : "";
+    }
+
+    function anchorUpdatedHtml(item){
+      const updated = formatAnchorGeneratedAt(item?.anchorGeneratedAt);
+      const title = formatAnchorGeneratedAtTitle(item?.anchorGeneratedAt);
+      return updated ? ` · <span title="${escapeHtml(title)}">최종 수정 ${escapeHtml(updated)}</span>` : "";
+    }
+    // SOFTM-위치맵: 상세 화면에서 위치맵 최종 수정시간(anchorGeneratedAt)을 상태와 함께 표시 - 2026-06-01
+
+    function renderInlineAnchorMapStatus(item){
+      const el = $("anchorMapStatusInline");
+      if (!el) return;
+      if (!item) {
+        el.classList.add("warn");
+        el.textContent = "위치맵 상태를 확인할 회차가 없습니다.";
+        return;
+      }
+      const confidence = Math.round(Number(item.anchorConfidence || 0) * 100);
+      const warnings = Array.isArray(item.anchorWarnings) ? item.anchorWarnings.filter(Boolean) : [];
+      if (item.anchorMap) {
+        el.classList.toggle("warn", warnings.length > 0 || confidence < 80);
+        el.innerHTML = `
+          ${anchorStatusPill(item)}
+          <span class="desc">저장 위치맵 사용 · 신뢰도 ${confidence}%${warnings.length ? ` · 확인 필요 ${warnings.length}건` : " · 경고 없음"}${anchorUpdatedHtml(item)}</span>
+          <span class="pathCell">${escapeHtml(normalizePath(item.anchorMap))}</span>
+        `;
+        return;
+      }
+      el.classList.add("warn");
+      el.innerHTML = `
+        ${anchorStatusPill(item)}
+        <span class="desc">저장된 _anchor.json 연결이 없습니다. 위치 확인은 가능하지만 풀이 화면은 OCR/실시간 추정 좌표를 다른 색으로 표시합니다.</span>
+      `;
+    }
+
+    function containsManualAnchorValue(value){
+      if (!value || typeof value !== "object") return false;
+      if (String(value.source || "").includes("manual")) return true;
+      if (String(value.anchorMode || "").includes("manual")) return true;
+      if (Array.isArray(value)) return value.some(containsManualAnchorValue);
+      return Object.values(value).some(containsManualAnchorValue);
+    }
+
+    function hasManualAnchorEdits(anchorData){
+      const base = anchorData?._manualBase;
+      if (base && typeof base === "object" && Object.values(base).some((group) => group && typeof group === "object" && Object.keys(group).length > 0)) {
+        return true;
+      }
+      return containsManualAnchorValue(anchorData?.questionLabelMap)
+        || containsManualAnchorValue(anchorData?.questionSegments)
+        || containsManualAnchorValue(anchorData?.choiceAnchorMap);
+    }
+
+    function setManualAnchorDeleteButton(enabled, title = ""){
+      const btn = $("btnDeleteManualAnchor");
+      if (!btn) return;
+      btn.disabled = !enabled;
+      btn.title = title || (enabled ? "수정된 앵커를 원래 위치맵 값으로 되돌립니다." : "수정된 앵커가 있을 때 활성화됩니다.");
+    }
+
+    async function refreshManualAnchorDeleteButton(item = state.item){
+      setManualAnchorDeleteButton(false, "수정된 앵커 상태를 확인 중입니다.");
+      if (!item?.anchorMap) {
+        setManualAnchorDeleteButton(false, "저장된 위치맵이 없습니다.");
+        return false;
+      }
+      try{
+        const data = await loadLocalJson(item.anchorMap);
+        const enabled = hasManualAnchorEdits(data);
+        setManualAnchorDeleteButton(enabled, enabled
+          ? "수정된 앵커가 있습니다. 클릭하면 수동 편집분만 원래 위치맵 값으로 되돌립니다."
+          : "수정된 앵커가 없습니다.");
+        return enabled;
+      }catch(err){
+        setManualAnchorDeleteButton(false, `위치맵을 읽을 수 없습니다: ${err?.message || err}`);
+        return false;
+      }
+    }
+
     function warningText(warnings){
       const list = Array.isArray(warnings) ? warnings.filter(Boolean) : [];
       return list.length ? list.slice(0, 5).map((item) => `- ${item}`).join("\n") : "특이사항 없음";
     }
 
+    function normalizePathList(value){
+      const values = Array.isArray(value) ? value : (value ? [value] : []);
+      const seen = new Set();
+      const out = [];
+      for (const item of values.flatMap((row) => Array.isArray(row) ? row : [row])){
+        const rel = normalizePath(item);
+        if (!rel || seen.has(rel)) continue;
+        seen.add(rel);
+        out.push(rel);
+      }
+      return out;
+    }
+
+    function answerFilesForItem(item){
+      return normalizePathList([
+        ...(Array.isArray(item?.answerPdfs) ? item.answerPdfs : []),
+        item?.answerPdf,
+        ...(Array.isArray(item?.answerFiles) ? item.answerFiles : []),
+      ]);
+    }
+
+    function getSelectedAnswerFile(){
+      const selected = normalizePath($("answerFileSelect").value);
+      const files = answerFilesForItem(state.item);
+      return selected || files[0] || "";
+    }
+
+    function downloadManagedFile(pathValue, label){
+      const target = normalizePath(pathValue);
+      if (!target) {
+        showToast(`${label} 경로가 없습니다.`, { title: "다운로드 실패", tone: "warn" });
+        return;
+      }
+      window.location.href = `/api/admin/download?path=${encodeURIComponent(target)}`;
+    }
+
     function makeQuizUrl(item){
+      const answerFile = answerFilesForItem(item)[0] || "";
       const q = new URLSearchParams({
         dataset: item.dataset,
         category: item.catNm,
@@ -659,7 +835,7 @@
         exam: item.questionNm,
         questionNo: item.questionNo,
         question: normalizePath(item.questionPdf),
-        answer: normalizePath(item.answerPdf),
+        answer: answerFile,
       });
       if (item.correctJson) q.set("correct", normalizePath(item.correctJson));
       if (item.questionCount) q.set("questionCount", item.questionCount);
@@ -674,6 +850,14 @@
       const [base, query = ""] = url.split("?");
       const q = new URLSearchParams(query);
       q.set("anchorDebug", "1");
+      return `${base}?${q.toString()}`;
+    }
+
+    function makeAnchorEditQuizUrl(item){
+      const url = makeAnchorDebugQuizUrl(item || state.item);
+      const [base, query = ""] = url.split("?");
+      const q = new URLSearchParams(query);
+      q.set("anchorEdit", "1");
       return `${base}?${q.toString()}`;
     }
 
@@ -859,32 +1043,58 @@
         $("summaryGrid").innerHTML = `<div class="status warn">목록에서 다시 선택하세요.</div>`;
         return;
       }
+      $("backLink").href = state.returnUrl || "./admin.html";
       $("pageMeta").textContent = `${item.catNm} · ${item.datasetLabel} · ${item.questionNo}`;
       $("quizLink").href = makeQuizUrl(item);
       $("quizLink").classList.remove("disabled");
+      $("anchorDebugLink").href = makeAnchorDebugQuizUrl(item);
+      $("anchorDebugLink").classList.remove("disabled");
+      if (item.anchorMap) {
+        $("anchorEditLink").href = makeAnchorEditQuizUrl(item);
+        $("anchorEditLink").classList.remove("disabled");
+      } else {
+        $("anchorEditLink").href = "#";
+        $("anchorEditLink").classList.add("disabled");
+      }
+      renderInlineAnchorMapStatus(item);
+      refreshManualAnchorDeleteButton(item).catch(() => setManualAnchorDeleteButton(false, "수정된 앵커 상태 확인 실패"));
+      const answerFiles = answerFilesForItem(item);
+      const answerLabel = answerFiles.length > 1
+        ? `${answerFiles[0]} 외 ${answerFiles.length - 1}개`
+        : (answerFiles[0] || item.correctJson || item.answerSourceId || "없음");
       $("summaryGrid").innerHTML = [
         ["문제 파일", fileNameFromPath(item.questionPdf) || item.questionNm || "-"],
         ["등록명", item.questionNm || "-"],
         ["분류", `${item.catNm || "-"} · ${item.gNm || "-"}`],
         ["풀이 상태", item.published ? "게시 가능" : (item.issue || "미게시")],
         ["문항", item.questionCount ? `${item.questionCount}문항` : "-"],
-        ["정답", item.correctJson || item.answerPdf || item.answerSourceId || "없음"],
-        ["위치맵", item.anchorMap ? `${Math.round(Number(item.anchorConfidence || 0) * 100)}% · ${item.anchorStatus || "위치맵 생성"}` : "없음"],
-      ].map(([label, value]) => `<div class="summaryBox" title="${escapeHtml(`${label}: ${value}`)}"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></div>`).join("")
+        ["정답", answerLabel],
+        ["위치맵", item.anchorMap ? `${item.anchorStatus || "위치맵 생성"} · ${Math.round(Number(item.anchorConfidence || 0) * 100)}%${anchorUpdatedText(item)}` : "미생성"],
+      ].map(([label, value]) => {
+        const title = label === "위치맵" && item.anchorGeneratedAt
+          ? `${label}: ${value}\n최종 수정: ${formatAnchorGeneratedAtTitle(item.anchorGeneratedAt)}`
+          : `${label}: ${value}`;
+        return `<div class="summaryBox" title="${escapeHtml(title)}"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></div>`;
+      }).join("")
         + (item.derivedPdf || isDerivedPdfPath(item.questionPdf) ? derivedNoticeHtml(item) : "");
       // SOFTM-ADMIN: 회차 요약값은 말줄임 표시하고 전체 값은 툴팁으로 확인하도록 보정 - 2026-05-30
       // SOFTM-위치맵: 회차 상세에서 문제·문항 위치맵 생성 여부와 신뢰도를 바로 확인하도록 요약 표시 - 2026-05-30
       $("questionDiag").innerHTML = `
-        <strong>문제 진단 ${diagPill(item.published ? "풀이 가능" : (item.issue || "미게시"), item.published ? "ok" : "warn")}</strong>
-        <span class="small">문제·문항 위치맵: ${escapeHtml(item.anchorMap ? `${item.anchorStatus || "생성됨"} · ${Math.round(Number(item.anchorConfidence || 0) * 100)}%` : "없음")}\nOCR 텍스트: ${escapeHtml(item.questionDiagStatus || "미확인")}${item.published && item.needsOcr ? "\nOCR 품질 경고가 있어도 원본 PDF와 정답 JSON으로 풀이 가능합니다." : ""}\n${escapeHtml(warningText(item.anchorWarnings || []))}</span>
+        <strong>문제 진단 ${diagPill(item.published ? "풀이 가능" : (item.issue || "미게시"), item.published ? "ok" : "warn")} ${anchorStatusPill(item)}</strong>
+        <span class="small" title="${escapeHtml(item.anchorGeneratedAt ? `최종 수정: ${formatAnchorGeneratedAtTitle(item.anchorGeneratedAt)}` : "")}">문제·문항 위치맵: ${escapeHtml(item.anchorMap ? `${item.anchorStatus || "생성됨"} · ${Math.round(Number(item.anchorConfidence || 0) * 100)}%${anchorUpdatedText(item)}` : "없음")}\nOCR 텍스트: ${escapeHtml(item.questionDiagStatus || "미확인")}${item.published && item.needsOcr ? "\nOCR 진단이 있어도 원본 PDF와 정답 연결로 풀이 가능합니다." : ""}\n${escapeHtml(warningText(item.anchorWarnings || []))}</span>
       `;
       // SOFTM-OCR: 상세 화면에서 풀이 가능 상태와 OCR 텍스트 품질 경고를 분리해 표시 - 2026-05-30
       $("answerDiag").innerHTML = `
         <strong>정답 진단 ${diagPill(item.answerDiagStatus, item.answerDiagTone)}</strong>
         <span class="small">정답쌍 ${Number(item.answerPairs || 0).toLocaleString()}개 / 텍스트 ${Number(item.answerTextChars || 0).toLocaleString()}자\n${escapeHtml(warningText(item.answerDiagWarnings))}</span>
       `;
-      $("btnAnswerPdf").disabled = !item.answerPdf;
-      $("btnAnswerPdf").setAttribute("aria-disabled", item.answerPdf ? "false" : "true");
+      const answerSelect = $("answerFileSelect");
+      answerSelect.innerHTML = answerFiles.map((file, idx) => `<option value="${escapeHtml(file)}">${escapeHtml(answerFiles.length > 1 ? `정답 ${idx + 1}: ${fileNameFromPath(file) || file}` : fileNameFromPath(file) || file)}</option>`).join("");
+      answerSelect.hidden = answerFiles.length <= 1;
+      $("btnAnswerPdf").disabled = !answerFiles.length;
+      $("btnAnswerPdf").setAttribute("aria-disabled", answerFiles.length ? "false" : "true");
+      $("btnDownloadQuestionPdf").disabled = !item.questionPdf;
+      $("btnDownloadAnswerPdf").disabled = !answerFiles.length;
       if (!$("pdfTargetPath").value) selectPdfTarget(item.questionPdf, "문제", { silent: true });
     }
 
@@ -894,6 +1104,20 @@
       state.item = state.catalog.questions.find((item) => item.dataset === state.dataset && item.questionNo === state.questionNo) || null;
       if (!options.keepTarget) $("pdfTargetPath").value = "";
       renderQuestion();
+    }
+
+    async function reloadQuestionWithProgress(){
+      await withProgress({
+        title: "회차 다시 읽기",
+        steps: ["회차 정보 조회", "화면 갱신"],
+        message: "관리자 서버에서 현재 회차 정보를 다시 읽고 있습니다.",
+        doneMessage: "회차 정보를 다시 읽었습니다.",
+      }, async (progress) => {
+        progress.step(0, "running", "카탈로그와 회차 상태를 조회하고 있습니다.");
+        await loadQuestion({ keepTarget: true });
+        progress.step(0, "done");
+        progress.step(1, "done", "위치맵/OCR/정답 진단 표시를 갱신했습니다.");
+      });
     }
 
     function setPdfTabRole(role){
@@ -909,20 +1133,27 @@
         return "";
       }
       setPdfTabRole(role);
+      const isPdf = /\.pdf$/i.test(target);
       $("pdfTargetPath").value = target;
       $("pdfTargetPath").dataset.pdfRole = role;
-      $("pdfTargetHelp").textContent = `${role} PDF를 미리보기로 표시했습니다.`;
-      $("pdfPreviewFrame").src = `./${target}`;
-      $("pdfPreviewFrame").hidden = false;
-      $("emptyPreview").hidden = true;
+      $("pdfTargetHelp").textContent = `${role} ${isPdf ? "PDF를 미리보기로 표시했습니다." : "파일을 선택했습니다."}`;
+      if (isPdf) {
+        $("pdfPreviewFrame").src = `./${target}`;
+        $("pdfPreviewFrame").hidden = false;
+        $("emptyPreview").hidden = true;
+      } else {
+        $("pdfPreviewFrame").hidden = true;
+        $("emptyPreview").hidden = false;
+        $("emptyPreview").textContent = `${role} 파일은 PDF 미리보기를 지원하지 않습니다. 다운로드로 확인하세요.`;
+      }
       $("pdfDiagnoseStatus").classList.remove("warn");
       if (isDerivedPdfPath(target)) {
         $("pdfDiagnoseStatus").classList.add("warn");
         $("pdfDiagnoseStatus").innerHTML = `<div class="status">[${escapeHtml(role)} PDF 보기]</div>${derivedNoticeHtml(target)}`;
       } else {
-        $("pdfDiagnoseStatus").textContent = `[${role} PDF 보기]\n${target}\n\n문제·문항 위치맵 생성, PDF 진단 또는 보조 OCR을 실행할 수 있습니다.`;
+        $("pdfDiagnoseStatus").textContent = `[${role} ${isPdf ? "PDF 보기" : "파일 선택"}]\n${target}\n\n${isPdf ? "문제·문항 위치맵 생성, PDF 진단 또는 보조 OCR을 실행할 수 있습니다." : "PDF가 아닌 정답 파일은 다운로드로 확인하세요."}`;
       }
-      if (!options.silent) showToast(`${role} PDF를 미리보기로 표시했습니다.`, { title: "PDF 보기", tone: "ok", timeout: 2600 });
+      if (!options.silent) showToast(`${role} ${isPdf ? "PDF를 미리보기로 표시했습니다." : "파일을 선택했습니다."}`, { title: isPdf ? "PDF 보기" : "파일 선택", tone: "ok", timeout: 2600 });
       return target;
     }
     // SOFTM-ADMIN: 문제 PDF와 정답 PDF를 탭처럼 전환하며 현재 대상을 표시 - 2026-05-30
@@ -966,7 +1197,7 @@
     function diagnosisVerdict(data){
       if (data.needsOcr) {
         return {
-          label: "OCR 품질 경고",
+          label: "OCR",
           tone: "warn",
           message: "OCR 텍스트 품질 확인이 필요합니다.",
           detail: "이 경고는 검색/텍스트 레이어 품질 기준입니다. 원본 PDF와 정답 JSON이 있으면 풀이 게시를 막지 않습니다.",
@@ -1015,13 +1246,13 @@
             `).join("")}
           </div>
           <div>
-            <h3>OCR 품질 경고</h3>
+            <h3>OCR</h3>
             ${warnings.length
               ? `<ul class="warningList">${warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
               : `<div class="desc">OCR 위험 신호가 없습니다.</div>`}
           </div>
           <div class="diagnosisMessage">
-            ${escapeHtml(data.needsOcr ? "OCR 품질 경고는 보조 진단입니다. 원본 PDF와 정답 JSON이 연결된 회차는 그대로 풀이할 수 있습니다." : "OCR 품질은 정상이며, 풀이 가능 여부는 정답 JSON 연결 상태로 별도 판단합니다.")}
+            ${escapeHtml(data.needsOcr ? "OCR은 보조 진단입니다. 원본 PDF와 정답 연결이 있는 회차는 그대로 풀이할 수 있습니다." : "OCR 품질은 정상이며, 풀이 가능 여부는 정답 연결 상태로 별도 판단합니다.")}
           </div>
           ${managementWarnings.length ? `
             <div>
@@ -1076,13 +1307,15 @@
     function renderAnchorOcrResult(data){
       const confidence = Math.round(Number(data.confidence || 0) * 100);
       const warnings = Array.isArray(data.warnings) ? data.warnings.filter(Boolean) : [];
+      const generatedAt = formatAnchorGeneratedAt(data.generatedAt);
+      const generatedAtTitle = formatAnchorGeneratedAtTitle(data.generatedAt);
       $("pdfDiagnoseStatus").classList.toggle("warn", warnings.length > 0 || Number(data.confidence || 0) < 0.32);
       $("pdfDiagnoseStatus").innerHTML = `
         <div class="diagnosisResult ${warnings.length ? "warn" : ""}">
           <div class="diagnosisHeadline">
             <div>
               <h3 class="diagnosisTitle">문제·문항 위치맵: ${diagPill(data.status || "생성 완료", warnings.length ? "warn" : "ok")}</h3>
-              <div class="desc">감지 ${formatNumber(data.detected)}개 / 원시 후보 ${formatNumber(data.rawDetected)}개 · 신뢰도 ${confidence}% · ${formatDuration(data.elapsedMs)}</div>
+              <div class="desc">감지 ${formatNumber(data.detected)}개 / 원시 후보 ${formatNumber(data.rawDetected)}개 · 신뢰도 ${confidence}% · ${formatDuration(data.elapsedMs)}${generatedAt ? ` · <span title="${escapeHtml(generatedAtTitle)}">최종 수정 ${escapeHtml(generatedAt)}</span>` : ""}</div>
             </div>
             <div class="desc">${escapeHtml(data.output || "")}</div>
           </div>
@@ -1197,6 +1430,8 @@
     function renderAnchorMapCheck(data, pathValue){
       const report = analyzeAnchorMap(data);
       const confidence = Math.round(report.confidence * 100);
+      const generatedAt = formatAnchorGeneratedAt(data.generatedAt);
+      const generatedAtTitle = formatAnchorGeneratedAtTitle(data.generatedAt);
       const missingText = report.missing.length
         ? `${report.missing.slice(0, 30).join(", ")}${report.missing.length > 30 ? ` 외 ${report.missing.length - 30}개` : ""}`
         : "없음";
@@ -1216,9 +1451,9 @@
           <div class="diagnosisHeadline">
             <div>
               <h3 class="diagnosisTitle">위치맵 확인: ${diagPill(report.ok ? "정상" : "확인 필요", report.ok ? "ok" : "warn")}</h3>
-              <div class="desc">감지 ${formatNumber(report.detected)} / 문항 ${formatNumber(report.questionCount)} · 신뢰도 ${confidence}%</div>
+              <div class="desc">감지 ${formatNumber(report.detected)} / 문항 ${formatNumber(report.questionCount)} · 신뢰도 ${confidence}%${generatedAt ? ` · <span title="${escapeHtml(generatedAtTitle)}">최종 수정 ${escapeHtml(generatedAt)}</span>` : ""}</div>
             </div>
-            <a class="button primary" href="${escapeHtml(makeAnchorDebugQuizUrl(state.item))}" target="_blank" rel="noopener">풀이화면 위치 확인</a>
+                <a class="button primary" href="${escapeHtml(makeAnchorDebugQuizUrl(state.item))}" target="_blank" rel="noopener">풀이(위치)</a>
           </div>
           <div class="metricGrid">
             <div class="metricBox"><span class="metricLabel">위치맵</span><strong>${escapeHtml(report.ok ? "정상" : "확인 필요")}</strong><span class="metricHelp">${escapeHtml(normalizePath(pathValue))}</span></div>
@@ -1250,8 +1485,18 @@
     async function checkAnchorMapForCurrentQuestion(){
       const item = state.item;
       if (!item?.anchorMap) {
-        showToast("생성된 위치맵이 없습니다. 먼저 문제·문항 위치맵 생성을 실행하세요.", { title: "위치맵 없음", tone: "warn" });
-        $("pdfDiagnoseStatus").textContent = "위치맵이 없습니다. 문제·문항 위치맵 생성을 먼저 실행하세요.";
+        showToast("생성된 위치맵은 없지만 풀이화면에서 OCR/실시간 위치 추정은 확인할 수 있습니다.", { title: "위치맵 없음", tone: "warn" });
+        $("pdfDiagnoseStatus").innerHTML = `
+          <div class="diagnosisResult warn">
+            <div class="diagnosisHeadline">
+              <div>
+                <h3 class="diagnosisTitle">위치맵 확인: ${diagPill("미생성", "warn")}</h3>
+                <div class="desc">저장된 문제·문항 위치맵 JSON은 없습니다. 풀이화면은 OCR/실시간 패턴 위치를 다른 색으로 표시합니다.</div>
+              </div>
+              <a class="button primary" href="${escapeHtml(makeAnchorDebugQuizUrl(state.item))}" target="_blank" rel="noopener">풀이(위치)</a>
+            </div>
+          </div>
+        `;
         return;
       }
       await withProgress({
@@ -1331,6 +1576,133 @@
       }
     }
     // SOFTM-위치맵: 상세 화면에서 문제 PDF 이미지를 분석해 문제 시작 위치와 선택지 위치 JSON을 생성하는 흐름 추가 - 2026-05-30
+
+    async function deleteAnchorMapForCurrentQuestion(){
+      const item = state.item;
+      if (!item?.questionNo) {
+        showToast("삭제할 회차를 먼저 선택하세요.", { title: "위치맵 삭제", tone: "warn" });
+        return;
+      }
+      const anchorPath = normalizePath(item.anchorMap || "");
+      if (!anchorPath) {
+        showToast("삭제할 저장 위치맵이 없습니다.", { title: "위치맵 없음", tone: "warn" });
+        return;
+      }
+      const confirmed = await showConfirmDialog({
+        title: "위치맵 삭제",
+        message: `저장된 문제·문항 위치맵을 삭제합니다.\n\n대상: ${anchorPath}\n\n삭제하면 목록/상세의 위치맵 상태가 없음으로 바뀌고, 풀이화면은 저장 위치맵 대신 OCR/실시간 추정 좌표를 사용합니다.`,
+        confirmText: "삭제",
+        cancelText: "취소",
+      });
+      if (!confirmed) return;
+      $("btnDeleteAnchorMap").disabled = true;
+      try{
+        await withProgress({
+          title: "위치맵 삭제",
+          steps: ["삭제 확인", "파일 삭제", "회차 상태 갱신"],
+          message: "저장된 위치맵 파일과 manifest 연결을 삭제하고 있습니다.",
+          doneMessage: "위치맵이 삭제되었습니다.",
+        }, async (progress) => {
+          progress.step(0, "done", "삭제 확인 완료");
+          progress.step(1, "running", "위치맵 JSON 파일을 삭제하고 있습니다.");
+          const data = await api("/api/admin/anchor-delete", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              dataset: state.dataset,
+              questionNo: state.questionNo,
+              path: item.questionPdf || "",
+            }),
+          });
+          progress.step(1, "done", data.deleted?.length ? `삭제: ${data.deleted.join(", ")}` : "삭제할 파일 없음");
+          progress.step(2, "running", "회차 상태를 다시 읽고 있습니다.");
+          await loadQuestion({ keepTarget: true });
+          progress.step(2, "done");
+          $("pdfDiagnoseStatus").innerHTML = `
+            <div class="diagnosisResult warn">
+              <div class="diagnosisHeadline">
+                <div>
+                  <h3 class="diagnosisTitle">위치맵 삭제: ${diagPill("삭제됨", "warn")}</h3>
+                  <div class="desc">${escapeHtml(data.message || "위치맵을 삭제했습니다.")}</div>
+                </div>
+              </div>
+            </div>
+          `;
+          showToast("위치맵을 삭제했습니다.", { title: "위치맵 삭제", tone: "ok", timeout: 3200 });
+          return data;
+        });
+      } finally {
+        $("btnDeleteAnchorMap").disabled = false;
+      }
+    }
+    // SOFTM-위치맵: 상세 화면에서 저장 위치맵을 확인 후 삭제하고 상태를 갱신하는 기능 추가 - 2026-06-01
+
+    async function deleteManualAnchorsForCurrentQuestion(){
+      const item = state.item;
+      if (!item?.questionNo) {
+        showToast("회차를 먼저 선택하세요.", { title: "앵커 초기화", tone: "warn" });
+        return;
+      }
+      const anchorPath = normalizePath(item.anchorMap || "");
+      if (!anchorPath) {
+        showToast("저장된 위치맵이 없습니다.", { title: "앵커 초기화", tone: "warn" });
+        return;
+      }
+      const hasManual = await refreshManualAnchorDeleteButton(item);
+      if (!hasManual) {
+        showToast("초기화할 수정 앵커가 없습니다.", { title: "앵커 초기화", tone: "warn" });
+        return;
+      }
+      const confirmed = await showConfirmDialog({
+        title: "앵커 초기화",
+        message: `수정된 앵커를 초기화하고 원래 위치맵 값으로 되돌립니다.\n\n대상: ${anchorPath}\n\n위치맵 파일 자체는 삭제하지 않습니다.`,
+        confirmText: "초기화",
+        cancelText: "취소",
+      });
+      if (!confirmed) return;
+      $("btnDeleteManualAnchor").disabled = true;
+      try{
+        await withProgress({
+          title: "앵커 초기화",
+          steps: ["초기화 확인", "수정 앵커 원복", "회차 상태 갱신"],
+          message: "수정된 앵커를 원래 위치맵 값으로 되돌리고 있습니다.",
+          doneMessage: "수정 앵커가 삭제되었습니다.",
+        }, async (progress) => {
+          progress.step(0, "done", "초기화 확인 완료");
+          progress.step(1, "running", "수정 앵커를 원복하고 있습니다.");
+          const data = await api("/api/admin/anchor-manual-delete", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              dataset: state.dataset,
+              questionNo: state.questionNo,
+              anchorMapPath: anchorPath,
+              path: item.questionPdf || "",
+            }),
+          });
+          progress.step(1, "done", `${Number(data.restored || 0)}개 항목 원복`);
+          progress.step(2, "running", "회차 상태를 다시 읽고 있습니다.");
+          await loadQuestion({ keepTarget: true });
+          await refreshManualAnchorDeleteButton(state.item);
+          progress.step(2, "done");
+          $("pdfDiagnoseStatus").innerHTML = `
+            <div class="diagnosisResult ok">
+              <div class="diagnosisHeadline">
+                <div>
+                  <h3 class="diagnosisTitle">앵커 초기화: ${diagPill("완료", "ok")}</h3>
+                  <div class="desc">${escapeHtml(data.message || "수정 앵커를 삭제했습니다.")}</div>
+                </div>
+              </div>
+            </div>
+          `;
+          showToast("수정 앵커를 초기화했습니다.", { title: "앵커 초기화", tone: "ok", timeout: 3200 });
+          return data;
+        });
+      } finally {
+        refreshManualAnchorDeleteButton(state.item).catch(() => setManualAnchorDeleteButton(false, "수정된 앵커 상태 확인 실패"));
+      }
+    }
+    // SOFTM-ANCHOR: 상세 화면에서 수동 편집 앵커가 있을 때만 삭제 버튼을 활성화하고 원본 위치맵으로 복원 - 2026-06-01
 
     function renderOcrJobStatus(job){
       const logs = Array.isArray(job.logs) ? job.logs.slice(-30).join("\n") : "";
@@ -1500,7 +1872,7 @@
           await loadQuestion({ keepTarget: true });
           progress.step(2, "done");
           if (qualityPassed) showToast("OCR PDF가 생성되고 품질 기준을 통과했습니다.", { title: "OCR 완료", tone: "ok" });
-          else showToast("OCR 사본은 품질 미달로 보관했습니다. 원본 PDF로 풀이 가능합니다.", { title: "OCR 품질 경고", tone: "warn", timeout: 6200 });
+          else showToast("OCR 사본은 품질 미달로 보관했습니다. 원본 PDF로 풀이 가능합니다.", { title: "OCR", tone: "warn", timeout: 6200 });
         }finally{
           state.activeOcrJobId = "";
           $("progressCancel").hidden = true;
@@ -1515,7 +1887,13 @@
     // SOFTM-OCR: OCR 실행 버튼을 보조 작업으로 명확히 표시해 게시/풀이 기준과 혼동되지 않도록 조정 - 2026-05-30
 
     $("btnQuestionPdf").addEventListener("click", () => selectPdfTarget(state.item?.questionPdf, "문제"));
-    $("btnAnswerPdf").addEventListener("click", () => selectPdfTarget(state.item?.answerPdf, "정답"));
+    $("btnAnswerPdf").addEventListener("click", () => selectPdfTarget(getSelectedAnswerFile(), "정답"));
+    $("btnDownloadQuestionPdf").addEventListener("click", () => downloadManagedFile(state.item?.questionPdf, "문제 PDF"));
+    $("btnDownloadAnswerPdf").addEventListener("click", () => downloadManagedFile(getSelectedAnswerFile(), "정답 파일"));
+    $("answerFileSelect").addEventListener("change", () => {
+      const target = getSelectedAnswerFile();
+      if (target) selectPdfTarget(target, "정답", { silent: true });
+    });
     $("btnOpenPdf").addEventListener("click", openSelectedPdf);
     $("btnPdfDiagnose").addEventListener("click", () => diagnosePdf("", "PDF", { showProgress: true }).catch((err) => {
       if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
@@ -1533,9 +1911,19 @@
       if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
       showToast(err.message, { title: "위치맵 확인 실패", tone: "error" });
     }));
+    $("btnDeleteAnchorMap").addEventListener("click", () => deleteAnchorMapForCurrentQuestion().catch((err) => {
+      $("btnDeleteAnchorMap").disabled = false;
+      if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
+      showToast(err.message, { title: "위치맵 삭제 실패", tone: "error" });
+    }));
+    $("btnDeleteManualAnchor").addEventListener("click", () => deleteManualAnchorsForCurrentQuestion().catch((err) => {
+      refreshManualAnchorDeleteButton(state.item).catch(() => setManualAnchorDeleteButton(false, "수정된 앵커 상태 확인 실패"));
+      if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
+      showToast(err.message, { title: "앵커 초기화 실패", tone: "error" });
+    }));
     // SOFTM-OCR: OCR 실패 시 진행 로그 카드가 단순 오류 문구로 덮이지 않도록 보정 - 2026-05-30
     // SOFTM-위치맵: 위치맵 생성 버튼 오류도 토스트와 상태 영역에 명확히 표시 - 2026-05-30
-    $("btnReload").addEventListener("click", () => loadQuestion({ keepTarget: true }).catch((err) => showToast(err.message, { title: "다시 읽기 실패", tone: "error" })));
+    $("btnReload").addEventListener("click", () => reloadQuestionWithProgress().catch((err) => showToast(err.message, { title: "다시 읽기 실패", tone: "error" })));
     $("progressCancel").addEventListener("click", async () => {
       const jobId = await findCancelableOcrJobId().catch(() => "");
       const target = normalizePath($("pdfTargetPath").value);

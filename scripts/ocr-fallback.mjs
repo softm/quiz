@@ -11,6 +11,7 @@ const dpi = Number(process.env.QUIZ_OCR_DPI || 300); // SOFTM-OCR: 직접 텍스
 const psm = String(process.env.QUIZ_OCR_PSM || "4"); // SOFTM-OCR: 한국어 문제지는 단락 기반 PSM이 본문 OCR 품질이 높아 기본값을 조정 - 2026-05-30
 const language = String(process.env.QUIZ_OCR_LANG || "kor"); // SOFTM-OCR: 한국어 시험지 본문 오인식을 줄이도록 fallback OCR 기본 언어를 한국어 우선으로 조정 - 2026-05-30
 const tessdataDir = String(process.env.QUIZ_OCR_TESSDATA_DIR || "");
+const ocrMaxHeight = Number(process.env.QUIZ_OCR_MAX_H || "30000");
 
 if (!inputAbs || !outputAbs) {
   console.error("usage: node scripts/ocr-fallback.mjs <input.pdf> <output.pdf>");
@@ -31,6 +32,28 @@ function run(command, args){
       reject(new Error(`${command} failed with code ${code ?? "-"}${signal ? `, signal ${signal}` : ""}`));
     });
   });
+}
+
+async function ensureOcrSafeImage(imagePath) {
+  const target = `x${ocrMaxHeight}>`;
+  try {
+    await run("magick", [imagePath, "-resize", target, imagePath]);
+    return;
+  } catch (magickErr) {
+    // ImageMagick 6 환경이나 구버전에서 magick 바인딩이 없는 경우 fallback
+    try {
+      await run("convert", [imagePath, "-resize", target, imagePath]);
+      return;
+    } catch (convertErr) {
+      // 전처리가 되지 않아도 OCR 실행은 계속 시도하고,
+      // 이 경우 에러는 tesseract 실행 단계에서 본질적으로 드러납니다.
+      console.warn(
+        `WARN: image resize fallback failed (${path.basename(imagePath)}).`,
+      );
+      console.warn(` - magick: ${magickErr?.message || magickErr}`);
+      console.warn(` - convert: ${convertErr?.message || convertErr}`);
+    }
+  }
 }
 
 async function main(){
@@ -55,6 +78,7 @@ async function main(){
     for (let i = 0; i < images.length; i += 1) {
       const base = path.join(tempDir, `ocr-${String(i + 1).padStart(4, "0")}`);
       console.log(`FALLBACK page ${i + 1}/${images.length}`);
+      await ensureOcrSafeImage(images[i]);
       const tessArgs = tessdataDir ? ["--tessdata-dir", tessdataDir] : [];
       await run("tesseract", [...tessArgs, images[i], base, "-l", language, "--psm", psm, "txt", "hocr"]); // SOFTM-OCR: PDF 텍스트 레이어를 원문 좌표에 맞추도록 hOCR bbox도 함께 생성 - 2026-05-30
     }
