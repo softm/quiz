@@ -38,5 +38,15 @@
     "catPath": "quiz/pdf/방통대/모바일앱프로그래밍",
     "depth": 2,
     "seq": 4
+  },
+  {
+    "gNo": "03",
+    "gNm": "방통대",
+    "catNm": "Java프로그래밍",
+    "catNo": "0005",
+    "parentCatNo": "0003",
+    "catPath": "quiz/pdf/방통대/Java프로그래밍",
+    "depth": 2,
+    "seq": 5
   }
 ]
