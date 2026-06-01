@@ -1,0 +1,2335 @@
+{
+  "version": 1,
+  "kind": "question-anchor-map",
+  "questionNo": "0020",
+  "questionPdf": "pdf/방통대/모바일앱프로그래밍/[기출문제] [2018-1학기] 기말시험 기출문제.pdf",
+  "pageCount": 3,
+  "questionCount": 25,
+  "choiceCount": 4,
+  "questionStartNo": 36,
+  "questionEndNo": 60,
+  "printedQuestionNoMap": [
+    null,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60
+  ],
+  "questionLabelMap": {
+    "1": {
+      "page": 1,
+      "xRatio": 0.04488330341113106,
+      "yRatio": 0.13696892834495877,
+      "anchorColumn": 0
+    },
+    "2": {
+      "page": 1,
+      "xRatio": 0.04488330341113106,
+      "yRatio": 0.35351934051997463,
+      "anchorColumn": 0
+    },
+    "3": {
+      "page": 1,
+      "xRatio": 0.04488330341113106,
+      "yRatio": 0.7422320862396956,
+      "anchorColumn": 0
+    },
+    "4": {
+      "page": 1,
+      "xRatio": 0.04488330341113106,
+      "yRatio": 0.858275206087508,
+      "anchorColumn": 0
+    },
+    "5": {
+      "page": 1,
+      "xRatio": 0.5098743267504489,
+      "yRatio": 0.05326569435637286,
+      "anchorColumn": 1
+    },
+    "6": {
+      "page": 1,
+      "xRatio": 0.5098743267504489,
+      "yRatio": 0.17374762206721622,
+      "anchorColumn": 1
+    },
+    "7": {
+      "page": 1,
+      "xRatio": 0.5098743267504489,
+      "yRatio": 0.50285351934052,
+      "anchorColumn": 1
+    },
+    "8": {
+      "page": 1,
+      "xRatio": 0.5098743267504489,
+      "yRatio": 0.6081166772352569,
+      "anchorColumn": 1
+    },
+    "9": {
+      "page": 1,
+      "xRatio": 0.5098743267504489,
+      "yRatio": 0.6984781230183893,
+      "anchorColumn": 1
+    },
+    "10": {
+      "page": 1,
+      "xRatio": 0.5098743267504489,
+      "yRatio": 0.8189600507292327,
+      "anchorColumn": 1
+    },
+    "11": {
+      "page": 2,
+      "xRatio": 0.04488330341113106,
+      "yRatio": 0.05326569435637286,
+      "anchorColumn": 0
+    },
+    "12": {
+      "page": 2,
+      "xRatio": 0.04488330341113106,
+      "yRatio": 0.15377298668357642,
+      "anchorColumn": 0
+    },
+    "13": {
+      "page": 2,
+      "xRatio": 0.04488330341113106,
+      "yRatio": 0.2710843373493976,
+      "anchorColumn": 0
+    },
+    "14": {
+      "page": 2,
+      "xRatio": 0.04488330341113106,
+      "yRatio": 0.849714648065948,
+      "anchorColumn": 0
+    },
+    "15": {
+      "page": 2,
+      "xRatio": 0.5103231597845601,
+      "yRatio": 0.05326569435637286,
+      "anchorColumn": 1
+    },
+    "16": {
+      "page": 2,
+      "xRatio": 0.5103231597845601,
+      "yRatio": 0.4524413443246671,
+      "anchorColumn": 1
+    },
+    "17": {
+      "page": 2,
+      "xRatio": 0.5103231597845601,
+      "yRatio": 0.6255548509828789,
+      "anchorColumn": 1
+    },
+    "18": {
+      "page": 2,
+      "xRatio": 0.5103231597845601,
+      "yRatio": 0.7672796448953709,
+      "anchorColumn": 1
+    },
+    "19": {
+      "page": 2,
+      "xRatio": 0.5103231597845601,
+      "yRatio": 0.8776157260621433,
+      "anchorColumn": 1
+    },
+    "20": {
+      "page": 3,
+      "xRatio": 0.04533213644524237,
+      "yRatio": 0.05326569435637286,
+      "anchorColumn": 0
+    },
+    "21": {
+      "page": 3,
+      "xRatio": 0.04533213644524237,
+      "yRatio": 0.21179454660748256,
+      "anchorColumn": 0
+    },
+    "22": {
+      "page": 3,
+      "xRatio": 0.04533213644524237,
+      "yRatio": 0.33893468611287253,
+      "anchorColumn": 0
+    },
+    "23": {
+      "page": 3,
+      "xRatio": 0.04533213644524237,
+      "yRatio": 0.48161065313887125,
+      "anchorColumn": 0
+    },
+    "25": {
+      "page": 3,
+      "xRatio": 0.5103231597845601,
+      "yRatio": 0.26886493341788203,
+      "anchorColumn": 0
+    }
+  },
+  "questionColumnBoundsMap": {
+    "1": {
+      "page": 1,
+      "left": 0,
+      "right": 0.5148114901256733,
+      "split": 0.4997755834829444,
+      "column": 0,
+      "source": "anchor-column"
+    },
+    "2": {
+      "page": 1,
+      "left": 0,
+      "right": 0.5148114901256733,
+      "split": 0.4997755834829444,
+      "column": 0,
+      "source": "anchor-column"
+    },
+    "3": {
+      "page": 1,
+      "left": 0,
+      "right": 0.5148114901256733,
+      "split": 0.4997755834829444,
+      "column": 0,
+      "source": "anchor-column"
+    },
+    "4": {
+      "page": 1,
+      "left": 0,
+      "right": 0.5148114901256733,
+      "split": 0.4997755834829444,
+      "column": 0,
+      "source": "anchor-column"
+    },
+    "5": {
+      "page": 1,
+      "left": 0.48473967684021546,
+      "right": 0.9596050269299821,
+      "split": 0.4997755834829444,
+      "column": 1,
+      "source": "anchor-column"
+    },
+    "6": {
+      "page": 1,
+      "left": 0.48473967684021546,
+      "right": 0.9596050269299821,
+      "split": 0.4997755834829444,
+      "column": 1,
+      "source": "anchor-column"
+    },
+    "7": {
+      "page": 1,
+      "left": 0.48473967684021546,
+      "right": 0.9596050269299821,
+      "split": 0.4997755834829444,
+      "column": 1,
+      "source": "anchor-column"
+    },
+    "8": {
+      "page": 1,
+      "left": 0.48473967684021546,
+      "right": 0.9596050269299821,
+      "split": 0.4997755834829444,
+      "column": 1,
+      "source": "anchor-column"
+    },
+    "9": {
+      "page": 1,
+      "left": 0.48473967684021546,
+      "right": 0.9596050269299821,
+      "split": 0.4997755834829444,
+      "column": 1,
+      "source": "anchor-column"
+    },
+    "10": {
+      "page": 1,
+      "left": 0.48473967684021546,
+      "right": 0.9596050269299821,
+      "split": 0.4997755834829444,
+      "column": 1,
+      "source": "anchor-column"
+    },
+    "11": {
+      "page": 2,
+      "left": 0,
+      "right": 0.5148114901256733,
+      "split": 0.4997755834829444,
+      "column": 0,
+      "source": "anchor-column"
+    },
+    "12": {
+      "page": 2,
+      "left": 0,
+      "right": 0.5148114901256733,
+      "split": 0.4997755834829444,
+      "column": 0,
+      "source": "anchor-column"
+    },
+    "13": {
+      "page": 2,
+      "left": 0,
+      "right": 0.5148114901256733,
+      "split": 0.4997755834829444,
+      "column": 0,
+      "source": "anchor-column"
+    },
+    "14": {
+      "page": 2,
+      "left": 0,
+      "right": 0.5148114901256733,
+      "split": 0.4997755834829444,
+      "column": 0,
+      "source": "anchor-column"
+    },
+    "15": {
+      "page": 2,
+      "left": 0.48473967684021546,
+      "right": 0.9596050269299821,
+      "split": 0.4997755834829444,
+      "column": 1,
+      "source": "anchor-column"
+    },
+    "16": {
+      "page": 2,
+      "left": 0.48473967684021546,
+      "right": 0.9596050269299821,
+      "split": 0.4997755834829444,
+      "column": 1,
+      "source": "anchor-column"
+    },
+    "17": {
+      "page": 2,
+      "left": 0.48473967684021546,
+      "right": 0.9596050269299821,
+      "split": 0.4997755834829444,
+      "column": 1,
+      "source": "anchor-column"
+    },
+    "18": {
+      "page": 2,
+      "left": 0.48473967684021546,
+      "right": 0.9596050269299821,
+      "split": 0.4997755834829444,
+      "column": 1,
+      "source": "anchor-column"
+    },
+    "19": {
+      "page": 2,
+      "left": 0.48473967684021546,
+      "right": 0.9596050269299821,
+      "split": 0.4997755834829444,
+      "column": 1,
+      "source": "anchor-column"
+    },
+    "20": {
+      "page": 3,
+      "left": 0,
+      "right": 0.5148114901256733,
+      "split": 0.4997755834829444,
+      "column": 0,
+      "source": "anchor-column"
+    },
+    "21": {
+      "page": 3,
+      "left": 0,
+      "right": 0.5148114901256733,
+      "split": 0.4997755834829444,
+      "column": 0,
+      "source": "anchor-column"
+    },
+    "22": {
+      "page": 3,
+      "left": 0,
+      "right": 0.5148114901256733,
+      "split": 0.4997755834829444,
+      "column": 0,
+      "source": "anchor-column"
+    },
+    "23": {
+      "page": 3,
+      "left": 0,
+      "right": 0.5148114901256733,
+      "split": 0.4997755834829444,
+      "column": 0,
+      "source": "anchor-column"
+    },
+    "24": {
+      "page": 3,
+      "left": 0.48473967684021546,
+      "right": 0.9596050269299821,
+      "split": 0.4997755834829444,
+      "column": 1,
+      "source": "inferred-column"
+    },
+    "25": {
+      "page": 3,
+      "left": 0,
+      "right": 0.5148114901256733,
+      "split": 0.4997755834829444,
+      "column": 0,
+      "source": "anchor-column"
+    }
+  },
+  "questionSegments": {
+    "1": [
+      {
+        "page": 1,
+        "top": 0.08196892834495878,
+        "bottom": 0.3335193405199746,
+        "left": 0,
+        "right": 0.5148114901256733,
+        "column": 0,
+        "source": "column-segment"
+      }
+    ],
+    "2": [
+      {
+        "page": 1,
+        "top": 0.3335193405199746,
+        "bottom": 0.7222320862396956,
+        "left": 0,
+        "right": 0.5148114901256733,
+        "column": 0,
+        "source": "column-segment"
+      }
+    ],
+    "3": [
+      {
+        "page": 1,
+        "top": 0.7222320862396956,
+        "bottom": 0.8382752060875079,
+        "left": 0,
+        "right": 0.5148114901256733,
+        "column": 0,
+        "source": "column-segment"
+      }
+    ],
+    "4": [
+      {
+        "page": 1,
+        "top": 0.8382752060875079,
+        "bottom": 0.97,
+        "left": 0,
+        "right": 0.5148114901256733,
+        "column": 0,
+        "source": "column-segment"
+      }
+    ],
+    "5": [
+      {
+        "page": 1,
+        "top": 0.035,
+        "bottom": 0.15374762206721623,
+        "left": 0.48473967684021546,
+        "right": 0.9596050269299821,
+        "column": 1,
+        "source": "column-segment"
+      }
+    ],
+    "6": [
+      {
+        "page": 1,
+        "top": 0.15374762206721623,
+        "bottom": 0.48285351934052,
+        "left": 0.48473967684021546,
+        "right": 0.9596050269299821,
+        "column": 1,
+        "source": "column-segment"
+      }
+    ],
+    "7": [
+      {
+        "page": 1,
+        "top": 0.48285351934052,
+        "bottom": 0.5881166772352568,
+        "left": 0.48473967684021546,
+        "right": 0.9596050269299821,
+        "column": 1,
+        "source": "column-segment"
+      }
+    ],
+    "8": [
+      {
+        "page": 1,
+        "top": 0.5881166772352568,
+        "bottom": 0.6784781230183893,
+        "left": 0.48473967684021546,
+        "right": 0.9596050269299821,
+        "column": 1,
+        "source": "column-segment"
+      }
+    ],
+    "9": [
+      {
+        "page": 1,
+        "top": 0.6784781230183893,
+        "bottom": 0.7989600507292327,
+        "left": 0.48473967684021546,
+        "right": 0.9596050269299821,
+        "column": 1,
+        "source": "column-segment"
+      }
+    ],
+    "10": [
+      {
+        "page": 1,
+        "top": 0.7989600507292327,
+        "bottom": 0.954712111604312,
+        "left": 0.48473967684021546,
+        "right": 0.9596050269299821,
+        "column": 1,
+        "source": "column-segment"
+      }
+    ],
+    "11": [
+      {
+        "page": 2,
+        "top": 0.035,
+        "bottom": 0.13377298668357643,
+        "left": 0,
+        "right": 0.5148114901256733,
+        "column": 0,
+        "source": "column-segment"
+      }
+    ],
+    "12": [
+      {
+        "page": 2,
+        "top": 0.13377298668357643,
+        "bottom": 0.25108433734939756,
+        "left": 0,
+        "right": 0.5148114901256733,
+        "column": 0,
+        "source": "column-segment"
+      }
+    ],
+    "13": [
+      {
+        "page": 2,
+        "top": 0.25108433734939756,
+        "bottom": 0.829714648065948,
+        "left": 0,
+        "right": 0.5148114901256733,
+        "column": 0,
+        "source": "column-segment"
+      }
+    ],
+    "14": [
+      {
+        "page": 2,
+        "top": 0.829714648065948,
+        "bottom": 0.97,
+        "left": 0,
+        "right": 0.5148114901256733,
+        "column": 0,
+        "source": "column-segment"
+      }
+    ],
+    "15": [
+      {
+        "page": 2,
+        "top": 0.035,
+        "bottom": 0.4324413443246671,
+        "left": 0.48473967684021546,
+        "right": 0.9596050269299821,
+        "column": 1,
+        "source": "column-segment"
+      }
+    ],
+    "16": [
+      {
+        "page": 2,
+        "top": 0.4324413443246671,
+        "bottom": 0.6055548509828789,
+        "left": 0.48473967684021546,
+        "right": 0.9596050269299821,
+        "column": 1,
+        "source": "column-segment"
+      }
+    ],
+    "17": [
+      {
+        "page": 2,
+        "top": 0.6055548509828789,
+        "bottom": 0.7472796448953709,
+        "left": 0.48473967684021546,
+        "right": 0.9596050269299821,
+        "column": 1,
+        "source": "column-segment"
+      }
+    ],
+    "18": [
+      {
+        "page": 2,
+        "top": 0.7472796448953709,
+        "bottom": 0.8576157260621433,
+        "left": 0.48473967684021546,
+        "right": 0.9596050269299821,
+        "column": 1,
+        "source": "column-segment"
+      }
+    ],
+    "19": [
+      {
+        "page": 2,
+        "top": 0.8576157260621433,
+        "bottom": 0.97,
+        "left": 0.48473967684021546,
+        "right": 0.9596050269299821,
+        "column": 1,
+        "source": "column-segment"
+      }
+    ],
+    "20": [
+      {
+        "page": 3,
+        "top": 0.035,
+        "bottom": 0.19179454660748257,
+        "left": 0,
+        "right": 0.5148114901256733,
+        "column": 0,
+        "source": "column-segment"
+      }
+    ],
+    "21": [
+      {
+        "page": 3,
+        "top": 0.19179454660748257,
+        "bottom": 0.3189346861128725,
+        "left": 0,
+        "right": 0.5148114901256733,
+        "column": 0,
+        "source": "column-segment"
+      }
+    ],
+    "22": [
+      {
+        "page": 3,
+        "top": 0.3189346861128725,
+        "bottom": 0.46161065313887123,
+        "left": 0,
+        "right": 0.5148114901256733,
+        "column": 0,
+        "source": "column-segment"
+      }
+    ],
+    "23": [
+      {
+        "page": 3,
+        "top": 0.46161065313887123,
+        "bottom": 0.95,
+        "left": 0,
+        "right": 0.5148114901256733,
+        "column": 0,
+        "source": "column-segment"
+      }
+    ],
+    "24": [
+      {
+        "page": 3,
+        "top": 0.32023779327837665,
+        "bottom": 0.95,
+        "left": 0.48473967684021546,
+        "right": 0.9596050269299821,
+        "column": 1,
+        "source": "column-segment"
+      }
+    ],
+    "25": [
+      {
+        "page": 3,
+        "top": 0.24886493341788204,
+        "bottom": 0.95,
+        "left": 0,
+        "right": 0.5148114901256733,
+        "column": 0,
+        "source": "column-segment"
+      }
+    ]
+  },
+  "questionPageMap": [
+    null,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3
+  ],
+  "questionTopRatioMap": [
+    null,
+    0.08196892834495878,
+    0.29851934051997464,
+    0.6872320862396956,
+    0.8032752060875079,
+    0.035,
+    0.11874762206721623,
+    0.44785351934052003,
+    0.5531166772352568,
+    0.6434781230183892,
+    0.7639600507292327,
+    0.035,
+    0.09877298668357642,
+    0.21608433734939758,
+    0.8090957514267597,
+    0.035,
+    0.3974413443246671,
+    0.5705548509828788,
+    0.7309410272669626,
+    0.8226157260621433,
+    0.035,
+    0.17513887127457195,
+    0.28393468611287254,
+    0.42661065313887125,
+    0.32023779327837665,
+    0.21386493341788204
+  ],
+  "choiceAnchorMap": {
+    "1": [
+      {
+        "choice": 1,
+        "page": 1,
+        "xRatio": 0.07338420107719928,
+        "yRatio": 0.19213696892834495,
+        "wRatio": 0.011220825852782765,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 2,
+        "page": 1,
+        "xRatio": 0.27176840215439857,
+        "yRatio": 0.19150285351934052,
+        "wRatio": 0.013016157989228007,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 3,
+        "page": 1,
+        "xRatio": 0.07338420107719928,
+        "yRatio": 0.26854787571337985,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 4,
+        "page": 1,
+        "xRatio": 0.2710951526032316,
+        "yRatio": 0.26854787571337985,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      }
+    ],
+    "2": [
+      {
+        "choice": 1,
+        "page": 1,
+        "xRatio": 0.07921903052064631,
+        "yRatio": 0.5616677235256817,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 1,
+        "xRatio": 0.07921903052064631,
+        "yRatio": 0.577996195307546,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 1,
+        "xRatio": 0.07921903052064631,
+        "yRatio": 0.6429930247305009,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 1,
+        "xRatio": 0.07293536804308798,
+        "yRatio": 0.6642358909321496,
+        "wRatio": 0.012118491921005385,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "3": [
+      {
+        "choice": 1,
+        "page": 1,
+        "xRatio": 0.07405745062836624,
+        "yRatio": 0.7809131261889664,
+        "wRatio": 0.011669658886894075,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 1,
+        "xRatio": 0.07338420107719928,
+        "yRatio": 0.7967660114140773,
+        "wRatio": 0.013016157989228007,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 1,
+        "xRatio": 0.07338420107719928,
+        "yRatio": 0.8132530120481928,
+        "wRatio": 0.013016157989228007,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 1,
+        "xRatio": 0.0742818671454219,
+        "yRatio": 0.8298985415345593,
+        "wRatio": 0.011220825852782765,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "4": [
+      {
+        "choice": 1,
+        "page": 1,
+        "xRatio": 0.0742818671454219,
+        "yRatio": 0.8961636017755231,
+        "wRatio": 0.011220825852782765,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 1,
+        "xRatio": 0.07360861759425494,
+        "yRatio": 0.9120164870006341,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 1,
+        "xRatio": 0.07293536804308798,
+        "yRatio": 0.929296131896005,
+        "wRatio": 0.012118491921005385,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 1,
+        "xRatio": 0.07271095152603231,
+        "yRatio": 0.9457831325301205,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "5": [
+      {
+        "choice": 1,
+        "page": 1,
+        "xRatio": 0.5691202872531418,
+        "yRatio": 0.10304375396322131,
+        "wRatio": 0.07360861759425494,
+        "hRatio": 0.012,
+        "source": "anchor-ocr-token",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 1,
+        "xRatio": 0.5392728904847397,
+        "yRatio": 0.11715282181357008,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 1,
+        "xRatio": 0.5383752244165171,
+        "yRatio": 0.13316423589093215,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 1,
+        "xRatio": 0.5379263913824057,
+        "yRatio": 0.14806594800253647,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "6": [
+      {
+        "choice": 1,
+        "page": 1,
+        "xRatio": 0.5451077199281867,
+        "yRatio": 0.19340519974635384,
+        "wRatio": 0.011220825852782765,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 1,
+        "xRatio": 0.5444344703770198,
+        "yRatio": 0.22828154724159797,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 1,
+        "xRatio": 0.5444344703770198,
+        "yRatio": 0.2450856055802156,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 1,
+        "xRatio": 0.5646319569120287,
+        "yRatio": 0.262999365884591,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "7": [
+      {
+        "choice": 1,
+        "page": 1,
+        "xRatio": 0.5601436265709157,
+        "yRatio": 0.5401077996195307,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 2,
+        "page": 1,
+        "xRatio": 0.7473070017953322,
+        "yRatio": 0.5377298668357641,
+        "wRatio": 0.012567324955116697,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 3,
+        "page": 1,
+        "xRatio": 0.5599192100538599,
+        "yRatio": 0.5829105897273303,
+        "wRatio": 0.010323159784560144,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 4,
+        "page": 1,
+        "xRatio": 0.7544883303411131,
+        "yRatio": 0.5829105897273303,
+        "wRatio": 0.010771992818671455,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      }
+    ],
+    "8": [
+      {
+        "choice": 1,
+        "page": 1,
+        "xRatio": 0.5381508078994613,
+        "yRatio": 0.6588459099556119,
+        "wRatio": 0.010771992818671455,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 2,
+        "page": 1,
+        "xRatio": 0.7367594254937163,
+        "yRatio": 0.6574191502853519,
+        "wRatio": 0.013016157989228007,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 3,
+        "page": 1,
+        "xRatio": 0.5388240574506283,
+        "yRatio": 0.6739061509194674,
+        "wRatio": 0.013016157989228007,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 4,
+        "page": 1,
+        "xRatio": 0.7358617594254937,
+        "yRatio": 0.6731135066582118,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      }
+    ],
+    "9": [
+      {
+        "choice": 1,
+        "page": 1,
+        "xRatio": 0.5731597845601436,
+        "yRatio": 0.7187698161065313,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 1,
+        "xRatio": 0.5747307001795332,
+        "yRatio": 0.74857324032974,
+        "wRatio": 0.013016157989228007,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 1,
+        "xRatio": 0.5596947935368043,
+        "yRatio": 0.7634749524413443,
+        "wRatio": 0.010771992818671455,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 1,
+        "xRatio": 0.5747307001795332,
+        "yRatio": 0.7786937222574508,
+        "wRatio": 0.013016157989228007,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "10": [
+      {
+        "choice": 1,
+        "page": 1,
+        "xRatio": 0.5617145421903053,
+        "yRatio": 0.8389346861128726,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 1,
+        "xRatio": 0.5583482944344704,
+        "yRatio": 0.8688966391883323,
+        "wRatio": 0.010771992818671455,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 1,
+        "xRatio": 0.5596947935368043,
+        "yRatio": 0.8845909955611921,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 1,
+        "xRatio": 0.5614901256732495,
+        "yRatio": 0.901712111604312,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "11": [
+      {
+        "choice": 1,
+        "page": 2,
+        "xRatio": 0.07338420107719928,
+        "yRatio": 0.07466708941027267,
+        "wRatio": 0.013016157989228007,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 2,
+        "xRatio": 0.07383303411131059,
+        "yRatio": 0.10716550412175016,
+        "wRatio": 0.012118491921005385,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 2,
+        "xRatio": 0.07293536804308798,
+        "yRatio": 0.12492073557387444,
+        "wRatio": 0.012118491921005385,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 2,
+        "xRatio": 0.07293536804308798,
+        "yRatio": 0.14184024427228364,
+        "wRatio": 0.012118491921005385,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline-inferred-trailing",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.62
+      }
+    ],
+    "12": [
+      {
+        "choice": 1,
+        "page": 2,
+        "xRatio": 0.07338420107719928,
+        "yRatio": 0.19197844007609385,
+        "wRatio": 0.013016157989228007,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 2,
+        "xRatio": 0.0933572710951526,
+        "yRatio": 0.20862396956246038,
+        "wRatio": 0.010771992818671455,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 2,
+        "xRatio": 0.07383303411131059,
+        "yRatio": 0.22463538363982244,
+        "wRatio": 0.012118491921005385,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 2,
+        "xRatio": 0.10412926391382406,
+        "yRatio": 0.24239061509194673,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "13": [
+      {
+        "choice": 1,
+        "page": 2,
+        "xRatio": 0.08886894075403949,
+        "yRatio": 0.5673747622067217,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 2,
+        "xRatio": 0.08886894075403949,
+        "yRatio": 0.7319277108433735,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 2,
+        "xRatio": 0.07473070017953322,
+        "yRatio": 0.7699746353836399,
+        "wRatio": 0.010323159784560144,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 2,
+        "xRatio": 0.07405745062836624,
+        "yRatio": 0.7870957514267597,
+        "wRatio": 0.011669658886894075,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "14": [
+      {
+        "choice": 1,
+        "page": 2,
+        "xRatio": 0.07405745062836624,
+        "yRatio": 0.8717501585288523,
+        "wRatio": 0.011669658886894075,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 2,
+        "xRatio": 0.07383303411131059,
+        "yRatio": 0.8920418516169943,
+        "wRatio": 0.012118491921005385,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 2,
+        "xRatio": 0.07473070017953322,
+        "yRatio": 0.9083703233988586,
+        "wRatio": 0.010323159784560144,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 2,
+        "xRatio": 0.07315978456014363,
+        "yRatio": 0.9280279010779962,
+        "wRatio": 0.012567324955116697,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "15": [
+      {
+        "choice": 1,
+        "page": 2,
+        "xRatio": 0.5383752244165171,
+        "yRatio": 0.31531388712745717,
+        "wRatio": 0.013016157989228007,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 2,
+        "xRatio": 0.5561041292639138,
+        "yRatio": 0.33243500317057706,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 2,
+        "xRatio": 0.5390484739676841,
+        "yRatio": 0.34575142675967024,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 2,
+        "xRatio": 0.5558797127468582,
+        "yRatio": 0.36382371591629675,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "16": [
+      {
+        "choice": 1,
+        "page": 2,
+        "xRatio": 0.5619389587073609,
+        "yRatio": 0.47257450856055805,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 2,
+        "xRatio": 0.559245960502693,
+        "yRatio": 0.4885859226379201,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 2,
+        "xRatio": 0.5388240574506283,
+        "yRatio": 0.5053899809765378,
+        "wRatio": 0.013016157989228007,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 2,
+        "xRatio": 0.5383752244165171,
+        "yRatio": 0.5358275206087508,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "17": [
+      {
+        "choice": 1,
+        "page": 2,
+        "xRatio": 0.5381508078994613,
+        "yRatio": 0.6467977171845276,
+        "wRatio": 0.010771992818671455,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 2,
+        "xRatio": 0.559245960502693,
+        "yRatio": 0.676284083703234,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 2,
+        "xRatio": 0.5601436265709157,
+        "yRatio": 0.6934051997463538,
+        "wRatio": 0.012567324955116697,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 2,
+        "xRatio": 0.5383752244165171,
+        "yRatio": 0.7089410272669626,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "18": [
+      {
+        "choice": 1,
+        "page": 2,
+        "xRatio": 0.558572710951526,
+        "yRatio": 0.7878883956880152,
+        "wRatio": 0.010323159784560144,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 2,
+        "xRatio": 0.558572710951526,
+        "yRatio": 0.8037412809131262,
+        "wRatio": 0.010323159784560144,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 2,
+        "xRatio": 0.5383752244165171,
+        "yRatio": 0.8192771084337349,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 2,
+        "xRatio": 0.559245960502693,
+        "yRatio": 0.8351299936588459,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "19": [
+      {
+        "choice": 1,
+        "page": 2,
+        "xRatio": 0.5383752244165171,
+        "yRatio": 0.930564362714014,
+        "wRatio": 0.012118491921005385,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 2,
+        "page": 2,
+        "xRatio": 0.7367594254937163,
+        "yRatio": 0.9296131896005073,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 3,
+        "page": 2,
+        "xRatio": 0.5383752244165171,
+        "yRatio": 0.9454660748256183,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 4,
+        "page": 2,
+        "xRatio": 0.7358617594254937,
+        "yRatio": 0.9453075459733672,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      }
+    ],
+    "20": [
+      {
+        "choice": 1,
+        "page": 3,
+        "xRatio": 0.07405745062836624,
+        "yRatio": 0.09036144578313253,
+        "wRatio": 0.011669658886894075,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 3,
+        "xRatio": 0.10951526032315978,
+        "yRatio": 0.10558021559923907,
+        "wRatio": 0.012567324955116697,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 3,
+        "xRatio": 0.07248653500897666,
+        "yRatio": 0.135859226379201,
+        "wRatio": 0.011220825852782765,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 3,
+        "xRatio": 0.10951526032315978,
+        "yRatio": 0.15313887127457196,
+        "wRatio": 0.012567324955116697,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "21": [
+      {
+        "choice": 1,
+        "page": 3,
+        "xRatio": 0.07383303411131059,
+        "yRatio": 0.23161065313887128,
+        "wRatio": 0.012118491921005385,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 3,
+        "xRatio": 0.09358168761220825,
+        "yRatio": 0.26410906785034877,
+        "wRatio": 0.010323159784560144,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 3,
+        "xRatio": 0.07405745062836624,
+        "yRatio": 0.2791693088142042,
+        "wRatio": 0.011669658886894075,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 3,
+        "xRatio": 0.0742818671454219,
+        "yRatio": 0.31182625237793277,
+        "wRatio": 0.011220825852782765,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "22": [
+      {
+        "choice": 1,
+        "page": 3,
+        "xRatio": 0.07338420107719928,
+        "yRatio": 0.3593849080532657,
+        "wRatio": 0.013016157989228007,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 3,
+        "xRatio": 0.09470377019748653,
+        "yRatio": 0.37523779327837664,
+        "wRatio": 0.012567324955116697,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 3,
+        "xRatio": 0.07360861759425494,
+        "yRatio": 0.3904565630944832,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 3,
+        "xRatio": 0.09358168761220825,
+        "yRatio": 0.4074191502853519,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ],
+    "24": [
+      {
+        "choice": 1,
+        "page": 3,
+        "xRatio": 0.5576750448833034,
+        "yRatio": 0.3693722257450856,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 3,
+        "xRatio": 0.5574506283662477,
+        "yRatio": 0.38617628408370325,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 3,
+        "xRatio": 0.5576750448833034,
+        "yRatio": 0.4036144578313253,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 3,
+        "xRatio": 0.5576750448833034,
+        "yRatio": 0.4193541081619713,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image-inferred-trailing",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.62
+      }
+    ],
+    "25": [
+      {
+        "choice": 1,
+        "page": 3,
+        "xRatio": 0.09223518850987433,
+        "yRatio": 0.2950221940393152,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 3,
+        "xRatio": 0.0742818671454219,
+        "yRatio": 0.31182625237793277,
+        "wRatio": 0.011220825852782765,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 3,
+        "xRatio": 0.07338420107719928,
+        "yRatio": 0.3593849080532657,
+        "wRatio": 0.013016157989228007,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 3,
+        "xRatio": 0.09470377019748653,
+        "yRatio": 0.37523779327837664,
+        "wRatio": 0.012567324955116697,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      }
+    ]
+  },
+  "anchors": [
+    {
+      "label": 36,
+      "page": 1,
+      "xRatio": 0.04488330341113106,
+      "yRatio": 0.13696892834495877,
+      "text": "36.2.)",
+      "markerText": "36.2.)",
+      "anchorScore": 1.18,
+      "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 5,
+      "anchorColumn": 0,
+      "q": 1
+    },
+    {
+      "label": 37,
+      "page": 1,
+      "xRatio": 0.04488330341113106,
+      "yRatio": 0.35351934051997463,
+      "text": "37.922",
+      "markerText": "37.922",
+      "anchorScore": 1.1,
+      "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 11,
+      "anchorColumn": 0,
+      "q": 2
+    },
+    {
+      "label": 38,
+      "page": 1,
+      "xRatio": 0.04488330341113106,
+      "yRatio": 0.7422320862396956,
+      "text": "38.224",
+      "markerText": "38.224",
+      "anchorScore": 1.1,
+      "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 16,
+      "anchorColumn": 0,
+      "q": 3
+    },
+    {
+      "label": 39,
+      "page": 1,
+      "xRatio": 0.04488330341113106,
+      "yRatio": 0.858275206087508,
+      "text": "39.29(742",
+      "markerText": "39.29(742",
+      "anchorScore": 1.1,
+      "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 20,
+      "anchorColumn": 0,
+      "q": 4
+    },
+    {
+      "label": 40,
+      "page": 1,
+      "xRatio": 0.5098743267504489,
+      "yRatio": 0.05326569435637286,
+      "text": "40.20207",
+      "markerText": "40.20207",
+      "anchorScore": 1.1,
+      "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 23,
+      "anchorColumn": 1,
+      "q": 5
+    },
+    {
+      "label": 41,
+      "page": 1,
+      "xRatio": 0.5098743267504489,
+      "yRatio": 0.17374762206721622,
+      "text": "41.4270",
+      "markerText": "41.4270",
+      "anchorScore": 1.1,
+      "lineHeightRatio": 0.009828788839568801,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 30,
+      "anchorColumn": 1,
+      "q": 6
+    },
+    {
+      "label": 42,
+      "page": 1,
+      "xRatio": 0.5098743267504489,
+      "yRatio": 0.50285351934052,
+      "text": "42.05270",
+      "markerText": "42.05270",
+      "anchorScore": 1.1,
+      "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 32,
+      "anchorColumn": 1,
+      "q": 7
+    },
+    {
+      "label": 43,
+      "page": 1,
+      "xRatio": 0.5098743267504489,
+      "yRatio": 0.6081166772352569,
+      "text": "43.0(22)",
+      "markerText": "43.0(22)",
+      "anchorScore": 1.1,
+      "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 39,
+      "anchorColumn": 1,
+      "q": 8
+    },
+    {
+      "label": 44,
+      "page": 1,
+      "xRatio": 0.5098743267504489,
+      "yRatio": 0.6984781230183893,
+      "text": "44.(3)",
+      "markerText": "44.(3)",
+      "anchorScore": 1.18,
+      "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 43,
+      "anchorColumn": 1,
+      "q": 9
+    },
+    {
+      "label": 45,
+      "page": 1,
+      "xRatio": 0.5098743267504489,
+      "yRatio": 0.8189600507292327,
+      "text": "45.2407)3)",
+      "markerText": "45.2407)3)",
+      "anchorScore": 1.18,
+      "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 49,
+      "anchorColumn": 1,
+      "q": 10
+    },
+    {
+      "label": 46,
+      "page": 2,
+      "xRatio": 0.04488330341113106,
+      "yRatio": 0.05326569435637286,
+      "text": "46.37)(2)",
+      "markerText": "46.37)(2)",
+      "anchorScore": 1.18,
+      "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 57,
+      "anchorColumn": 0,
+      "q": 11
+    },
+    {
+      "label": 47,
+      "page": 2,
+      "xRatio": 0.04488330341113106,
+      "yRatio": 0.15377298668357642,
+      "text": "47.()2",
+      "markerText": "47.()2",
+      "anchorScore": 1.18,
+      "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 66,
+      "anchorColumn": 0,
+      "q": 12
+    },
+    {
+      "label": 48,
+      "page": 2,
+      "xRatio": 0.04488330341113106,
+      "yRatio": 0.2710843373493976,
+      "text": "48.272)2",
+      "markerText": "48.272)2",
+      "anchorScore": 1.1,
+      "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 75,
+      "anchorColumn": 0,
+      "q": 13
+    },
+    {
+      "label": 49,
+      "page": 2,
+      "xRatio": 0.04488330341113106,
+      "yRatio": 0.849714648065948,
+      "text": "49.3)",
+      "markerText": "49.3)",
+      "anchorScore": 1.18,
+      "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 77,
+      "anchorColumn": 0,
+      "q": 14
+    },
+    {
+      "label": 50,
+      "page": 2,
+      "xRatio": 0.5103231597845601,
+      "yRatio": 0.05326569435637286,
+      "text": "50.7",
+      "markerText": "50.7",
+      "anchorScore": 1.1,
+      "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 82,
+      "anchorColumn": 1,
+      "q": 15
+    },
+    {
+      "label": 51,
+      "page": 2,
+      "xRatio": 0.5103231597845601,
+      "yRatio": 0.4524413443246671,
+      "text": "51.7(2)",
+      "markerText": "51.7(2)",
+      "anchorScore": 1.18,
+      "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 84,
+      "anchorColumn": 1,
+      "q": 16
+    },
+    {
+      "label": 52,
+      "page": 2,
+      "xRatio": 0.5103231597845601,
+      "yRatio": 0.6255548509828789,
+      "text": "52.277(2)",
+      "markerText": "52.277(2)",
+      "anchorScore": 1.18,
+      "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 92,
+      "anchorColumn": 1,
+      "q": 17
+    },
+    {
+      "label": 53,
+      "page": 2,
+      "xRatio": 0.5103231597845601,
+      "yRatio": 0.7672796448953709,
+      "text": "53.77(44)",
+      "markerText": "53.77(44)",
+      "anchorScore": 1.18,
+      "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 98,
+      "anchorColumn": 1,
+      "q": 18
+    },
+    {
+      "label": 54,
+      "page": 2,
+      "xRatio": 0.5103231597845601,
+      "yRatio": 0.8776157260621433,
+      "text": "54.442428...",
+      "markerText": "54.442428...",
+      "anchorScore": 1.1,
+      "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 106,
+      "anchorColumn": 1,
+      "q": 19
+    },
+    {
+      "label": 55,
+      "page": 3,
+      "xRatio": 0.04533213644524237,
+      "yRatio": 0.05326569435637286,
+      "text": "55.12542()",
+      "markerText": "55.12542()",
+      "anchorScore": 1.18,
+      "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 111,
+      "anchorColumn": 0,
+      "q": 20
+    },
+    {
+      "label": 56,
+      "page": 3,
+      "xRatio": 0.04533213644524237,
+      "yRatio": 0.21179454660748256,
+      "text": "56.272(3)",
+      "markerText": "56.272(3)",
+      "anchorScore": 1.18,
+      "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 113,
+      "anchorColumn": 0,
+      "q": 21
+    },
+    {
+      "label": 57,
+      "page": 3,
+      "xRatio": 0.04533213644524237,
+      "yRatio": 0.33893468611287253,
+      "text": "57.2)772(38)",
+      "markerText": "57.2)772(38)",
+      "anchorScore": 1.18,
+      "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 124,
+      "anchorColumn": 0,
+      "q": 22
+    },
+    {
+      "label": 58,
+      "page": 3,
+      "xRatio": 0.04533213644524237,
+      "yRatio": 0.48161065313887125,
+      "text": "58.227.",
+      "markerText": "58.227.",
+      "anchorScore": 1.18,
+      "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 130,
+      "anchorColumn": 0,
+      "q": 23
+    },
+    {
+      "label": 60,
+      "page": 3,
+      "xRatio": 0.5103231597845601,
+      "yRatio": 0.26886493341788203,
+      "text": "60.(2773)",
+      "markerText": "60.(2773)",
+      "anchorScore": 1.18,
+      "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 138,
+      "anchorColumn": 0,
+      "q": 25
+    }
+  ],
+  "rawAnchorCount": 138,
+  "sourceStats": {
+    "questionDetected": 24,
+    "questionExpected": 25,
+    "ocrChoiceCandidateCount": 16,
+    "choiceDetected": 96,
+    "choiceExpected": 100,
+    "choiceCoverage": 0.96,
+    "choiceMissingQuestions": [
+      23
+    ],
+    "parserDiagnostics": {
+      "missingSegments": [],
+      "outOfSegmentChoices": [],
+      "partialChoiceQuestions": [],
+      "suspiciousChoiceOrder": [],
+      "missingSegmentCount": 0,
+      "outOfSegmentChoiceCount": 0,
+      "partialChoiceQuestionCount": 0,
+      "suspiciousChoiceOrderCount": 0
+    }
+  },
+  "confidence": 0.9647999999999999,
+  "warnings": [
+    "일부 선택지 위치가 누락되었습니다(96/100). 틀린 좌표 대신 누락으로 표시합니다."
+  ],
+  "generatedAt": "2026-06-01T06:59:42.682Z"
+}
