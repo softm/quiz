@@ -503,6 +503,43 @@
     button.warn{background:rgba(255,191,60,.12); border-color:rgba(255,191,60,.35)}
     button:hover{filter:brightness(1.08)}
     button.active{outline:2px solid rgba(169,180,223,.6)}
+    #btnAnchorDebugToggle,
+    #btnAnchorClickAreaToggle,
+    #btnAnchorEdit{
+      position:relative;
+      transition:background .16s ease, color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+    }
+    #btnAnchorDebugToggle[aria-pressed="true"],
+    #btnAnchorClickAreaToggle[aria-pressed="true"],
+    #btnAnchorEdit[aria-pressed="true"]{
+      color:#0f172a;
+      border-color:rgba(10,102,214,.75);
+      background:linear-gradient(180deg,#dbeafe,#bfdbfe);
+      box-shadow:0 0 0 2px rgba(37,99,235,.22), 0 6px 16px rgba(37,99,235,.22), inset 0 1px 0 rgba(255,255,255,.75);
+      transform:translateY(-1px);
+      outline:0;
+    }
+    #btnAnchorDebugToggle[aria-pressed="true"]::before,
+    #btnAnchorClickAreaToggle[aria-pressed="true"]::before,
+    #btnAnchorEdit[aria-pressed="true"]::before{
+      content:"";
+      display:inline-block;
+      width:7px;
+      height:7px;
+      margin-right:6px;
+      border-radius:999px;
+      background:#16a34a;
+      box-shadow:0 0 0 3px rgba(34,197,94,.18);
+      vertical-align:1px;
+    }
+    body.theme-dark #btnAnchorDebugToggle[aria-pressed="true"],
+    body.theme-dark #btnAnchorClickAreaToggle[aria-pressed="true"],
+    body.theme-dark #btnAnchorEdit[aria-pressed="true"]{
+      color:#eff6ff;
+      border-color:rgba(96,165,250,.9);
+      background:linear-gradient(180deg,#1d4ed8,#1e40af);
+      box-shadow:0 0 0 2px rgba(96,165,250,.25), 0 8px 18px rgba(59,130,246,.28), inset 0 1px 0 rgba(255,255,255,.18);
+    }
     .modeBtn{
       font-size:14px;
       font-weight:800;
@@ -858,6 +895,12 @@
       text-align:right;
       color:#b91c1c;
       font-weight:900;
+    }
+    .anchorEditChoiceRow .anchorEditRangeReset{
+      padding:4px 7px;
+      min-width:auto;
+      font-size:11px;
+      border-radius:999px;
     }
     .anchorEditChoiceRow select{
       min-width:120px;
@@ -1576,7 +1619,7 @@
 <header>
   <div class="left">
     <h1 id="pageTitle">문제풀이 + 정답확인</h1>
-    <button id="btnShareQuestion" class="secondary iconBtn" title="현재 문제 링크 공유" aria-label="현재 문제 링크 공유">↗</button>
+    <button id="btnShareQuestion" class="secondary iconBtn" title="현재 문제 링크 공유" aria-label="현재 문제 링크 공유"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7.5 11.1 16.2 6.2M7.5 12.9l8.7 4.9" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/><circle cx="5" cy="12" r="3.6" fill="currentColor"/><circle cx="18.8" cy="5" r="3.6" fill="currentColor"/><circle cx="18.8" cy="19" r="3.6" fill="currentColor"/></svg></button>
     <span class="pill">단축키( 문제이동 : ←→ 답 : 1~5 )</span>
   </div>
   <div class="controls">
@@ -1603,7 +1646,8 @@
           <button id="btnFontUp" class="secondary">글자 ⊕</button>
           <button id="btnFontDown" class="secondary">글자 ⊖</button>
           <button id="btnFontReset" class="secondary">원래대로</button>
-          <button id="btnAnchorDebugToggle" class="secondary" hidden>디버깅</button>
+          <button id="btnAnchorDebugToggle" class="secondary" hidden>위치디버깅</button>
+          <button id="btnAnchorClickAreaToggle" class="secondary" hidden>문항영역</button>
           <button id="btnAnchorEdit" class="secondary" hidden>위치 편집</button>
           <button id="btnAnchorResetTop" class="secondary danger" hidden>앵커 초기화</button>
           <button id="openQ">문제 PDF</button>
@@ -1645,7 +1689,7 @@
           <div class="anchorEditKindControls">
             <button id="anchorEditQuestion" class="secondary" type="button">문제 앵커</button>
             <button id="anchorEditChoice" class="secondary active" type="button">문항 앵커</button>
-            <label class="toggle"><input id="anchorEditQuestionLock" type="checkbox" /> 문제 락</label>
+            <label class="toggle"><input id="anchorEditQuestionLock" type="checkbox" /> 스크롤 문제 락</label>
           </div>
           <div class="anchorEditModeRow" id="anchorEditModeRow">
             <span class="anchorEditModeLabel">편집 모드</span>
@@ -1663,6 +1707,7 @@
             <label class="anchorEditRangeControl" for="anchorEditChoiceRadius">원 크기
               <input id="anchorEditChoiceRadius" type="range" min="25" max="160" step="5" value="100" />
               <span id="anchorEditChoiceRadiusValue" class="anchorEditRangeValue">100%</span>
+              <button id="anchorEditChoiceRadiusReset" class="secondary anchorEditRangeReset" type="button">초기화</button>
             </label>
           </div>
         </div>
@@ -1809,6 +1854,12 @@
     const value = match[1] == null || match[1] === "" ? "1" : decodeURIComponent(match[1]);
     return !["0", "false", "off", "no"].includes(String(value).toLowerCase());
   })(); // SOFTM-ANCHOR: 저장 위치맵을 PDF 위에서 검증하는 디버그 오버레이 - 2026-05-30
+  let ANCHOR_CLICK_AREA_DEBUG = (() => {
+    const match = String(location.href || "").match(/[?#&]anchorClickArea(?:=([^&#]*))?/i);
+    if (!match) return false;
+    const value = match[1] == null || match[1] === "" ? "1" : decodeURIComponent(match[1]);
+    return !["0", "false", "off", "no"].includes(String(value).toLowerCase());
+  })();
   const encodedQuestionPdfUrl = encodeURI(QUESTION_PDF_URL);
   const encodedAnswerPdfUrl = encodeURI(ANSWER_PDF_URL);
   const PDFJS_SCRIPT_URLS = ["vendor/pdf.min.js?v=202605301745", "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"]; // SOFTM-위치맵: 외부 CDN 지연 시 풀이 화면이 멈추지 않도록 로컬 PDF.js를 우선 사용 - 2026-05-30
@@ -1965,6 +2016,7 @@
     pdfZoomMobile: 1,
     pdfZoomDesktop: 1,
     anchorChoiceRadiusScale: 1,
+    anchorChoiceRadiusInitialScale: 1,
     anchorChoiceRadiusRefreshRaf: 0,
     infoExpanded: false,
     currentPdfPage: 1,
@@ -2068,6 +2120,7 @@
   const btnFontDown = document.getElementById("btnFontDown");
   const btnFontReset = document.getElementById("btnFontReset");
   const btnAnchorDebugToggle = document.getElementById("btnAnchorDebugToggle");
+  const btnAnchorClickAreaToggle = document.getElementById("btnAnchorClickAreaToggle");
   const btnAnchorEdit = document.getElementById("btnAnchorEdit");
   const btnAnchorResetTop = document.getElementById("btnAnchorResetTop");
   const columnSelectLayer = document.getElementById("columnSelectLayer");
@@ -2092,6 +2145,7 @@
   const anchorEditAutoNextChoice = document.getElementById("anchorEditAutoNextChoice");
   const anchorEditChoiceRadius = document.getElementById("anchorEditChoiceRadius");
   const anchorEditChoiceRadiusValue = document.getElementById("anchorEditChoiceRadiusValue");
+  const anchorEditChoiceRadiusReset = document.getElementById("anchorEditChoiceRadiusReset");
   const anchorEditModeRow = document.getElementById("anchorEditModeRow");
   const anchorEditModeToggle = document.getElementById("anchorEditModeToggle");
   const anchorEditQuestionFind = document.getElementById("anchorEditQuestionFind");
@@ -2150,6 +2204,9 @@
     dragMoved: false,
     dragGhost: null,
     questionLocked: false,
+    pdfPointerClientX: null,
+    pdfPointerColumn: 0,
+    pdfPointerMovedAt: 0,
     activeColumn: 1,
     panelSide: "right",
     suppressNextClick: false,
@@ -2495,6 +2552,7 @@
   btnFontDown.addEventListener("click", () => changePdfZoom(-0.1));
   btnFontReset.addEventListener("click", resetPdfZoom);
   if (btnAnchorDebugToggle) btnAnchorDebugToggle.addEventListener("click", () => setAnchorDebugEnabled(!ANCHOR_DEBUG));
+  if (btnAnchorClickAreaToggle) btnAnchorClickAreaToggle.addEventListener("click", () => setAnchorClickAreaDebugEnabled(!ANCHOR_CLICK_AREA_DEBUG));
   if (btnAnchorEdit) btnAnchorEdit.addEventListener("click", () => setAnchorEditEnabled(!anchorEditState.enabled));
   if (btnAnchorResetTop) btnAnchorResetTop.addEventListener("click", () => resetAllManualAnchorsFromViewer());
   if (anchorColumnOne) anchorColumnOne.addEventListener("click", () => setAnchorEditActiveColumn(1));
@@ -2508,8 +2566,8 @@
     anchorEditState.selectedQ = Number(anchorEditState.selectedQ || state.focusQ || 1);
     syncAnchorEditUi();
     setAnchorEditStatus(anchorEditState.questionLocked
-      ? `${formatPrintedQuestionLabel(anchorEditState.selectedQ)}번 문제를 잠갔습니다. 스크롤/문제 클릭으로 문제번호가 바뀌지 않습니다.`
-      : "문제 잠금을 해제했습니다.");
+      ? `${formatPrintedQuestionLabel(anchorEditState.selectedQ)}번 기준으로 스크롤 문제 변경을 잠갔습니다. 답안지 클릭 이동은 가능합니다.`
+      : "스크롤 문제 잠금을 해제했습니다.");
   });
   if (anchorEditPrevChoice) anchorEditPrevChoice.addEventListener("click", () => shiftAnchorEditChoice(-1));
   if (anchorEditNextChoice) anchorEditNextChoice.addEventListener("click", () => shiftAnchorEditChoice(1));
@@ -2519,6 +2577,11 @@
   });
   if (anchorEditChoiceRadius) anchorEditChoiceRadius.addEventListener("input", () => {
     setAnchorChoiceRadiusScale(Number(anchorEditChoiceRadius.value) / 100);
+  });
+  if (anchorEditChoiceRadiusReset) anchorEditChoiceRadiusReset.addEventListener("click", () => {
+    const initialScale = getAnchorChoiceRadiusInitialScale();
+    setAnchorChoiceRadiusScale(initialScale);
+    setAnchorEditStatus(`문항 앵커 원 크기를 초기값 ${Math.round(initialScale * 100)}%로 되돌렸습니다.`);
   });
   if (anchorEditModeToggle) anchorEditModeToggle.addEventListener("click", () => {
     setAnchorEditInteractionMode(anchorEditState.interactionMode === "drag" ? "select" : "drag");
@@ -2751,7 +2814,10 @@
           state.pdfZoom = state.pdfZoomDesktop;
         }
         const radiusScale = Number(ui.anchorChoiceRadiusScale);
-        if (Number.isFinite(radiusScale)) state.anchorChoiceRadiusScale = Math.max(0.25, Math.min(1.6, radiusScale));
+        if (Number.isFinite(radiusScale)) {
+          state.anchorChoiceRadiusScale = Math.max(0.25, Math.min(1.6, radiusScale));
+          state.anchorChoiceRadiusInitialScale = state.anchorChoiceRadiusScale;
+        }
         if (typeof ui.infoExpanded === "boolean") state.infoExpanded = ui.infoExpanded;
         if (ui.pdfNav && typeof ui.pdfNav === "object") {
           const start = Number(ui.pdfNav.startPage);
@@ -3472,6 +3538,11 @@
     return Number.isFinite(scale) ? Math.max(0.25, Math.min(1.6, scale)) : 1;
   }
 
+  function getAnchorChoiceRadiusInitialScale(){
+    const scale = Number(state.anchorChoiceRadiusInitialScale);
+    return Number.isFinite(scale) ? Math.max(0.25, Math.min(1.6, scale)) : 1;
+  }
+
   function syncAnchorChoiceRadiusUi(){
     const scale = getAnchorChoiceRadiusScale();
     if (anchorEditChoiceRadius) anchorEditChoiceRadius.value = String(Math.round(scale * 100));
@@ -3497,13 +3568,23 @@
   function syncAnchorDebugToggleUi(){
     if (!btnAnchorDebugToggle) return;
     btnAnchorDebugToggle.classList.toggle("active", !!ANCHOR_DEBUG);
-    btnAnchorDebugToggle.textContent = "디버깅";
+    btnAnchorDebugToggle.textContent = "위치디버깅";
     btnAnchorDebugToggle.setAttribute("aria-pressed", ANCHOR_DEBUG ? "true" : "false");
-    btnAnchorDebugToggle.title = ANCHOR_DEBUG ? "앵커 디버깅 표시 끄기" : "앵커 디버깅 표시 켜기";
+    btnAnchorDebugToggle.title = ANCHOR_DEBUG ? "위치 디버깅 표시 끄기" : "위치 디버깅 표시 켜기";
+    syncAnchorClickAreaToggleUi();
+  }
+
+  function syncAnchorClickAreaToggleUi(){
+    if (!btnAnchorClickAreaToggle) return;
+    btnAnchorClickAreaToggle.classList.toggle("active", !!ANCHOR_CLICK_AREA_DEBUG);
+    btnAnchorClickAreaToggle.textContent = "문항영역";
+    btnAnchorClickAreaToggle.setAttribute("aria-pressed", ANCHOR_CLICK_AREA_DEBUG ? "true" : "false");
+    btnAnchorClickAreaToggle.title = ANCHOR_CLICK_AREA_DEBUG ? "문항 클릭영역 표시 끄기" : "문항 클릭영역 표시 켜기";
+    btnAnchorClickAreaToggle.disabled = false;
   }
 
   function syncAdminDebugControls(){
-    for (const el of [btnAnchorDebugToggle, btnAnchorEdit, btnAnchorResetTop]){
+    for (const el of [btnAnchorDebugToggle, btnAnchorClickAreaToggle, btnAnchorEdit, btnAnchorResetTop]){
       if (el) el.hidden = !isAdminHost;
     }
     syncAnchorDebugToggleUi();
@@ -3514,6 +3595,8 @@
       const url = new URL(location.href);
       if (ANCHOR_DEBUG) url.searchParams.set("anchorDebug", "1");
       else url.searchParams.delete("anchorDebug");
+      if (ANCHOR_CLICK_AREA_DEBUG) url.searchParams.set("anchorClickArea", "1");
+      else url.searchParams.delete("anchorClickArea");
       history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
     }catch(_){}
   }
@@ -3535,6 +3618,14 @@
     if (!ANCHOR_DEBUG && anchorEditState.enabled) {
       setAnchorEditEnabled(false).catch(() => {});
     }
+  }
+
+  function setAnchorClickAreaDebugEnabled(enabled, options = {}){
+    if (!isAdminHost) return;
+    ANCHOR_CLICK_AREA_DEBUG = !!enabled;
+    syncAnchorClickAreaToggleUi();
+    if (options.updateUrl !== false) updateAnchorDebugUrl();
+    if (options.render !== false) refreshAnchorDebugView();
   }
 
   function getAnchorEditActiveQuestion(){
@@ -3616,7 +3707,7 @@
   }
 
   function isAnchorColumnLayerActive(){
-    return !!(isAdminHost && anchorEditState.enabled && state.viewMode === "all");
+    return false;
   }
 
   function inferAnchorColumnForQuestion(q){
@@ -3632,9 +3723,9 @@
   }
 
   function syncAnchorColumnLayerUi(){
-    const active = isAnchorColumnLayerActive();
+    const active = false;
     if (columnSelectLayer) {
-      columnSelectLayer.hidden = !active;
+      columnSelectLayer.hidden = true;
       columnSelectLayer.classList.toggle("active", active);
     }
     const column = getAnchorEditActiveColumn();
@@ -3659,10 +3750,41 @@
   }
 
   function isPointInInactiveAnchorColumn(point){
-    if (!isAnchorColumnLayerActive() || !point) return false;
-    const x = Number(point.xRatio);
-    if (!Number.isFinite(x)) return false;
-    return getAnchorEditActiveColumn() === 1 ? x >= 0.5 : x < 0.5;
+    return false;
+  }
+
+  function getColumnFromXRatio(xRatio){
+    const x = Number(xRatio);
+    if (!Number.isFinite(x)) return 0;
+    return x >= 0.5 ? 2 : 1;
+  }
+
+  function rememberPdfPointerPosition(e){
+    if (!e || state.viewMode !== "all") return;
+    const point = getAllCanvasPointFromEvent(e);
+    if (!point) return;
+    anchorEditState.pdfPointerClientX = Number(e.clientX);
+    anchorEditState.pdfPointerColumn = getColumnFromXRatio(point.xRatio);
+    anchorEditState.pdfPointerMovedAt = Date.now();
+  }
+
+  function getPdfPointerColumnForRect(rect){
+    const movedAt = Number(anchorEditState.pdfPointerMovedAt || 0);
+    if (!movedAt || Date.now() - movedAt > 15000) return 0;
+    const x = Number(anchorEditState.pdfPointerClientX);
+    if (rect && Number.isFinite(x) && Number.isFinite(Number(rect.left)) && Number.isFinite(Number(rect.right)) && rect.right > rect.left) {
+      return x >= (rect.left + rect.width * 0.5) ? 2 : 1;
+    }
+    return getColumnFromXRatio(Number(anchorEditState.pdfPointerColumn) === 2 ? 0.75 : (Number(anchorEditState.pdfPointerColumn) === 1 ? 0.25 : NaN));
+  }
+
+  function isAnchorSameColumnAsPoint(anchor, point){
+    if (!anchor || !point) return true;
+    if (!isTwoColumnQuestionPage(point.page)) return true;
+    const ax = Number(anchor.xRatio);
+    const px = Number(point.xRatio);
+    if (!Number.isFinite(ax) || !Number.isFinite(px)) return true;
+    return getColumnFromXRatio(ax) === getColumnFromXRatio(px);
   }
 
   function drawInactiveColumnMaskOnCanvas(canvas){
@@ -3715,7 +3837,7 @@
   }
 
   function syncAnchorEditQuestionChange(){
-    if (!anchorEditState.enabled || anchorEditState.questionLocked) return;
+    if (!anchorEditState.enabled) return;
     const q = getAnchorEditActiveQuestion();
     if (!q) return;
     if (anchorEditState.lastQuestionQ && anchorEditState.lastQuestionQ !== q) {
@@ -3766,7 +3888,7 @@
         : Number(anchorEditState.selectedQ || state.focusQ || 1);
       const qLabel = Number.isFinite(q) && q > 0 ? `${formatPrintedQuestionLabel(q)}번` : "문제 미선택";
       const kindLabel = anchorEditState.kind === "question" ? "문제 앵커" : `${anchorEditState.choice}번 문항`;
-      const lockLabel = anchorEditState.questionLocked ? " · 락" : "";
+      const lockLabel = anchorEditState.questionLocked ? " · 스크롤 락" : "";
       const modeLabel = state.viewMode === "all"
         ? ` · ${anchorEditState.interactionMode === "drag" ? "드래그 편집" : "선택편집"}`
         : "";
@@ -4055,6 +4177,11 @@
       return;
     }
     if (!ANCHOR_DEBUG) setAnchorDebugEnabled(true, { render: false });
+    if (!ANCHOR_CLICK_AREA_DEBUG) {
+      ANCHOR_CLICK_AREA_DEBUG = true;
+      syncAnchorClickAreaToggleUi();
+      updateAnchorDebugUrl();
+    }
     if (!currentAnchorMapPath) {
       const pattern = await loadQuestionAnchorPattern({ force: false });
       currentAnchorMapPath = pattern?.anchorMapPath || currentAnchorMapPath;
@@ -4070,9 +4197,11 @@
     anchorEditState.activeColumn = inferAnchorColumnForQuestion(anchorEditState.selectedQ || state.focusQ || 1);
     anchorEditState.panelSide = panelSideForAnchorColumn(anchorEditState.activeColumn);
     anchorEditState.choice = 1;
+    state.anchorChoiceRadiusInitialScale = getAnchorChoiceRadiusScale();
     if (anchorEditAutoNextChoice) anchorEditAutoNextChoice.checked = true;
     anchorEditState.lastQuestionQ = Number(anchorEditState.selectedQ || state.focusQ || 0) || 0;
     syncAnchorEditUi();
+    refreshAnchorDebugView();
     setAnchorEditStatus(state.viewMode === "all"
       ? "전체보기 위치 편집: 선택편집은 클릭 이동/생성, 드래그 편집은 기존 앵커 드래그만 허용합니다."
       : "위치 편집: 붉은 문제 기준선/문항 원을 드래그해 옮기거나, 빠진 앵커는 원하는 위치를 클릭하세요.");
@@ -4194,6 +4323,215 @@
     return null;
   }
 
+  function buildAllModeChoiceBandHit(points, canvasX, canvasY, canvas){
+    if (!Array.isArray(points) || points.length < 2 || !canvas) return null;
+    const xs = points.map((p) => Number(p.x)).filter(Number.isFinite);
+    const ys = points.map((p) => Number(p.y)).filter(Number.isFinite);
+    if (!xs.length || !ys.length) return null;
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const xSpread = maxX - minX;
+    const ySpread = maxY - minY;
+    const avgX = xs.reduce((sum, x) => sum + x, 0) / xs.length;
+    const avgY = ys.reduce((sum, y) => sum + y, 0) / ys.length;
+    const avgR = Math.max(10, points.reduce((sum, p) => sum + (Number(p.r) || 18), 0) / points.length);
+    const twoColumnPage = points.some((p) => isTwoColumnQuestionPage(p.page));
+    const columnLeft = twoColumnPage ? (avgX >= canvas.width * 0.5 ? canvas.width * 0.5 : 0) : 0;
+    const columnRight = twoColumnPage ? (avgX >= canvas.width * 0.5 ? canvas.width : canvas.width * 0.5) : canvas.width;
+    if (canvasX < columnLeft - 18 || canvasX > columnRight + 18) return null;
+
+    if (points.length >= 3 && xSpread > 90 && ySpread > 26) {
+      const padX = Math.max(36, avgR * 3.2);
+      const padY = Math.max(30, avgR * 3.0);
+      if (canvasX < minX - padX || canvasX > maxX + Math.max(220, padX) || canvasY < minY - padY || canvasY > maxY + padY) return null;
+      const midX = (minX + maxX) * 0.5;
+      const midY = (minY + maxY) * 0.5;
+      const targetCol = canvasX < midX ? 0 : 1;
+      const targetRow = canvasY < midY ? 0 : 1;
+      let best = null;
+      for (const p of points){
+        const col = Number(p.x) < midX ? 0 : 1;
+        const row = Number(p.y) < midY ? 0 : 1;
+        const penalty = (col === targetCol ? 0 : 900) + (row === targetRow ? 0 : 900);
+        const score = Math.hypot(canvasX - Number(p.x), canvasY - Number(p.y)) + penalty;
+        if (!best || score < best.score) best = { ...p, score };
+      }
+      return best ? { q: best.q, choice: best.choice, distance: best.score, score: best.score, anchor: best.anchor, band: true } : null;
+    }
+
+    const horizontal = ySpread <= Math.max(26, xSpread * 0.24);
+    if (horizontal) {
+      const yBand = Math.max(34, avgR * 3.4);
+      if (canvasY < minY - yBand || canvasY > maxY + yBand) return null;
+      const sorted = [...points].sort((a, b) => Number(a.x) - Number(b.x));
+      const idx = sorted.findIndex((p, i) => i === sorted.length - 1 || canvasX < ((Number(p.x) + Number(sorted[i + 1].x)) * 0.5));
+      const picked = sorted[Math.max(0, Math.min(sorted.length - 1, idx >= 0 ? idx : sorted.length - 1))];
+      if (!picked) return null;
+      const outsideX = canvasX < minX ? minX - canvasX : (canvasX > maxX ? canvasX - maxX : 0);
+      const score = Math.abs(canvasY - avgY) + outsideX * 0.12;
+      return { q: picked.q, choice: picked.choice, distance: score, score, anchor: picked.anchor, band: true };
+    }
+
+    const yPad = Math.max(34, avgR * 3.0);
+    if (canvasY < minY - yPad || canvasY > maxY + yPad) return null;
+    const sorted = [...points].sort((a, b) => Number(a.y) - Number(b.y));
+    const idx = sorted.findIndex((p, i) => i === sorted.length - 1 || canvasY < ((Number(p.y) + Number(sorted[i + 1].y)) * 0.5));
+    const picked = sorted[Math.max(0, Math.min(sorted.length - 1, idx >= 0 ? idx : sorted.length - 1))];
+    if (!picked) return null;
+    const columnWidth = Math.max(1, columnRight - columnLeft);
+    const gutter = twoColumnPage ? Math.max(18, canvas.width * 0.018) : 0;
+    const textReach = twoColumnPage
+      ? Math.min(columnWidth * 0.58, Math.max(190, avgR * 13))
+      : Math.max(520, avgR * 22);
+    const leftLimit = Math.max(columnLeft, minX - Math.max(42, avgR * 3.0));
+    const rightLimit = Math.min(columnRight - gutter, maxX + textReach);
+    if (canvasX < leftLimit || canvasX > rightLimit) return null;
+    const score = Math.abs(canvasY - Number(picked.y)) + Math.max(0, minX - canvasX) * 0.25;
+    return { q: picked.q, choice: picked.choice, distance: score, score, anchor: picked.anchor, band: true };
+  }
+
+  function buildAllModeChoiceClickAreaRects(points, canvas){
+    if (!Array.isArray(points) || points.length < 2 || !canvas) return [];
+    const safe = points
+      .map((p) => ({
+        ...p,
+        x: Number(p.x),
+        y: Number(p.y),
+        r: Number(p.r) || 18,
+        choice: Number(p.choice),
+      }))
+      .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.choice));
+    if (safe.length < 2) return [];
+    const xs = safe.map((p) => p.x);
+    const ys = safe.map((p) => p.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const xSpread = maxX - minX;
+    const ySpread = maxY - minY;
+    const avgX = xs.reduce((sum, x) => sum + x, 0) / xs.length;
+    const avgR = Math.max(10, safe.reduce((sum, p) => sum + p.r, 0) / safe.length);
+    const twoColumnPage = safe.some((p) => isTwoColumnQuestionPage(p.page));
+    const columnLeft = twoColumnPage ? (avgX >= canvas.width * 0.5 ? canvas.width * 0.5 : 0) : 0;
+    const columnRight = twoColumnPage ? (avgX >= canvas.width * 0.5 ? canvas.width : canvas.width * 0.5) : canvas.width;
+    const clampX = (x) => Math.max(0, Math.min(canvas.width, x));
+    const clampY = (y) => Math.max(0, Math.min(canvas.height, y));
+    const makeRect = (choice, x1, y1, x2, y2) => {
+      const left = clampX(Math.min(x1, x2));
+      const right = clampX(Math.max(x1, x2));
+      const top = clampY(Math.min(y1, y2));
+      const bottom = clampY(Math.max(y1, y2));
+      if (right - left < 4 || bottom - top < 4) return null;
+      return { choice, x: left, y: top, w: right - left, h: bottom - top };
+    };
+
+    if (safe.length >= 3 && xSpread > 90 && ySpread > 26) {
+      const padX = Math.max(36, avgR * 3.2);
+      const padY = Math.max(30, avgR * 3.0);
+      const midX = (minX + maxX) * 0.5;
+      const midY = (minY + maxY) * 0.5;
+      const leftEdge = Math.max(columnLeft, minX - padX);
+      const rightEdge = Math.min(columnRight, maxX + Math.max(220, padX));
+      const topEdge = Math.max(0, minY - padY);
+      const bottomEdge = Math.min(canvas.height, maxY + padY);
+      return safe.map((p) => makeRect(
+        p.choice,
+        p.x < midX ? leftEdge : midX,
+        p.y < midY ? topEdge : midY,
+        p.x < midX ? midX : rightEdge,
+        p.y < midY ? midY : bottomEdge
+      )).filter(Boolean);
+    }
+
+    const horizontal = ySpread <= Math.max(26, xSpread * 0.24);
+    if (horizontal) {
+      const yBand = Math.max(34, avgR * 3.4);
+      const sorted = [...safe].sort((a, b) => a.x - b.x);
+      return sorted.map((p, i) => {
+        const left = i === 0 ? columnLeft : (sorted[i - 1].x + p.x) * 0.5;
+        const right = i === sorted.length - 1 ? columnRight : (p.x + sorted[i + 1].x) * 0.5;
+        return makeRect(p.choice, left, minY - yBand, right, maxY + yBand);
+      }).filter(Boolean);
+    }
+
+    const yPad = Math.max(34, avgR * 3.0);
+    const columnWidth = Math.max(1, columnRight - columnLeft);
+    const gutter = twoColumnPage ? Math.max(18, canvas.width * 0.018) : 0;
+    const textReach = twoColumnPage
+      ? Math.min(columnWidth * 0.58, Math.max(190, avgR * 13))
+      : Math.max(520, avgR * 22);
+    const leftLimit = Math.max(columnLeft, minX - Math.max(42, avgR * 3.0));
+    const rightLimit = Math.min(columnRight - gutter, maxX + textReach);
+    const sorted = [...safe].sort((a, b) => a.y - b.y);
+    return sorted.map((p, i) => {
+      const top = i === 0 ? minY - yPad : (sorted[i - 1].y + p.y) * 0.5;
+      const bottom = i === sorted.length - 1 ? maxY + yPad : (p.y + sorted[i + 1].y) * 0.5;
+      return makeRect(p.choice, leftLimit, top, rightLimit, bottom);
+    }).filter(Boolean);
+  }
+
+  function findAllModeChoiceClickAreaRectHit(points, canvasX, canvasY, canvas){
+    const rects = buildAllModeChoiceClickAreaRects(points, canvas);
+    if (!rects.length) return null;
+    let best = null;
+    for (const rect of rects){
+      if (canvasX < rect.x || canvasX > rect.x + rect.w || canvasY < rect.y || canvasY > rect.y + rect.h) continue;
+      const point = points.find((p) => Number(p.choice) === Number(rect.choice));
+      const centerX = rect.x + rect.w * 0.5;
+      const centerY = rect.y + rect.h * 0.5;
+      const score = Math.hypot(canvasX - centerX, canvasY - centerY) + (rect.w * rect.h * 0.00001);
+      const hit = {
+        q: point?.q,
+        choice: rect.choice,
+        distance: score,
+        score,
+        anchor: point?.anchor,
+        area: rect,
+      };
+      if (!best || hit.score < best.score) best = hit;
+    }
+    return best;
+  }
+
+  function findAllModeChoiceAnchorHit(point, options = {}){
+    if (!point || !Number.isFinite(point.page)) return null;
+    const { page: pageNo, canvas, meta, canvasX, canvasY, fullWidth, fullHeight } = point;
+    if (!canvas || !meta) return null;
+    let bestBand = null;
+    const pageMap = state.pdfNav?.questionPageMap;
+    for (let q = 1; q <= QUESTION_COUNT; q++){
+      const mappedPage = Array.isArray(pageMap) ? Number(pageMap[q]) : NaN;
+      if (Number.isFinite(mappedPage) && Math.floor(mappedPage) !== Number(pageNo)) continue;
+      const storedChoices = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
+      if (!Array.isArray(storedChoices) || !storedChoices.length) continue;
+      const qPoints = [];
+      for (const item of storedChoices){
+        if (Number(item?.page || pageNo) !== Number(pageNo)) continue;
+        if (options.requireSameColumn !== false && !isAnchorSameColumnAsPoint(item, point)) continue;
+        const choice = Number(item.choice);
+        if (!Number.isInteger(choice) || choice < 1 || choice > Math.max(5, CHOICE_COUNT)) continue;
+        const projected = projectChoiceAnchorToCanvas(
+          item,
+          { width: fullWidth, height: fullHeight },
+          Number(meta.srcLeft || 0),
+          0,
+          Number(meta.srcWidth || fullWidth),
+          fullHeight,
+          canvas.width,
+          canvas.height
+        );
+        if (!projected) continue;
+        qPoints.push({ q, choice, page: pageNo, x: projected.x, y: projected.y, r: projected.r, anchor: item });
+      }
+      const rectHit = findAllModeChoiceClickAreaRectHit(qPoints, canvasX, canvasY, canvas);
+      if (rectHit && (!bestBand || Number(rectHit.score) < Number(bestBand.score))) bestBand = rectHit;
+    }
+    return bestBand;
+  }
+
   function getAllAnchorEditHitFromEvent(e){
     const point = getAllCanvasPointFromEvent(e);
     if (!point) return null;
@@ -4207,6 +4545,7 @@
       if (!Array.isArray(storedChoices) || !storedChoices.length) continue;
       for (const item of storedChoices){
         if (Number(item?.page || pageNo) !== pageNo) continue;
+        if (!isAnchorSameColumnAsPoint(item, point)) continue;
         const choice = Number(item.choice);
         if (!Number.isInteger(choice) || choice < 1 || choice > Math.max(5, CHOICE_COUNT)) continue;
         const projected = projectChoiceAnchorToCanvas(
@@ -7282,6 +7621,7 @@
           cropped.style.height = `${Math.ceil(destHeight / outputScale)}px`;
           cropped.style.cursor = "pointer";
           cropped.addEventListener("click", onAllPdfCanvasClick);
+          cropped.addEventListener("pointermove", rememberPdfPointerPosition);
           cropped.addEventListener("pointerdown", onAnchorEditPointerDown);
           cropped.addEventListener("pointermove", onAnchorEditPointerMove);
           cropped.addEventListener("pointerup", onAnchorEditPointerUp);
@@ -7309,6 +7649,7 @@
         pdfAllPages.appendChild(canvas);
         canvas.style.cursor = "pointer";
         canvas.addEventListener("click", onAllPdfCanvasClick);
+        canvas.addEventListener("pointermove", rememberPdfPointerPosition);
         canvas.addEventListener("pointerdown", onAnchorEditPointerDown);
         canvas.addEventListener("pointermove", onAnchorEditPointerMove);
         canvas.addEventListener("pointerup", onAnchorEditPointerUp);
@@ -8155,6 +8496,63 @@
     }
     return drawn;
   }
+
+  function drawChoiceClickAreasAll(pageNo, q){
+    if (!ANCHOR_CLICK_AREA_DEBUG || !Number.isFinite(pageNo) || !Number.isFinite(q)) return false;
+    const list = getReliableStoredChoiceAnchors(state.pdfNav.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
+    if (!Array.isArray(list) || !list.length) return false;
+    const canvas = state.allPageCanvases[pageNo];
+    const meta = state.allPageCanvasMeta[pageNo];
+    if (!canvas || !meta) return false;
+    const points = [];
+    for (const item of list){
+      if (Number(item?.page || pageNo) !== Number(pageNo)) continue;
+      const choice = Number(item.choice);
+      if (!Number.isInteger(choice) || choice < 1 || choice > Math.max(5, CHOICE_COUNT)) continue;
+      const projected = projectChoiceAnchorToCanvas(
+        item,
+        { width: meta.fullWidth, height: meta.fullHeight },
+        meta.srcLeft || 0,
+        0,
+        meta.srcWidth,
+        meta.fullHeight,
+        meta.destWidth,
+        meta.destHeight
+      );
+      if (!projected) continue;
+      const x = projected.x;
+      const y = projected.y;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      points.push({ q, choice, page: pageNo, x, y, r: projected.r, anchor: item });
+    }
+    const rects = buildAllModeChoiceClickAreaRects(points, canvas);
+    if (!rects.length) return false;
+    const ctx = canvas.getContext("2d");
+    ctx.save();
+    ctx.fillStyle = "rgba(239,68,68,0.14)";
+    ctx.strokeStyle = "rgba(239,68,68,0.42)";
+    ctx.lineWidth = Math.max(1, canvas.width * 0.0012);
+    ctx.setLineDash([8, 7]);
+    ctx.font = `800 ${Math.max(11, Math.min(18, canvas.width * 0.012))}px sans-serif`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    for (const rect of rects){
+      if (typeof ctx.roundRect === "function") {
+        ctx.beginPath();
+        ctx.roundRect(rect.x, rect.y, rect.w, rect.h, Math.min(12, rect.h * 0.18));
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+        ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+      }
+      ctx.fillStyle = "rgba(185,28,28,0.84)";
+      ctx.fillText(`${formatPrintedChoiceLabel(q, rect.choice)} click`, rect.x + 6, rect.y + 5);
+      ctx.fillStyle = "rgba(239,68,68,0.14)";
+    }
+    ctx.restore();
+    return true;
+  }
   // SOFTM-위치맵: 전체보기에서도 문제·문항 위치맵 기준선을 페이지별로 표시해 앵커 정상 여부를 확인 - 2026-05-30
 
   async function drawAllModeGradeMarker(pageNo, q, gradeState){
@@ -8201,14 +8599,15 @@
     for (let p = 1; p <= totalPages; p++){
       restoreAllPageCanvas(p);
     }
-    if (ANCHOR_DEBUG) {
+    if (ANCHOR_DEBUG || ANCHOR_CLICK_AREA_DEBUG) {
       const pageMap = state.pdfNav.questionPageMap;
       for (let q = 1; q <= QUESTION_COUNT; q++){
         const pageNo = Array.isArray(pageMap) ? Number(pageMap[q]) : NaN;
         if (!Number.isFinite(pageNo)) continue;
         const safePage = Math.max(1, Math.min(totalPages, Math.floor(pageNo)));
-        drawAnchorDebugMarkerAll(safePage, q);
-        drawChoiceAnchorDebugMarkersAll(safePage, q);
+        if (ANCHOR_DEBUG) drawAnchorDebugMarkerAll(safePage, q);
+        drawChoiceClickAreasAll(safePage, q);
+        if (ANCHOR_DEBUG) drawChoiceAnchorDebugMarkersAll(safePage, q);
       }
     }
     for (let q = 1; q <= QUESTION_COUNT; q++){
@@ -8317,7 +8716,8 @@
     const pageNo = Number(canvas.dataset?.page);
     if (!Number.isFinite(pageNo)) return null;
     const clampedY = Math.max(rect.top + 1, Math.min(rect.bottom - 1, targetY));
-    const targetX = getScrollSyncTargetX(rect, viewerRect);
+    const targetX = getScrollSyncTargetX(rect, viewerRect, pageNo);
+    const targetColumn = isTwoColumnQuestionPage(pageNo) ? getPdfPointerColumnForRect(rect) : 0;
     const point = getAllCanvasPointFromEvent({
       currentTarget: canvas,
       clientX: targetX,
@@ -8325,7 +8725,7 @@
     }, null);
     if (!point) return null;
     let q = guessAllModeQuestionFromPoint(point);
-    if (Number.isFinite(q) && q > 0 && !isQuestionInActiveScrollColumn(q, pageNo)) q = null;
+    if (Number.isFinite(q) && q > 0 && !isQuestionInActiveScrollColumn(q, pageNo, targetColumn)) q = null;
     if (!Number.isFinite(q) || q <= 0) {
       const pageMap = state.pdfNav?.questionPageMap;
       const ratioMap = state.pdfNav?.questionTopRatioMap;
@@ -8333,7 +8733,7 @@
       if (Array.isArray(pageMap) && Array.isArray(ratioMap)) {
         for (let i = 1; i <= QUESTION_COUNT; i++){
           if (Number(pageMap[i]) !== pageNo || !Number.isFinite(Number(ratioMap[i]))) continue;
-          if (!isQuestionInActiveScrollColumn(i, pageNo)) continue;
+          if (!isQuestionInActiveScrollColumn(i, pageNo, targetColumn)) continue;
           const distance = Math.abs(Number(ratioMap[i]) - Number(point.yRatio));
           if (!best || distance < best.distance) best = { q: i, distance };
         }
@@ -8343,9 +8743,10 @@
     return Number.isFinite(q) && q > 0 ? Math.max(1, Math.min(QUESTION_COUNT, Math.floor(q))) : null;
   }
 
-  function getScrollSyncTargetX(rect, viewerRect){
+  function getScrollSyncTargetX(rect, viewerRect, pageNo = null){
     let ratio = 0.5;
-    if (isAnchorColumnLayerActive()) ratio = getAnchorEditActiveColumn() === 2 ? 0.75 : 0.25;
+    const pointerColumn = getPdfPointerColumnForRect(rect);
+    if (pointerColumn && isTwoColumnQuestionPage(pageNo)) ratio = pointerColumn === 2 ? 0.75 : 0.25;
     const rawX = rect.left + rect.width * ratio;
     const visibleLeft = Math.max(rect.left, viewerRect.left, 0);
     const visibleRight = Math.min(rect.right, viewerRect.right, window.innerWidth);
@@ -8355,25 +8756,69 @@
     return Math.max(rect.left + 1, Math.min(rect.right - 1, rawX));
   }
 
-  function isQuestionInActiveScrollColumn(q, pageNo = null){
-    if (!isAnchorColumnLayerActive()) return true;
-    const activeColumn = getAnchorEditActiveColumn();
+  function isQuestionInActiveScrollColumn(q, pageNo = null, activeColumn = 0){
+    activeColumn = Number(activeColumn);
+    if (!isTwoColumnQuestionPage(pageNo)) return true;
+    if (activeColumn !== 1 && activeColumn !== 2) return true;
     const isActiveX = (x) => activeColumn === 2 ? x >= 0.5 : x < 0.5;
-    const questionAnchor = getQuestionAnchorForEditFind(Number(q));
-    if (questionAnchor && Number.isFinite(Number(questionAnchor.xRatio))) {
-      if (pageNo != null && Number.isFinite(Number(questionAnchor.page)) && Number(questionAnchor.page) !== Number(pageNo)) return false;
-      return isActiveX(Number(questionAnchor.xRatio));
-    }
     const storedChoices = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]) || [];
     const xs = storedChoices
       .filter((anchor) => pageNo == null || !Number.isFinite(Number(anchor.page)) || Number(anchor.page) === Number(pageNo))
       .map((anchor) => Number(anchor.xRatio))
       .filter(Number.isFinite);
     if (xs.length) {
-      const avgX = xs.reduce((sum, x) => sum + x, 0) / xs.length;
-      return isActiveX(avgX);
+      return xs.some((x) => isActiveX(x));
+    }
+    const segments = state.pdfNav?.questionSegments && Array.isArray(state.pdfNav.questionSegments[String(q)])
+      ? state.pdfNav.questionSegments[String(q)]
+      : [];
+    for (const seg of segments){
+      if (pageNo != null && Number.isFinite(Number(seg?.page)) && Number(seg.page) !== Number(pageNo)) continue;
+      const left = Number.isFinite(Number(seg?.left)) ? Number(seg.left) : 0;
+      const right = Number.isFinite(Number(seg?.right)) ? Number(seg.right) : 1;
+      if (activeColumn === 1 && left < 0.5) return true;
+      if (activeColumn === 2 && right >= 0.5) return true;
+    }
+    const questionAnchor = getQuestionAnchorForEditFind(Number(q));
+    if (questionAnchor && Number.isFinite(Number(questionAnchor.xRatio))) {
+      if (pageNo != null && Number.isFinite(Number(questionAnchor.page)) && Number(questionAnchor.page) !== Number(pageNo)) return false;
+      return isActiveX(Number(questionAnchor.xRatio));
     }
     return true;
+  }
+
+  function isTwoColumnQuestionPage(pageNo){
+    const safePage = Number(pageNo);
+    if (!Number.isFinite(safePage)) return false;
+    const pageMap = state.pdfNav?.questionPageMap;
+    const segmentsMap = state.pdfNav?.questionSegments;
+    let hasLeftSegment = false;
+    let hasRightSegment = false;
+    if (segmentsMap) {
+      for (let q = 1; q <= QUESTION_COUNT; q++){
+        const mappedPage = Array.isArray(pageMap) ? Number(pageMap[q]) : NaN;
+        if (Number.isFinite(mappedPage) && Math.floor(mappedPage) !== safePage) continue;
+        const segments = Array.isArray(segmentsMap[String(q)]) ? segmentsMap[String(q)] : [];
+        for (const seg of segments){
+          if (Number.isFinite(Number(seg?.page)) && Number(seg.page) !== safePage) continue;
+          const left = Number.isFinite(Number(seg?.left)) ? Number(seg.left) : 0;
+          const right = Number.isFinite(Number(seg?.right)) ? Number(seg.right) : 1;
+          const width = Math.max(0, right - left);
+          if (width > 0.72) continue;
+          if (right <= 0.64 || (left < 0.5 && right <= 0.72)) hasLeftSegment = true;
+          if (left >= 0.36) hasRightSegment = true;
+        }
+      }
+      if (hasLeftSegment && hasRightSegment) return true;
+    }
+    const questionXs = [];
+    for (let q = 1; q <= QUESTION_COUNT; q++){
+      const anchor = getQuestionAnchorForEditFind(q);
+      if (!anchor || !Number.isFinite(Number(anchor.xRatio))) continue;
+      if (Number.isFinite(Number(anchor.page)) && Number(anchor.page) !== safePage) continue;
+      questionXs.push(Number(anchor.xRatio));
+    }
+    return questionXs.some((x) => x < 0.42) && questionXs.some((x) => x > 0.58);
   }
 
   function syncAnswerFocusFromPdfScroll(){
@@ -9884,11 +10329,6 @@
             closeMobileSheet();
             return;
           }
-          if (isAnchorEditQuestionLocked() && Number(q) !== Number(getAnchorEditLockedQuestion())) {
-            e.preventDefault();
-            setAnchorEditStatus(`${formatPrintedQuestionLabel(getAnchorEditLockedQuestion())}번 문제 락 상태입니다. 잠금 해제 후 다른 문제를 선택하세요.`);
-            return;
-          }
           if (isLocked(q)){
             e.preventDefault();
             return;
@@ -9903,11 +10343,6 @@
       card.appendChild(choices);
       card.addEventListener("click", (e) => {
         if (e.target.closest(".choice")) return;
-        if (isAnchorEditQuestionLocked() && Number(q) !== Number(getAnchorEditLockedQuestion())) {
-          e.preventDefault();
-          setAnchorEditStatus(`${formatPrintedQuestionLabel(getAnchorEditLockedQuestion())}번 문제 락 상태입니다. 잠금 해제 후 다른 문제를 선택하세요.`);
-          return;
-        }
         suppressPdfScrollFocusSync();
         focusCard(q, false, { scrollPdf: state.viewMode === "all", history: "push" });
         if (window.matchMedia("(max-width: 768px)").matches && sheetOverlay.classList.contains("open")){
@@ -9923,10 +10358,6 @@
 
   // ====== 포커스/단축키 ======
   function focusCard(q, scroll, options = {}){
-    if (isAnchorEditQuestionLocked() && Number(q) !== Number(getAnchorEditLockedQuestion()) && options.force !== true) {
-      setAnchorEditStatus(`${formatPrintedQuestionLabel(getAnchorEditLockedQuestion())}번 문제 락 상태입니다.`);
-      return;
-    }
     if (anchorEditState.enabled && anchorEditState.dirty && q !== state.focusQ) {
       saveAnchorEditNow({ silent: true });
     }
@@ -10359,9 +10790,6 @@
         e.preventDefault();
         return;
       }
-      if (isAnchorEditQuestionLocked()) {
-        anchorEditState.selectedQ = getAnchorEditLockedQuestion();
-      }
       await handleAnchorEditAllCanvasClick(e);
       return;
     }
@@ -10371,6 +10799,15 @@
     if (!Number.isFinite(pageNo)) return;
     const meta = state.allPageCanvasMeta[pageNo];
     if (!meta) return;
+
+    rememberPdfPointerPosition(e);
+    const clickPoint = getAllCanvasPointFromEvent(e);
+    const directChoiceHit = findAllModeChoiceAnchorHit(clickPoint, { requireSameColumn: true });
+    if (directChoiceHit && Number.isFinite(directChoiceHit.q) && Number.isFinite(directChoiceHit.choice)) {
+      setFocusQuestionSilently(directChoiceHit.q);
+      chooseByKeyboard(Math.max(1, Math.min(CHOICE_COUNT, Math.trunc(directChoiceHit.choice))), { advance: false });
+      return;
+    }
 
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
@@ -10393,6 +10830,7 @@
 
     let anchors = await getChoiceAnchorsForQuestion(pageNo, q, { startRatio, endRatio });
     if (!Array.isArray(anchors)) anchors = [];
+    anchors = anchors.filter((anchor) => isAnchorSameColumnAsPoint(anchor, { xRatio }));
     if (anchors.length < CHOICE_COUNT) {
       const byChoice = new Map();
       for (const a of anchors){
@@ -10403,7 +10841,7 @@
         if (byChoice.has(c)) continue;
         try{
           const recovered = await resolveChoiceAnchorByQuestionBand(pageNo, q, c, startRatio, endRatio);
-          if (recovered) byChoice.set(c, recovered);
+          if (recovered && isAnchorSameColumnAsPoint(recovered, { xRatio })) byChoice.set(c, recovered);
         }catch(_){}
       }
       anchors = Array.from(byChoice.values()).sort((a, b) => a.choice - b.choice);
