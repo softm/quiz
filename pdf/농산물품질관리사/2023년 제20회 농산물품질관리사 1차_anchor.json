@@ -2025,17 +2025,16 @@
         "confidence": 1
       },
       {
+        "q": 1,
         "choice": 2,
         "page": 1,
-        "xRatio": 0.522539857064321,
-        "yRatio": 0.38651379712397976,
-        "wRatio": 0.01,
-        "hRatio": 0.012,
+        "xRatio": 0.5222308985165408,
+        "yRatio": 0.3855074466701352,
+        "wRatio": 0.018,
+        "hRatio": 0.018,
         "source": "manual-anchor",
         "anchorMode": "center",
-        "layout": "grid",
-        "confidence": 1,
-        "q": 1
+        "confidence": 1
       },
       {
         "choice": 3,
@@ -7566,6 +7565,6 @@
   "warnings": [
     "선택지 위치 감지가 부족합니다(248/400). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
   ],
-  "generatedAt": "2026-06-01T12:03:15.853Z",
-  "manualEditedAt": "2026-06-01T12:03:15.853Z"
+  "generatedAt": "2026-06-02T05:11:04.062Z",
+  "manualEditedAt": "2026-06-02T05:11:04.062Z"
 }

@@ -6,12 +6,15 @@
   <title>카테고리 회차 목록</title>
   <style>
     :root {
-      --bg: #f7f4ed;
-      --ink: #1f2b35;
-      --card: #fffdf8;
-      --line: #d7cbba;
-      --accent: #1f6e78;
-      --muted: #607081;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --panel-soft: #f9fafb;
+      --ink: #1f2933;
+      --muted: #66788a;
+      --line: #d9e0e7;
+      --line-strong: #b7c4d1;
+      --accent: #176b75;
+      --accent-strong: #10565f;
     }
 
     * { box-sizing: border-box; }
@@ -19,17 +22,18 @@
     body {
       margin: 0;
       font-family: "Pretendard", "SUIT", "Noto Sans KR", sans-serif;
+      letter-spacing: 0;
       color: var(--ink);
-      background:
-        linear-gradient(140deg, rgba(31,110,120,.06), rgba(255,255,255,.7)),
-        var(--bg);
+      background: var(--bg);
       min-height: 100vh;
     }
 
+    a { color: inherit; }
+
     .container {
-      width: min(1120px, 92vw);
+      width: min(1180px, 94vw);
       margin: 0 auto;
-      padding: 34px 0 60px;
+      padding: 28px 0 56px;
     }
 
     .top {
@@ -41,32 +45,49 @@
     }
 
     .back {
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
       text-decoration: none;
       border: 1px solid var(--line);
       color: var(--ink);
-      border-radius: 999px;
-      padding: 7px 14px;
+      border-radius: 8px;
+      padding: 7px 12px;
       font-size: 13px;
-      background: rgba(255,255,255,.7);
+      background: var(--panel);
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .pageHead {
+      margin-top: 18px;
+      display: grid;
+      gap: 8px;
     }
 
     h1 {
-      margin: 12px 0 0;
-      font-size: clamp(26px, 3.7vw, 40px);
-      letter-spacing: -0.03em;
+      margin: 0;
+      font-size: clamp(26px, 3.5vw, 40px);
+      line-height: 1.15;
+      letter-spacing: 0;
     }
 
     .desc {
+      margin: 0;
       color: var(--muted);
-      margin: 10px 0 0;
       font-size: 14px;
+      line-height: 1.5;
     }
+
     .adWrap {
-      margin-top: 16px;
-      min-height: 100px;
-      border: 1px dashed var(--line);
-      border-radius: 12px;
-      background: rgba(255,255,255,.55);
+      margin-top: 18px;
+      min-height: 92px;
+      border: 1px dashed var(--line-strong);
+      border-radius: 8px;
+      background: var(--panel);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -75,91 +96,241 @@
       padding: 8px;
     }
 
-    .list {
-      margin-top: 24px;
+    .toolbar {
+      margin-top: 14px;
       display: grid;
-      grid-template-columns: 1fr;
-      gap: 12px;
+      grid-template-columns: minmax(220px, 1fr) 180px;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 10px;
     }
 
-    .exam {
+    .srOnly {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .searchInput,
+    .sortSelect {
+      width: 100%;
+      height: 38px;
       border: 1px solid var(--line);
-      border-radius: 16px;
-      background: var(--card);
-      padding: 16px;
-      box-shadow: 0 8px 16px rgba(31,43,53,.06);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      color: var(--ink);
+      font-size: 14px;
+      padding: 0 12px;
+      outline: none;
+    }
+
+    .searchInput:focus,
+    .sortSelect:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(23,107,117,.14);
+      background: #fff;
+    }
+
+    .listHead {
+      margin-top: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .listHead strong {
+      color: var(--ink);
+      font-size: 15px;
+    }
+
+    .list {
+      margin-top: 10px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .examRow {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 14px;
+    }
+
+    .examRow:hover {
+      border-color: var(--line-strong);
+      box-shadow: 0 8px 18px rgba(24,39,56,.06);
+    }
+
+    .rowMain {
+      min-width: 0;
+      display: grid;
+      gap: 8px;
+    }
+
+    .nameLine {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
     }
 
     .name {
       margin: 0;
-      font-size: 20px;
-      line-height: 1.3;
-      letter-spacing: -0.02em;
+      min-width: 0;
+      font-size: 18px;
+      line-height: 1.35;
+      font-weight: 800;
+      overflow-wrap: anywhere;
     }
 
-    .status {
-      margin-top: 6px;
+    .miniBadge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      padding: 3px 8px;
+      font-size: 12px;
+      line-height: 1.2;
+      white-space: nowrap;
+      background: var(--panel-soft);
+      color: var(--muted);
+    }
+
+    .metaLine {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .detailLine {
       color: var(--muted);
       font-size: 13px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
     }
 
-    .row {
-      margin-top: 12px;
+    .actions {
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
+      justify-content: flex-end;
+      align-items: center;
+      min-width: 260px;
     }
 
     .btn {
+      min-height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       text-decoration: none;
-      color: #fff;
-      border-radius: 10px;
-      padding: 9px 12px;
+      border-radius: 8px;
+      padding: 8px 12px;
       font-size: 13px;
-      border: 1px solid transparent;
-      background: var(--accent);
+      font-weight: 700;
+      border: 1px solid var(--line);
+      background: var(--panel-soft);
+      color: var(--ink);
+      white-space: nowrap;
     }
 
-    .btn.secondary {
-      color: var(--ink);
-      background: rgba(255,255,255,.6);
-      border-color: var(--line);
+    .btn.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
     }
+
+    .btn.primary:hover { background: var(--accent-strong); }
 
     .btn.disabled {
       pointer-events: none;
-      opacity: .45;
+      opacity: .44;
     }
 
     .empty {
-      border: 1px dashed var(--line);
-      border-radius: 16px;
-      padding: 24px;
+      border: 1px dashed var(--line-strong);
+      border-radius: 8px;
+      padding: 28px 18px;
       color: var(--muted);
-      background: rgba(255,255,255,.6);
+      background: var(--panel);
+      text-align: center;
+    }
+
+    @media (max-width: 960px) {
+      .toolbar { grid-template-columns: 1fr; }
+      .examRow { grid-template-columns: 1fr; }
+      .actions { justify-content: flex-start; min-width: 0; }
+    }
+
+    @media (max-width: 620px) {
+      .container { padding-top: 22px; }
+      .actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .btn { width: 100%; }
     }
   </style>
 </head>
 <body>
   <main class="container">
     <div class="top">
-      <a class="back" href="./index.html">← 메인으로</a>
-      <div id="meta" class="desc"></div>
+      <a class="back" href="./index.html">메인으로</a>
+      <div id="meta" class="meta">데이터 로딩 중...</div>
     </div>
-    <h1 id="title">카테고리</h1>
-    <p class="desc">파일명에서 suffix(`시험문제지`, `최종정답`)를 제거한 값이 회차명으로 표시됩니다.</p>
+
+    <header class="pageHead">
+      <h1 id="title">카테고리</h1>
+      <p class="desc" id="subtitle">회차 목록</p>
+    </header>
+
     <section class="adWrap" id="adfitCategoryTop">광고 영역</section>
 
+    <section class="toolbar" aria-label="회차 목록 제어">
+      <label class="srOnly" for="searchInput">회차 검색</label>
+      <input id="searchInput" class="searchInput" type="search" placeholder="회차명, 연도, 시험 유형 검색" autocomplete="off" />
+
+      <label class="srOnly" for="sortSelect">정렬</label>
+      <select id="sortSelect" class="sortSelect" aria-label="정렬">
+        <option value="seq">등록순</option>
+        <option value="latest">최신 연도순</option>
+        <option value="name">이름순</option>
+      </select>
+    </section>
+
+    <div class="listHead">
+      <strong id="resultCount">회차 0개</strong>
+      <span id="resultHint">전체</span>
+    </div>
     <section class="list" id="list"></section>
   </main>
 
   <script>
     const params = new URLSearchParams(location.search);
-    const DATASET = params.get("dataset") === "knou" ? "knou" : "default"; // SOFTM-KNOU: 방통대 manifest 분기 기준 추가 - 2026-05-29
+    const DATASET = params.get("dataset") === "knou" ? "knou" : "default";
     const categoryName = params.get("category") || "농산물품질관리사";
     const categoryNo = params.get("catNo") || "";
     const ADFIT_UNITS = {
       categoryTop: "DAN_REPLACE_CATEGORY_TOP",
+    };
+    const state = {
+      items: [],
+      query: "",
+      sort: "seq",
     };
 
     function loadAdFitScript() {
@@ -188,15 +359,14 @@
       return raw.replace(/^\.\//, "").replace(/^quiz\//, "");
     }
 
-    function examStatus(exam) {
-      const hasQ = Boolean(normalizePdfPath(exam.questionPdf));
-      const hasA = Boolean(normalizePdfPath(exam.answerPdf) || String(exam.answerSourceId || "").trim());
-      const published = isPublishedQuestion(exam);
-      if (hasQ && published) return "퍼블리싱 완료";
-      if (hasQ && hasA && !published) return "정답 JSON 없음";
-      if (hasQ && !hasA) return "정답 파일 없음";
-      if (!hasQ && (hasA || published)) return "문제 PDF 없음";
-      return "파일 누락";
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      }[ch]));
     }
 
     function isPublishedQuestion(row) {
@@ -206,16 +376,6 @@
         return row?.published === true || String(row?.published) === "true";
       }
       return Boolean(normalizePdfPath(row?.answerPdf) || String(row?.answerSourceId || "").trim());
-    }
-    // SOFTM-OCR: 카테고리 회차 목록은 OCR 품질과 분리해 correct.json/정답 원본 기준으로 표시 - 2026-05-30
-
-    function makeCategoryUrl(category) {
-      const q = new URLSearchParams({
-        catNo: category.catNo,
-        category: category.catNm,
-      });
-      if (DATASET === "knou") q.set("dataset", "knou");
-      return `./category.html?${q.toString()}`;
     }
 
     function collectDescendantCatNos(categories, catNo) {
@@ -234,7 +394,15 @@
       }
       return out;
     }
-    // SOFTM-GEN: correctJson 기반 퍼블리싱 상태와 하위 카테고리 이동 지원 - 2026-05-29
+
+    function makeCategoryUrl(category) {
+      const q = new URLSearchParams({
+        catNo: category.catNo,
+        category: category.catNm,
+      });
+      if (DATASET === "knou") q.set("dataset", "knou");
+      return `./category.html?${q.toString()}`;
+    }
 
     function makeQuizUrl(exam) {
       const question = normalizePdfPath(exam.questionPdf);
@@ -248,16 +416,14 @@
         question,
         answer,
       });
-      /* SOFTM-KNOU 시작: 방통대 정답 원본 인덱스 참조값 전달 - 2026-05-29 */
       if (exam.answerSourceId) q.set("answerSourceId", exam.answerSourceId);
       if (exam.answerSubject) q.set("answerSubject", exam.answerSubject);
       if (exam.grade) q.set("grade", exam.grade);
       if (exam.questionCount) q.set("questionCount", exam.questionCount);
-      if (exam.questionStartNo) q.set("questionStartNo", exam.questionStartNo); // SOFTM-KNOU: PDF 인쇄 문항 시작 번호 전달 - 2026-05-29
-      if (exam.questionEndNo) q.set("questionEndNo", exam.questionEndNo); // SOFTM-KNOU: PDF 인쇄 문항 종료 번호 전달 - 2026-05-29
+      if (exam.questionStartNo) q.set("questionStartNo", exam.questionStartNo);
+      if (exam.questionEndNo) q.set("questionEndNo", exam.questionEndNo);
       if (exam.choiceCount) q.set("choiceCount", exam.choiceCount);
-      /* SOFTM-KNOU 끝 */
-      if (exam.correctJson) q.set("correct", normalizePdfPath(exam.correctJson)); // SOFTM-GEN: 디렉토리별 correct.json을 quiz로 전달 - 2026-05-29
+      if (exam.correctJson) q.set("correct", normalizePdfPath(exam.correctJson));
       return `./quiz.html?${q.toString()}`;
     }
 
@@ -267,22 +433,182 @@
       return res.json();
     }
 
+    function numericYear(item) {
+      const raw = item.exam?.year || item.year || item.name || "";
+      const match = String(raw).match(/(19|20)\d{2}/);
+      return match ? Number(match[0]) : 0;
+    }
+
+    function formatQuestionMeta(exam) {
+      const count = Number(exam.questionCount || exam.answerCount || 0);
+      const start = Number(exam.questionStartNo || exam.answerStartNo || 0);
+      const end = Number(exam.questionEndNo || exam.answerEndNo || 0);
+      if (start && end && start !== 1) return `${start}-${end}번`;
+      if (count) return `${count}문항`;
+      return "문항 수 미확인";
+    }
+
+    function fileNameFromPath(path) {
+      const normalized = normalizePdfPath(path);
+      if (!normalized) return "";
+      return decodeURIComponent(normalized.split("/").pop() || normalized);
+    }
+
+    function makeSearchText(item) {
+      if (item.kind === "category") {
+        return [item.name, item.childReady, "과목"].join(" ").toLowerCase();
+      }
+      const exam = item.exam;
+      return [
+        item.name,
+        exam.year,
+        exam.semester,
+        exam.examType,
+        exam.questionNo,
+        exam.questionPdf,
+        exam.answerPdf,
+      ].join(" ").toLowerCase();
+    }
+
+    function filterItems(items) {
+      const query = state.query.trim().toLowerCase();
+      return items.filter((item) => {
+        if (query && !makeSearchText(item).includes(query)) return false;
+        return true;
+      });
+    }
+
+    function sortItems(items) {
+      const rows = items.slice();
+      rows.sort((a, b) => {
+        if (a.kind !== b.kind) return a.kind === "category" ? -1 : 1;
+        if (state.sort === "latest") {
+          return numericYear(b) - numericYear(a) || Number(a.seq || 0) - Number(b.seq || 0);
+        }
+        if (state.sort === "name") {
+          return String(a.name || "").localeCompare(String(b.name || ""), "ko");
+        }
+        return Number(a.seq || 0) - Number(b.seq || 0);
+      });
+      return rows;
+    }
+
+    function renderCategoryRow(item) {
+      const href = makeCategoryUrl(item.category);
+      return `
+        <article class="examRow">
+          <div class="rowMain">
+            <div class="nameLine">
+              <h2 class="name">${escapeHtml(item.name)}</h2>
+            </div>
+            <div class="metaLine">
+              <span class="miniBadge">회차 ${item.childReady}개</span>
+            </div>
+            <div class="detailLine">${escapeHtml(item.category.catPath || item.name)}</div>
+          </div>
+          <div class="actions">
+            <a class="btn primary ${item.childReady ? "" : "disabled"}" href="${escapeHtml(href)}">열기</a>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderExamRow(item) {
+      const exam = item.exam;
+      const questionPath = normalizePdfPath(exam.questionPdf);
+      const answerPath = normalizePdfPath(exam.answerPdf);
+      const ready = Boolean(questionPath && isPublishedQuestion(exam));
+      const quizUrl = makeQuizUrl(exam);
+      const qLink = questionPath ? `./${encodeURI(questionPath)}` : "#";
+      const aLink = answerPath ? `./${encodeURI(answerPath)}` : "#";
+      const answerLabel = DATASET === "knou" ? "정답 파일" : "정답 PDF";
+      const year = numericYear(item) || "";
+      const examType = [exam.semester, exam.examType].filter(Boolean).join(" · ");
+      const detail = [
+        fileNameFromPath(exam.questionPdf),
+        answerPath ? fileNameFromPath(exam.answerPdf) : (exam.answerSourceId ? `정답 원본 ${exam.answerSourceId}` : ""),
+      ].filter(Boolean).join(" / ");
+
+      return `
+        <article class="examRow">
+          <div class="rowMain">
+            <div class="nameLine">
+              <h2 class="name">${escapeHtml(item.name)}</h2>
+            </div>
+            <div class="metaLine">
+              ${year ? `<span class="miniBadge">${year}</span>` : ""}
+              ${examType ? `<span class="miniBadge">${escapeHtml(examType)}</span>` : ""}
+              <span class="miniBadge">${escapeHtml(formatQuestionMeta(exam))}</span>
+              ${exam.choiceCount ? `<span class="miniBadge">${escapeHtml(exam.choiceCount)}지선다</span>` : ""}
+            </div>
+            <div class="detailLine">${escapeHtml(detail || "파일 정보 없음")}</div>
+          </div>
+          <div class="actions">
+            <a class="btn primary ${ready ? "" : "disabled"}" href="${escapeHtml(quizUrl)}">풀이 시작</a>
+            <a class="btn ${questionPath ? "" : "disabled"}" href="${escapeHtml(qLink)}" target="_blank">문제 PDF</a>
+            <a class="btn ${answerPath ? "" : "disabled"}" href="${escapeHtml(aLink)}" target="_blank">${answerLabel}</a>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderList() {
+      const list = document.getElementById("list");
+      const resultCount = document.getElementById("resultCount");
+      const resultHint = document.getElementById("resultHint");
+      const rows = sortItems(filterItems(state.items));
+      const examCount = rows.filter((item) => item.kind === "exam").length;
+      const categoryCount = rows.filter((item) => item.kind === "category").length;
+      const hint = [
+        state.query.trim() ? `"${state.query.trim()}"` : "전체",
+      ].filter(Boolean).join(" · ");
+
+      resultCount.textContent = [
+        categoryCount ? `과목 ${categoryCount}개` : "",
+        `회차 ${examCount}개`,
+      ].filter(Boolean).join(" · ");
+      resultHint.textContent = hint || "전체";
+
+      if (!rows.length) {
+        list.innerHTML = '<article class="empty">조건에 맞는 회차가 없습니다.</article>';
+        return;
+      }
+
+      list.innerHTML = rows.map((item) =>
+        item.kind === "category" ? renderCategoryRow(item) : renderExamRow(item)
+      ).join("");
+    }
+
+    function bindControls() {
+      const searchInput = document.getElementById("searchInput");
+      const sortSelect = document.getElementById("sortSelect");
+
+      searchInput.addEventListener("input", () => {
+        state.query = searchInput.value;
+        renderList();
+      });
+
+      sortSelect.addEventListener("change", () => {
+        state.sort = sortSelect.value;
+        renderList();
+      });
+    }
+
     async function load() {
       const title = document.getElementById("title");
-      const list = document.getElementById("list");
+      const subtitle = document.getElementById("subtitle");
       const meta = document.getElementById("meta");
+      const list = document.getElementById("list");
 
       title.textContent = categoryName;
 
       try {
-        /* SOFTM-KNOU 시작: dataset별 manifest 선택 로딩 - 2026-05-29 */
         const categoryPath = DATASET === "knou" ? "./json/knou_category.json" : "./json/category.json";
         const questionPath = DATASET === "knou" ? "./json/knou_question.json" : "./json/question.json";
         const [categories, questions] = await Promise.all([
           fetchJson(categoryPath),
           fetchJson(questionPath),
         ]);
-        /* SOFTM-KNOU 끝 */
         const category = (categories || []).find((c) =>
           (categoryNo && String(c.catNo) === String(categoryNo)) ||
           (!categoryNo && String(c.catNm) === String(categoryName))
@@ -295,57 +621,40 @@
           .filter((q) => String(q.catNo) === String(catNo))
           .filter((q) => isPublishedQuestion(q))
           .sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0));
-        const readyCount = exams.filter((e) => normalizePdfPath(e.questionPdf) && isPublishedQuestion(e)).length;
 
-        meta.textContent = `하위 카테고리 ${children.length}개 · 퍼블리싱 회차 ${readyCount}개`;
-        list.innerHTML = "";
-
-        if (children.length === 0 && exams.length === 0) {
-          list.innerHTML = '<article class="empty">퍼블리싱된 회차가 없습니다. 정답 JSON(correct.json)을 생성한 뒤 manifest를 다시 생성하세요.</article>';
-          return;
-        }
+        state.items = [];
 
         for (const child of children) {
           const childCatNos = collectDescendantCatNos(categories, child.catNo);
           const childExams = (questions || []).filter((q) => childCatNos.has(String(q.catNo)));
           const childReady = childExams.filter((q) => normalizePdfPath(q.questionPdf) && isPublishedQuestion(q)).length;
-          const card = document.createElement("article");
-          card.className = "exam";
-          card.innerHTML = `
-            <h2 class="name">${child.catNm}</h2>
-            <p class="status">퍼블리싱 회차 ${childReady}개</p>
-            <div class="row">
-              <a class="btn ${childReady ? "" : "disabled"}" href="${makeCategoryUrl(child)}">하위 목록 보기</a>
-            </div>
-          `;
-          list.appendChild(card);
+          state.items.push({
+            kind: "category",
+            name: child.catNm,
+            category: child,
+            childReady,
+            childRegistered: childExams.length,
+            seq: Number(child.seq || 0),
+          });
         }
 
         for (const exam of exams) {
-          const questionPath = normalizePdfPath(exam.questionPdf);
-          const answerPath = normalizePdfPath(exam.answerPdf);
-          const ready = Boolean(questionPath && isPublishedQuestion(exam));
-
-          const card = document.createElement("article");
-          card.className = "exam";
-
-          const quizUrl = makeQuizUrl(exam);
-          const qLink = questionPath ? `./${encodeURI(questionPath)}` : "#";
-          const aLink = answerPath ? `./${encodeURI(answerPath)}` : "#";
-          const answerLabel = DATASET === "knou" ? "정답 파일" : "정답 PDF"; // SOFTM-KNOU: HWP 정답표도 표시 가능하도록 라벨 분리 - 2026-05-29
-
-          card.innerHTML = `
-            <h2 class="name">${exam.questionNm}</h2>
-            <p class="status">${examStatus(exam)}</p>
-            <div class="row">
-              <a class="btn ${ready ? "" : "disabled"}" href="${quizUrl}">풀이 시작</a>
-              <a class="btn secondary ${questionPath ? "" : "disabled"}" href="${qLink}" target="_blank">문제 PDF</a>
-              <a class="btn secondary ${answerPath ? "" : "disabled"}" href="${aLink}" target="_blank">${answerLabel}</a>
-            </div>
-          `;
-
-          list.appendChild(card);
+          state.items.push({
+            kind: "exam",
+            name: exam.questionNm,
+            exam,
+            seq: Number(exam.seq || 0),
+          });
         }
+
+        const readyCount = exams.filter((e) => normalizePdfPath(e.questionPdf) && isPublishedQuestion(e)).length;
+        meta.textContent = `${DATASET === "knou" ? "방통대" : "문제은행"} · ${category?.gNm || categoryName}`;
+        subtitle.textContent = [
+          children.length ? `과목 ${children.length}개` : "",
+          `회차 ${readyCount}개`,
+        ].filter(Boolean).join(" · ");
+
+        renderList();
       } catch (err) {
         meta.textContent = "데이터를 불러오지 못했습니다.";
         list.innerHTML = '<article class="empty">json 데이터(group/category/question)를 확인하세요.</article>';
@@ -353,6 +662,7 @@
     }
 
     initAdFit("adfitCategoryTop", ADFIT_UNITS.categoryTop, "728", "90");
+    bindControls();
     load();
   </script>
 </body>

@@ -185,10 +185,10 @@
       min-width: 0;
       table-layout: fixed;
     }
-    #categoryTable th:nth-child(1), #categoryTable td:nth-child(1) { width: 46%; }
+    #categoryTable th:nth-child(1), #categoryTable td:nth-child(1) { width: 50%; }
     #categoryTable th:nth-child(2), #categoryTable td:nth-child(2) { width: 56px; }
     #categoryTable th:nth-child(3), #categoryTable td:nth-child(3) { width: 72px; }
-    #categoryTable th:nth-child(4), #categoryTable td:nth-child(4) { width: 118px; }
+    #categoryTable th:nth-child(4), #categoryTable td:nth-child(4) { width: 220px; }
     #categoryTable td { min-width: 0; }
     #categoryTable .cellTitle,
     #categoryTable .cellSub {
@@ -484,10 +484,11 @@
     <div class="top">
       <div>
         <h1>문제은행 관리자</h1>
-        <div class="desc">카테고리와 문제 회차를 테이블로 확인하고, 파일 배치 후 JSON 생성 상태를 점검합니다.</div>
+        <div class="desc">카테고리, 파일 배치, JSON 생성 상태를 점검합니다. 문제 회차는 전용 화면에서 관리합니다.</div>
       </div>
       <div class="actions">
         <a class="button" href="./index.html">풀이 메인</a>
+        <a class="button" href="./admin-questions.html">문제 회차</a>
         <button id="btnRefresh" class="primary">새로고침</button>
         <button id="btnProcessGenerate" class="secondary">점검 후 JSON 재생성</button>
       </div>
@@ -499,7 +500,7 @@
       <section class="panel">
         <div class="panelHead">
           <div>
-            <h2>카테고리 / 문제 관리</h2>
+            <h2>카테고리 관리</h2>
             <div class="desc" id="catalogMeta">로딩 중</div>
           </div>
           <div class="row">
@@ -517,60 +518,35 @@
               <option value="published">게시</option>
               <option value="unpublished">미게시</option>
               <option value="warning">확인 필요</option>
+              <option value="initial">초기 상태</option>
+              <option value="anchor-missing">위치맵 없음</option>
+              <option value="manual-edited">수동 편집</option>
             </select>
             <select id="categoryFilter">
               <option value="">전체 카테고리</option>
             </select>
           </div>
 
-          <div class="splitTables">
-            <div class="stack">
-              <div class="row" style="justify-content:space-between">
-                <h3>카테고리</h3>
-                <div class="row">
-                  <span class="desc" id="categoryTableMeta"></span>
-                  <button id="btnRefreshCategories" class="secondary" type="button">카테고리 새로고침</button>
-                </div>
-              </div>
-              <div class="tableWrap">
-                <table id="categoryTable">
-                  <thead>
-                    <tr>
-                      <th>카테고리</th>
-                      <th>회차</th>
-                      <th>게시</th>
-                      <th>작업</th>
-                    </tr>
-                  </thead>
-                  <tbody id="categoryRows"></tbody>
-                </table>
+          <div class="stack">
+            <div class="row" style="justify-content:space-between">
+              <h3>카테고리</h3>
+              <div class="row">
+                <span class="desc" id="categoryTableMeta"></span>
+                <button id="btnRefreshCategories" class="secondary" type="button">카테고리 새로고침</button>
               </div>
             </div>
-
-            <div class="stack">
-              <div class="row" style="justify-content:space-between">
-                <h3>문제 회차</h3>
-                <div class="row">
-                  <span class="desc" id="questionTableMeta"></span>
-                  <button id="btnRefreshQuestions" class="secondary" type="button">문제 회차 새로고침</button>
-                </div>
-              </div>
-              <div class="tableWrap">
-                <table id="questionTable">
-                  <thead>
-                    <tr>
-                      <th>상태</th>
-                      <th>문제 파일</th>
-                      <th>OCR 품질</th>
-                      <th>정답 진단</th>
-                      <th>위치맵</th>
-                      <th>문항</th>
-                      <th>작업</th>
-                    </tr>
-                  </thead>
-                  <tbody id="questionRows"></tbody>
-                </table>
-              </div>
+            <div class="tableWrap">
+              <table id="categoryTable">
+                <thead>
+                  <tr>
+                    <th>카테고리</th>
+                    <th>회차</th>
+                    <th>게시</th>
+                    <th>작업</th>
+                  </tr>
+                </thead>
+                <tbody id="categoryRows"></tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -765,8 +741,16 @@
     }
     // SOFTM-ADMIN: 회차 목록을 등록명 대신 실제 문제 파일명 기준으로 표시하기 위한 경로 유틸 추가 - 2026-05-30
 
+    function adminApiUrl(value){
+      const target = String(value || "");
+      if (!target.startsWith("/api/admin/")) return target;
+      if (location.protocol === "http:" && location.port === "8787") return target;
+      const localHost = location.hostname === "127.0.0.1" ? "127.0.0.1" : "localhost";
+      return `http://${localHost}:8787${target}`;
+    }
+
     async function api(path, options = {}){
-      const res = await fetch(path, { cache: "no-store", ...options });
+      const res = await fetch(adminApiUrl(path), { cache: "no-store", ...options });
       const type = res.headers.get("content-type") || "";
       if (!type.includes("application/json")) {
         throw new Error("관리 기능은 Node 관리자 서버에서만 가능합니다. npm run admin 실행 후 http://localhost:8787/admin.html 로 접속하세요.");
@@ -775,6 +759,7 @@
       if (!res.ok || data.ok === false) throw new Error(data.message || "요청 실패");
       return data;
     }
+    // SOFTM-ADMIN: 목록 화면이 정적 서버 포트에서 열려도 관리자 API는 8787 Node 서버로 호출 - 2026-06-02
 
     /* SOFTM-ADMIN 시작: 완료/오류/취소 정보를 우측 하단 토스트로 안내 - 2026-05-30 */
     function showToast(message, options = {}){
@@ -903,65 +888,6 @@
       return `${item.dataset}:${item.questionNo}`;
     }
 
-    function statusPill(item){
-      if (item.published) return `<span class="pill ok">게시</span>`;
-      if (item.issue && item.issue !== "정상" && item.issue !== "미게시") return `<span class="pill warn">비정상</span>`;
-      return `<span class="pill warn">미게시</span>`;
-    }
-
-    function diagPill(status, tone = "ok"){
-      const normalized = String(status || "미확인")
-        .replaceAll("OCR 품질 경고", "OCR")
-        .replaceAll("OCR 경고", "OCR")
-        .replaceAll("PDF 품질 경고", "PDF")
-        .replaceAll("PDF 경고", "PDF");
-      return `<span class="pill ${tone || (normalized === "정상" ? "ok" : "warn")}">${escapeHtml(normalized)}</span>`;
-    }
-
-    function anchorPill(item){
-      if (!item?.anchorMap) return `<span class="pill warn">없음</span>`;
-      const confidence = Math.round(Number(item.anchorConfidence || 0) * 100);
-      const warn = Array.isArray(item.anchorWarnings) && item.anchorWarnings.length > 0;
-      const tone = warn || confidence < 80 ? "warn" : "ok";
-      return `<span class="pill ${tone}">${confidence}%</span>`;
-    }
-
-    function formatAnchorGeneratedAt(value){
-      if (!value) return "";
-      const date = new Date(value);
-      if (!Number.isFinite(date.getTime())) return "";
-      const diffMs = Date.now() - date.getTime();
-      const absMs = Math.abs(diffMs);
-      const minute = 60 * 1000;
-      const hour = 60 * minute;
-      const day = 24 * hour;
-      if (absMs < minute) return "방금 전";
-      if (absMs < hour) return `${Math.max(1, Math.round(absMs / minute))}분 전`;
-      if (absMs < day) return `${Math.max(1, Math.round(absMs / hour))}시간 전`;
-      if (absMs < 30 * day) return `${Math.max(1, Math.round(absMs / day))}일 전`;
-      return `${Math.max(1, Math.round(absMs / (30 * day)))}개월 전`;
-    }
-
-    function formatAnchorGeneratedAtTitle(value){
-      if (!value) return "";
-      const date = new Date(value);
-      if (!Number.isFinite(date.getTime())) return "";
-      const pad = (n) => String(n).padStart(2, "0");
-      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-    }
-
-    function anchorCell(item){
-      const updated = formatAnchorGeneratedAt(item?.anchorGeneratedAt);
-      const updatedTitle = formatAnchorGeneratedAtTitle(item?.anchorGeneratedAt);
-      return `${anchorPill(item)}${updated ? `<div class="cellSub" title="${escapeHtml(updatedTitle)}">수정 ${escapeHtml(updated)}</div>` : ""}`;
-    }
-    // SOFTM-위치맵: 목록에서 위치맵 최종 수정시간(anchorGeneratedAt)을 신뢰도와 함께 표시 - 2026-06-01
-
-    function warningText(warnings){
-      const list = Array.isArray(warnings) ? warnings.filter(Boolean) : [];
-      return list.length ? list.slice(0, 3).map((item) => `- ${item}`).join("\n") : "특이사항 없음";
-    }
-
     function readAdminListState(){
       const fromParams = new URLSearchParams(location.search);
       const hasQueryState = ["search", "dataset", "status", "cat", "question"].some((key) => fromParams.has(key));
@@ -1014,7 +940,7 @@
       state.listStateApplied = true;
     }
 
-    function makeAdminReturnUrl(overrides = {}){
+    function makeAdminQuestionsUrl(overrides = {}){
       const current = { ...currentAdminListState(), ...overrides };
       const q = new URLSearchParams();
       if (current.search) q.set("search", current.search);
@@ -1023,7 +949,7 @@
       if (current.categoryKey) q.set("cat", current.categoryKey);
       if (current.questionKey) q.set("question", current.questionKey);
       const query = q.toString();
-      return `./admin.html${query ? `?${query}` : ""}`;
+      return `./admin-questions.html${query ? `?${query}` : ""}`;
     }
 
     function makeCategoryUrl(item){
@@ -1031,43 +957,6 @@
       if (item.dataset === "knou") q.set("dataset", "knou");
       return `./category.html?${q.toString()}`;
     }
-
-    function makeQuizUrl(item){
-      const q = new URLSearchParams({
-        dataset: item.dataset,
-        category: item.catNm,
-        catNo: item.catNo,
-        exam: item.questionNm,
-        questionNo: item.questionNo,
-        question: normalizePath(item.questionPdf),
-        answer: normalizePath(item.answerPdf),
-      });
-      if (item.correctJson) q.set("correct", normalizePath(item.correctJson));
-      if (item.questionCount) q.set("questionCount", item.questionCount);
-      if (item.questionStartNo) q.set("questionStartNo", item.questionStartNo);
-      if (item.questionEndNo) q.set("questionEndNo", item.questionEndNo);
-      if (item.answerSourceId) q.set("answerSourceId", item.answerSourceId);
-      return `./quiz.html?${q.toString()}`;
-    }
-
-    function makeAnchorEditQuizUrl(item){
-      const url = makeQuizUrl(item);
-      const [base, query = ""] = url.split("?");
-      const q = new URLSearchParams(query);
-      q.set("anchorDebug", "1");
-      q.set("anchorEdit", "1");
-      return `${base}?${q.toString()}`;
-    }
-
-    function makeAdminDetailUrl(item){
-      const q = new URLSearchParams({
-        dataset: item.dataset || "default",
-        questionNo: item.questionNo || "",
-      });
-      q.set("return", makeAdminReturnUrl({ questionKey: questionKey(item) }));
-      return `./admin-detail.html?${q.toString()}`;
-    }
-    // SOFTM-ADMIN: 회차 상세/진단 페이지로 이동하는 관리자 URL 생성 추가 - 2026-05-30
 
     function renderCounts(data){
       const labels = {
@@ -1135,7 +1024,10 @@
       if (!status) return true;
       if (status === "published") return Boolean(item.published || item.published > 0);
       if (status === "unpublished") return Boolean(item.unpublished || !item.published);
-        if (status === "warning") return (item.issue && item.issue !== "정상") || item.needsOcr || item.answerIssue;
+      if (status === "warning") return (item.issue && item.issue !== "정상") || item.needsOcr || item.answerIssue || (Array.isArray(item.anchorWarnings) && item.anchorWarnings.length > 0);
+      if (status === "initial") return Boolean(item.workStateInitial) || (!item.correctJson && !item.anchorMap && !item.hasManualAnchorEdits);
+      if (status === "anchor-missing") return !item.anchorMap;
+      if (status === "manual-edited") return Boolean(item.hasManualAnchorEdits);
       return true;
     }
 
@@ -1144,23 +1036,13 @@
       return state.catalog.categories.filter((item) => {
         if (filters.dataset && item.dataset !== filters.dataset) return false;
         if (!matchesText(item, filters.text)) return false;
+        if (["warning", "initial", "anchor-missing", "manual-edited"].includes(filters.status)) {
+          const descendants = categoryDescendantKeys(categoryKey(item));
+          return state.catalog.questions.some((question) => descendants.has(categoryKey(question)) && matchesStatus(question, filters.status));
+        }
         if (filters.status === "published" && item.published <= 0) return false;
         if (filters.status === "unpublished" && item.unpublished <= 0) return false;
         if (filters.status === "warning" && item.unpublished <= 0 && Number(item.ocrWarning || 0) <= 0) return false;
-        return true;
-      });
-    }
-
-    function filteredQuestions(){
-      const filters = catalogFilters();
-      const selectedKeys = categoryDescendantKeys(filters.categoryKey);
-      return state.catalog.questions.filter((item) => {
-        if (filters.dataset && item.dataset !== filters.dataset) return false;
-        if (selectedKeys.size && !selectedKeys.has(categoryKey(item))) return false;
-        if (!matchesText(item, filters.text)) return false;
-        if (filters.status === "published" && !item.published) return false;
-        if (filters.status === "unpublished" && item.published) return false;
-        if (filters.status === "warning" && !((item.issue && item.issue !== "정상") || item.needsOcr || item.answerIssue)) return false;
         return true;
       });
     }
@@ -1206,6 +1088,7 @@
             </td>
             <td class="row">
               <a class="button" href="${makeCategoryUrl(item)}">보기</a>
+              <a class="button" href="${makeAdminQuestionsUrl({ categoryKey: key, questionKey: "" })}">회차관리</a>
               <button type="button" class="secondary" data-rebuild-category="${escapeHtml(key)}" ${item.dataset !== "default" ? "disabled" : ""} title="${escapeHtml(item.dataset !== "default" ? "기본 PDF 문제은행 카테고리만 부분 갱신할 수 있습니다." : "이 카테고리의 question/correct JSON만 갱신합니다.")}">JSON생성</button>
             </td>
           </tr>
@@ -1213,69 +1096,10 @@
       }).join("");
     }
 
-    function renderQuestionTable(){
-      const rows = filteredQuestions();
-      $("questionTableMeta").textContent = `${rows.length.toLocaleString()}개`;
-      if (!rows.length) {
-        $("questionRows").innerHTML = `<tr><td class="empty" colspan="7">문제 회차가 없습니다.</td></tr>`;
-        return;
-      }
-      if (!rows.some((item) => questionKey(item) === state.selectedQuestionKey)) {
-        state.selectedQuestionKey = questionKey(rows[0]);
-      }
-      $("questionRows").innerHTML = rows.map((item) => {
-        const key = questionKey(item);
-        const selected = key === state.selectedQuestionKey;
-        const questionFileName = fileNameFromPath(item.questionPdf) || item.questionNm || "-";
-        const questionFolder = folderNameFromPath(item.questionPdf);
-        const quizUrl = item.questionPdf ? makeQuizUrl(item) : "";
-        const anchorDebugQuizUrl = quizUrl ? `${quizUrl}${quizUrl.includes("?") ? "&" : "?"}anchorDebug=1` : "";
-        const anchorEditQuizUrl = item.anchorMap ? makeAnchorEditQuizUrl(item) : "";
-        const quizBadge = quizUrl ? `<a class="pill ok" href="${quizUrl}" target="_blank" rel="noopener">풀이</a>` : `<span class="pill warn">풀이</span>`;
-        const positionQuizBadge = anchorDebugQuizUrl ? `<a class="pill ok" href="${anchorDebugQuizUrl}" target="_blank" rel="noopener">위치</a>` : `<span class="pill warn">위치</span>`;
-        const detailUrl = makeAdminDetailUrl(item);
-        const anchorMapLink = `<a class="button secondary" href="${detailUrl}">위치맵</a>`;
-        const anchorEditLink = anchorEditQuizUrl ? `<a class="button secondary" href="${anchorEditQuizUrl}" target="_blank" rel="noopener">앵커 편집</a>` : `<span class="button disabled" title="먼저 위치맵을 생성하세요.">앵커 편집</span>`;
-        const counts = [
-          item.questionCount ? `${item.questionCount}` : "",
-          item.questionStartNo && item.questionEndNo ? `${item.questionStartNo}-${item.questionEndNo}` : "",
-        ].filter(Boolean).join(" · ");
-        return `
-          <tr class="selectableRow${selected ? " selected" : ""}" tabindex="0" data-question-key="${escapeHtml(key)}" aria-selected="${selected ? "true" : "false"}">
-            <td>${statusPill(item)}${item.issue && item.issue !== "정상" ? `<div class="cellSub">${escapeHtml(item.issue)}</div>` : ""}</td>
-            <td>
-              <div class="cellTitle"><a href="${detailUrl}">${escapeHtml(questionFileName)}</a> ${quizBadge} ${positionQuizBadge}</div>
-              <div class="cellSub">${escapeHtml(item.catNm)} · ${escapeHtml(item.datasetLabel)} · ${escapeHtml(item.gNm || "")}</div>
-              <div class="pathCell">${escapeHtml(questionFolder)}</div>
-            </td>
-            <td>
-              ${diagPill(item.questionDiagStatus, item.questionDiagTone)}
-            </td>
-            <td>
-              ${diagPill(item.answerDiagStatus, item.answerDiagTone)}
-            </td>
-            <td>${anchorCell(item)}</td>
-            <td>${escapeHtml(counts || "-")}</td>
-            <td class="row">${anchorMapLink}${anchorEditLink}</td>
-          </tr>
-        `;
-      }).join("");
-      markSelectedQuestionRow();
-    }
-
     function renderCatalog(){
       renderCategoryTable();
-      renderQuestionTable();
     }
     // SOFTM-OCR: 관리자 목록에서 게시 상태와 OCR 품질 경고를 분리해 OCR 경고가 있어도 풀이 가능 회차는 게시로 표시 - 2026-05-30
-
-    function markSelectedQuestionRow(){
-      document.querySelectorAll("#questionRows tr[data-question-key]").forEach((row) => {
-        const selected = row.dataset.questionKey === state.selectedQuestionKey;
-        row.classList.toggle("selected", selected);
-        row.setAttribute("aria-selected", selected ? "true" : "false");
-      });
-    }
 
     function selectedQuestion(){
       return state.catalog.questions.find((item) => questionKey(item) === state.selectedQuestionKey) || null;
@@ -1285,14 +1109,6 @@
       const key = state.selectedCategoryKey || $("categoryFilter").value;
       return state.catalog.categories.find((item) => categoryKey(item) === key) || null;
     }
-
-    function selectQuestionRow(key){
-      if (!key) return;
-      state.selectedQuestionKey = key;
-      markSelectedQuestionRow();
-      writeAdminListState();
-    }
-    // SOFTM-ADMIN: 메인 목록은 행 선택 표시만 유지하고 상세/진단은 별도 페이지로 이동 - 2026-05-30
 
     function markSelectedCategoryRow(){
       document.querySelectorAll("#categoryRows tr[data-category-key]").forEach((row) => {
@@ -1307,7 +1123,6 @@
       state.selectedCategoryKey = key;
       $("categoryFilter").value = key;
       markSelectedCategoryRow();
-      renderQuestionTable();
       writeAdminListState();
     }
     // SOFTM-ADMIN: 카테고리 선택 버튼 대신 행 포커스/클릭으로 선택 상태를 표시하도록 변경 - 2026-05-29
@@ -1760,25 +1575,6 @@
       selectCategoryRow(row.dataset.categoryKey);
     });
 
-    $("questionRows").addEventListener("click", async (e) => {
-      const row = e.target.closest("tr[data-question-key]");
-      if (!row || e.target.closest("a, button")) return;
-      selectQuestionRow(row.dataset.questionKey);
-    });
-
-    $("questionRows").addEventListener("focusin", (e) => {
-      const row = e.target.closest("tr[data-question-key]");
-      if (row) selectQuestionRow(row.dataset.questionKey);
-    });
-
-    $("questionRows").addEventListener("keydown", (e) => {
-      if (!["Enter", " "].includes(e.key)) return;
-      const row = e.target.closest("tr[data-question-key]");
-      if (!row || e.target.closest("a, button")) return;
-      e.preventDefault();
-      selectQuestionRow(row.dataset.questionKey);
-    });
-
     $("fileRows").addEventListener("click", async (e) => {
       const open = e.target.dataset.open;
       const rename = e.target.dataset.rename;
@@ -1853,7 +1649,6 @@
     $("btnRebuild").addEventListener("click", rebuildManifest);
     $("btnSyncCategories").addEventListener("click", () => syncCategoryInfo().catch((err) => { $("rebuildStatus").textContent = err.message; }));
     $("btnRefreshCategories").addEventListener("click", () => syncCategoryInfo().catch((err) => { $("rebuildStatus").textContent = err.message; }));
-    $("btnRefreshQuestions").addEventListener("click", () => rebuildCategoryManifest().catch((err) => { $("rebuildStatus").textContent = err.message; }));
     $("btnRebuildCategory").addEventListener("click", () => rebuildCategoryManifest().catch((err) => { $("rebuildStatus").textContent = err.message; }));
     $("btnProcessReport").addEventListener("click", () => loadProcessReport({ showProgress: true }).catch((err) => { $("processStatus").textContent = err.message; }));
     $("btnProcessGenerate").addEventListener("click", runManagedProcess);

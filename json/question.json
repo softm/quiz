@@ -61,13 +61,13 @@
     "questionEndNo": 100,
     "ocrStatus": "OCR 확인 필요",
     "ocrPublished": false,
-    "anchorMap": "pdf/농산물품질관리사/2023년 제20회 농산물품질관리사 1차 시험문제지_anchor.json",
-    "anchorStatus": "generated",
-    "anchorConfidence": 0.98,
+    "anchorMap": "quiz/pdf/농산물품질관리사/2023년 제20회 농산물품질관리사 1차 시험문제지_anchor.json",
+    "anchorStatus": "위치맵 생성",
+    "anchorConfidence": 0.9036,
     "anchorWarnings": [
-      "일부 선택지 위치가 누락되었습니다(386/400). 틀린 좌표 대신 누락으로 표시합니다."
+      "선택지 위치 감지가 부족합니다(248/400). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
     ],
-    "anchorGeneratedAt": "2026-06-01T06:04:24.729Z",
+    "anchorGeneratedAt": "2026-06-02T10:49:57.714Z",
     "choiceCount": 4,
     "anchorQuestionDetected": 99,
     "anchorQuestionExpected": 100,
@@ -568,7 +568,7 @@
     "parentCatNo": "0003",
     "questionNm": "[기출문제] [2015학년도 1학기] 기말시험",
     "questionNo": "0016",
-    "questionPdf": "pdf/방통대/모바일앱프로그래밍/[기출문제] [2015학년도 1학기] 기말시험.pdf",
+    "questionPdf": "quiz/pdf/방통대/모바일앱프로그래밍/[기출문제] [2015학년도 1학기] 기말시험.pdf",
     "answerPdf": "quiz/pdf/방통대/정답/기말시험/2015/2015. 1학기 기말시험정답표.hwp",
     "correctJson": "quiz/pdf/방통대/모바일앱프로그래밍/correct.json",
     "published": true,
@@ -589,28 +589,10 @@
     "questionCount": 25,
     "answerStartNo": 1,
     "answerEndNo": 25,
-    "questionStartNo": 36,
-    "questionEndNo": 60,
+    "questionStartNo": 1,
+    "questionEndNo": 25,
     "ocrStatus": "OCR 확인 필요",
-    "ocrPublished": false,
-    "anchorMap": "pdf/방통대/모바일앱프로그래밍/[기출문제] [2015학년도 1학기] 기말시험_anchor.json",
-    "anchorStatus": "generated",
-    "anchorConfidence": 0.9368,
-    "anchorWarnings": [
-      "선택지 위치 감지가 부족합니다(76/100). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
-    ],
-    "anchorGeneratedAt": "2026-06-01T06:03:40.487Z",
-    "anchorQuestionDetected": 23,
-    "anchorQuestionExpected": 25,
-    "anchorChoiceDetected": 96,
-    "anchorChoiceExpected": 100,
-    "anchorChoiceCoverage": 0.76,
-    "anchorQuestionTotal": 25,
-    "anchorChoiceTotal": 100,
-    "anchorIssueCount": 1,
-    "anchorPartialChoiceCount": 0,
-    "anchorOutOfSegmentChoiceCount": 0,
-    "anchorGeneratorVersion": 1
+    "ocrPublished": false
   },
   {
     "gNo": "03",
@@ -700,17 +682,10 @@
     "questionCount": 25,
     "answerStartNo": 1,
     "answerEndNo": 25,
-    "questionStartNo": 36,
-    "questionEndNo": 60,
+    "questionStartNo": 1,
+    "questionEndNo": 25,
     "ocrStatus": "OCR 확인 필요",
-    "ocrPublished": false,
-    "anchorMap": "quiz/pdf/방통대/모바일앱프로그래밍/[기출문제] [2017.1학기] 기말시험_anchor.json",
-    "anchorStatus": "위치맵 생성",
-    "anchorConfidence": 0.9485999999999999,
-    "anchorWarnings": [
-      "일부 선택지 위치가 누락되었습니다(87/100). 틀린 좌표 대신 누락으로 표시합니다."
-    ],
-    "anchorGeneratedAt": "2026-06-01T07:33:27.035Z"
+    "ocrPublished": false
   },
   {
     "gNo": "03",
@@ -741,17 +716,10 @@
     "questionCount": 25,
     "answerStartNo": 1,
     "answerEndNo": 25,
-    "questionStartNo": 36,
-    "questionEndNo": 60,
+    "questionStartNo": 1,
+    "questionEndNo": 25,
     "ocrStatus": "OCR 확인 필요",
-    "ocrPublished": false,
-    "anchorMap": "quiz/pdf/방통대/모바일앱프로그래밍/[기출문제] [2018-1학기] 기말시험 기출문제_anchor.json",
-    "anchorStatus": "위치맵 생성",
-    "anchorConfidence": 0.9647999999999999,
-    "anchorWarnings": [
-      "일부 선택지 위치가 누락되었습니다(96/100). 틀린 좌표 대신 누락으로 표시합니다."
-    ],
-    "anchorGeneratedAt": "2026-06-01T06:59:42.682Z"
+    "ocrPublished": false
   },
   {
     "gNo": "03",
@@ -814,23 +782,10 @@
     "questionCount": 25,
     "answerStartNo": 1,
     "answerEndNo": 25,
-    "questionStartNo": 36,
-    "questionEndNo": 60,
+    "questionStartNo": 1,
+    "questionEndNo": 25,
     "ocrStatus": "OCR 확인 필요",
-    "ocrPublished": false,
-    "anchorMap": "quiz/pdf/방통대/모바일앱프로그래밍/[기출문제] [2019-1학기] 기말시험 기출문제_anchor.json",
-    "anchorStatus": "위치맵 생성",
-    "anchorConfidence": 0.972,
-    "anchorWarnings": [],
-    "anchorGeneratedAt": "2026-06-01T06:25:33.534Z",
-    "anchorQuestionDetected": 24,
-    "anchorQuestionTotal": 25,
-    "anchorChoiceDetected": 100,
-    "anchorChoiceTotal": 100,
-    "anchorIssueCount": 0,
-    "anchorPartialChoiceCount": 0,
-    "anchorOutOfSegmentChoiceCount": 0,
-    "anchorGeneratorVersion": 1
+    "ocrPublished": false
   },
   {
     "gNo": "03",
@@ -860,17 +815,10 @@
     "questionCount": 15,
     "answerStartNo": 1,
     "answerEndNo": 15,
-    "questionStartNo": 16,
-    "questionEndNo": 30,
+    "questionStartNo": 1,
+    "questionEndNo": 15,
     "ocrStatus": "OCR 확인 필요",
-    "ocrPublished": false,
-    "anchorMap": "quiz/pdf/방통대/모바일앱프로그래밍/[기출문제] [2019-1학기] 출석수업대체시험 기출문제_anchor.json",
-    "anchorStatus": "위치맵 생성",
-    "anchorConfidence": 0.964,
-    "anchorWarnings": [
-      "일부 선택지 위치가 누락되었습니다(48/60). 틀린 좌표 대신 누락으로 표시합니다."
-    ],
-    "anchorGeneratedAt": "2026-06-01T04:50:32.340Z"
+    "ocrPublished": false
   },
   {
     "gNo": "03",
@@ -880,7 +828,7 @@
     "parentCatNo": "0003",
     "questionNm": "[기출문제] [2014.1학기 기말시험] 모바일앱프로그래밍",
     "questionNo": "0024",
-    "questionPdf": "pdf/방통대/모바일앱프로그래밍/[기출문제] [2014.1학기 기말시험] 모바일앱프로그래밍.pdf",
+    "questionPdf": "quiz/pdf/방통대/모바일앱프로그래밍/[기출문제] [2014.1학기 기말시험] 모바일앱프로그래밍.pdf",
     "answerPdf": "quiz/pdf/방통대/정답/기말시험/2014/2014. 1학기-기말시험정답표(최종).hwp",
     "correctJson": "quiz/pdf/방통대/모바일앱프로그래밍/correct.json",
     "published": true,
@@ -904,24 +852,13 @@
     "questionEndNo": 60,
     "ocrStatus": "OCR 확인 필요",
     "ocrPublished": false,
-    "anchorMap": "pdf/방통대/모바일앱프로그래밍/[기출문제] [2014.1학기 기말시험] 모바일앱프로그래밍_anchor.json",
-    "anchorStatus": "generated",
-    "anchorConfidence": 0.9647999999999999,
+    "anchorMap": "quiz/pdf/방통대/모바일앱프로그래밍/[기출문제] [2014.1학기 기말시험] 모바일앱프로그래밍_anchor.json",
+    "anchorStatus": "위치맵 생성",
+    "anchorConfidence": 0.9431999999999999,
     "anchorWarnings": [
-      "일부 선택지 위치가 누락되었습니다(86/100). 틀린 좌표 대신 누락으로 표시합니다."
+      "일부 선택지 위치가 누락되었습니다(84/100). 틀린 좌표 대신 누락으로 표시합니다."
     ],
-    "anchorGeneratedAt": "2026-06-01T06:03:29.901Z",
-    "anchorQuestionDetected": 24,
-    "anchorQuestionExpected": 25,
-    "anchorChoiceDetected": 96,
-    "anchorChoiceExpected": 100,
-    "anchorChoiceCoverage": 0.86,
-    "anchorQuestionTotal": 25,
-    "anchorChoiceTotal": 100,
-    "anchorIssueCount": 1,
-    "anchorPartialChoiceCount": 0,
-    "anchorOutOfSegmentChoiceCount": 0,
-    "anchorGeneratorVersion": 1
+    "anchorGeneratedAt": "2026-06-02T05:14:12.811Z"
   },
   {
     "gNo": "03",

@@ -368,6 +368,86 @@
       opacity: .45;
       cursor: not-allowed;
     }
+    .resetStateSummary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(140px, 1fr));
+      gap: 8px;
+    }
+    .resetStateItem {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 9px 10px;
+      display: grid;
+      gap: 4px;
+      min-height: 62px;
+    }
+    .resetStateItem span {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .resetStateItem strong {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 14px;
+      line-height: 1.25;
+    }
+    .resetStateItem strong.ok { color: var(--ok); }
+    .resetStateItem strong.warn { color: var(--warn); }
+    .resetGrid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      align-items: stretch;
+    }
+    .resetCard {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      min-height: 0;
+    }
+    .resetCard.dangerZone {
+      border-color: #e7b9b9;
+      background: #fff8f8;
+    }
+    .resetCardHead {
+      display: grid;
+      gap: 4px;
+    }
+    .resetCardHead h3 {
+      font-size: 15px;
+    }
+    .resetActions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .resetScopeGrid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(120px, 1fr));
+      gap: 8px;
+      align-items: end;
+    }
+    .resetScopeGrid .field:last-child {
+      grid-column: 1 / -1;
+    }
+    .resetScopeActions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .resetScopeActions button {
+      width: 100%;
+    }
+    /* SOFTM-ADMIN: 초기화 작업을 PDF 진단 버튼 줄에서 분리해 범위별 작업 카드로 정리 - 2026-06-02 */
     .progressTrack {
       position: relative;
       height: 8px;
@@ -432,6 +512,9 @@
       .detailLayout, .grid2 { grid-template-columns: 1fr; }
       .previewPanel { position: static; }
       .pdfPreview { height: 60vh; min-height: 360px; }
+      .resetGrid, .resetStateSummary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .resetScopeGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .resetScopeActions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 760px) {
       .summaryGrid, .diagGrid { grid-template-columns: 1fr; }
@@ -439,6 +522,7 @@
     @media (max-width: 640px) {
       .metricGrid { grid-template-columns: 1fr; }
       .metricBox { grid-template-columns: 68px minmax(0, 1fr); }
+      .resetGrid, .resetStateSummary, .resetScopeGrid, .resetScopeActions { grid-template-columns: 1fr; }
     }
     /* SOFTM-ADMIN: 상세 레이아웃이 단일 컬럼이어도 진단 지표는 좁은 모바일 전까지 다열로 유지 - 2026-05-30 */
   </style>
@@ -512,14 +596,14 @@
           <div class="panelHead">
             <div>
               <h2>PDF 진단 / OCR</h2>
-              <div class="desc">문제 PDF 또는 정답 PDF를 선택해 텍스트 추출 상태를 점검하고 OCR을 적용합니다.</div>
+              <div class="desc">문제 PDF 또는 정답 파일을 선택해 미리보기하고, PDF는 텍스트 추출 상태를 점검하거나 OCR을 적용합니다.</div>
             </div>
           </div>
           <div class="panelBody stack">
             <div class="row">
-              <div class="pdfTabs" role="tablist" aria-label="PDF 전환">
+              <div class="pdfTabs" role="tablist" aria-label="문서 전환">
               <button id="btnQuestionPdf" class="pdfTab" type="button" role="tab" aria-selected="true">문제 PDF</button>
-              <button id="btnAnswerPdf" class="pdfTab" type="button" role="tab" aria-selected="false">정답 PDF</button>
+              <button id="btnAnswerPdf" class="pdfTab" type="button" role="tab" aria-selected="false">정답 파일</button>
               </div>
               <button id="btnOpenPdf">새 탭으로 열기</button>
               <button id="btnDownloadQuestionPdf">문제 PDF 다운로드</button>
@@ -550,17 +634,87 @@
               </div>
             </div>
             <div class="row">
-              <button id="btnRunAnchorOcr" class="primary">문제·문항 위치맵 생성</button>
-              <button id="btnCheckAnchorMap">위치맵 확인</button>
-              <button id="btnDeleteAnchorMap" class="secondary">위치맵 삭제</button>
-              <button id="btnDeleteManualAnchor" class="danger" disabled title="수정된 앵커가 있을 때 활성화됩니다.">앵커 초기화</button>
-              <a id="anchorEditLink" class="button secondary disabled" href="#" target="_blank" rel="noopener">앵커 편집</a>
-              <a id="anchorDebugLink" class="button primary disabled" href="#" target="_blank" rel="noopener">풀이(위치)</a>
               <button id="btnRunOcr" class="secondary">보조 OCR 실행</button>
               <button id="btnReload">다시 읽기</button>
             </div>
-            <div id="anchorMapStatusInline" class="status">위치맵 상태 확인 중</div>
             <!-- SOFTM-위치맵: 풀이용 문제·문항 위치맵 생성/검증 버튼을 전체 OCR보다 앞에 배치 - 2026-05-30 -->
+          </div>
+        </section>
+
+        <section class="panel" id="resetPanel">
+          <div class="panelHead">
+            <div>
+              <h2>초기화 작업</h2>
+              <div class="desc">회차 상태, 위치맵, 문제/문항 앵커, 문항 클릭영역을 범위별로 되돌립니다.</div>
+            </div>
+            <div class="row">
+              <a id="anchorEditLink" class="button secondary disabled" href="#" target="_blank" rel="noopener">앵커 편집</a>
+              <a id="anchorDebugLink" class="button primary disabled" href="#" target="_blank" rel="noopener">풀이(위치)</a>
+            </div>
+          </div>
+          <div class="panelBody stack">
+            <div id="resetStateSummary" class="resetStateSummary"></div>
+            <div class="resetGrid">
+              <article class="resetCard dangerZone">
+                <div class="resetCardHead">
+                  <h3>문제 상태 초기화</h3>
+                  <div class="desc">정답 JSON 연결, 위치맵 연결/파일, 앵커 편집 정보를 제거하고 원본 문제/정답 파일만 유지합니다.</div>
+                </div>
+                <div class="resetActions">
+                  <button id="btnResetQuestionInitial" class="danger">문제 상태 초기화</button>
+                </div>
+              </article>
+
+              <article class="resetCard">
+                <div class="resetCardHead">
+                  <h3>위치맵 전체 관리</h3>
+                  <div class="desc">PDF 기준 문제 시작 위치와 선택지 위치를 생성, 확인, 삭제합니다.</div>
+                </div>
+                <div class="resetActions">
+                  <button id="btnRunAnchorOcr" class="primary">위치맵 생성</button>
+                  <button id="btnCheckAnchorMap">위치맵 확인</button>
+                  <button id="btnDeleteAnchorMap" class="danger">위치맵 삭제</button>
+                </div>
+              </article>
+
+              <article class="resetCard">
+                <div class="resetCardHead">
+                  <h3>수동 편집 원복</h3>
+                  <div class="desc">위치맵 파일은 유지하고, 관리자 또는 풀이 화면에서 수정한 앵커만 원래 값으로 되돌립니다.</div>
+                </div>
+                <div class="resetActions">
+                  <button id="btnDeleteManualAnchor" class="danger" disabled title="수정된 앵커가 있을 때 활성화됩니다.">수동 앵커 전체 초기화</button>
+                </div>
+              </article>
+
+              <article class="resetCard">
+                <div class="resetCardHead">
+                  <h3>문제/문항 단위 초기화</h3>
+                  <div class="desc">특정 문제의 시작 위치, 특정 선택지 앵커, 문항 클릭영역만 골라 초기화합니다.</div>
+                </div>
+                <div class="resetScopeGrid">
+                  <div class="field">
+                    <label>문제 번호</label>
+                    <input id="resetQuestionNo" inputmode="numeric" placeholder="예: 1" />
+                  </div>
+                  <div class="field">
+                    <label>문항 번호</label>
+                    <select id="resetChoiceNo"></select>
+                  </div>
+                  <div class="field">
+                    <label>범위 안내</label>
+                    <input id="resetScopeHint" readonly value="위치맵이 있는 회차에서 사용할 수 있습니다." />
+                  </div>
+                </div>
+                <div class="resetScopeActions">
+                  <button id="btnResetQuestionAnchor" type="button">문제 위치</button>
+                  <button id="btnResetChoiceAnchor" type="button">문항 위치</button>
+                  <button id="btnResetChoiceArea" type="button">문항 영역</button>
+                  <button id="btnResetAllChoiceAreas" class="danger" type="button">전체 영역</button>
+                </div>
+              </article>
+            </div>
+            <div id="anchorMapStatusInline" class="status">위치맵 상태 확인 중</div>
             <div class="status" id="pdfDiagnoseStatus">대기 중</div>
           </div>
         </section>
@@ -569,13 +723,13 @@
       <aside class="panel previewPanel">
         <div class="panelHead">
           <div>
-            <h2>PDF 미리보기</h2>
+              <h2>문서 미리보기</h2>
             <div class="desc" id="pdfTargetHelp">문제 PDF를 기본 대상으로 표시합니다.</div>
           </div>
         </div>
         <div class="panelBody">
-          <iframe id="pdfPreviewFrame" class="pdfPreview" title="선택한 PDF 미리보기" hidden></iframe>
-          <div class="status" id="emptyPreview">PDF를 불러오는 중입니다.</div>
+          <iframe id="pdfPreviewFrame" class="pdfPreview" title="선택한 문서 미리보기" hidden></iframe>
+          <div class="status" id="emptyPreview">문서를 불러오는 중입니다.</div>
         </div>
       </aside>
     </div>
@@ -645,10 +799,18 @@
       return parts.length ? parts[parts.length - 1] : "";
     }
 
+    function adminApiUrl(value){
+      const target = String(value || "");
+      if (!target.startsWith("/api/admin/")) return target;
+      if (location.protocol === "http:" && location.port === "8787") return target;
+      const localHost = location.hostname === "127.0.0.1" ? "127.0.0.1" : "localhost";
+      return `http://${localHost}:8787${target}`;
+    }
+
     async function api(path, options = {}){
       let res;
       try{
-        res = await fetch(path, { cache: "no-store", ...options });
+        res = await fetch(adminApiUrl(path), { cache: "no-store", ...options });
       }catch(err){
         throw new Error(`관리자 서버에 연결할 수 없습니다. npm run admin 서버 상태를 확인하세요. (${err?.message || err})`);
       }
@@ -657,9 +819,10 @@
         throw new Error("관리 기능은 Node 관리자 서버에서만 가능합니다. npm run admin 실행 후 http://localhost:8787/admin.html 로 접속하세요.");
       }
       const data = await res.json();
-      if (!res.ok || data.ok === false) throw new Error(data.message || "요청 실패");
+      if (!res.ok || data.ok === false) throw new Error(data.message || data.error || "요청 실패");
       return data;
     }
+    // SOFTM-ADMIN: 상세 화면이 정적 서버 포트에서 열려도 관리자 API는 8787 Node 서버로 호출 - 2026-06-02
     // SOFTM-ADMIN: fetch 실패를 관리자 서버 연결 오류로 명확히 표시 - 2026-05-30
 
     function questionKey(item){
@@ -756,7 +919,8 @@
       }
       return containsManualAnchorValue(anchorData?.questionLabelMap)
         || containsManualAnchorValue(anchorData?.questionSegments)
-        || containsManualAnchorValue(anchorData?.choiceAnchorMap);
+        || containsManualAnchorValue(anchorData?.choiceAnchorMap)
+        || containsManualAnchorValue(anchorData?.choiceClickAreaMap);
     }
 
     function setManualAnchorDeleteButton(enabled, title = ""){
@@ -770,6 +934,10 @@
       setManualAnchorDeleteButton(false, "수정된 앵커 상태를 확인 중입니다.");
       if (!item?.anchorMap) {
         setManualAnchorDeleteButton(false, "저장된 위치맵이 없습니다.");
+        if (state.item === item) {
+          state.item.hasManualAnchorEdits = false;
+          renderResetStateSummary(state.item);
+        }
         return false;
       }
       try{
@@ -778,9 +946,17 @@
         setManualAnchorDeleteButton(enabled, enabled
           ? "수정된 앵커가 있습니다. 클릭하면 수동 편집분만 원래 위치맵 값으로 되돌립니다."
           : "수정된 앵커가 없습니다.");
+        if (state.item === item) {
+          state.item.hasManualAnchorEdits = enabled;
+          renderResetStateSummary(state.item);
+        }
         return enabled;
       }catch(err){
         setManualAnchorDeleteButton(false, `위치맵을 읽을 수 없습니다: ${err?.message || err}`);
+        if (state.item === item) {
+          state.item.hasManualAnchorEdits = false;
+          renderResetStateSummary(state.item);
+        }
         return false;
       }
     }
@@ -824,6 +1000,38 @@
         return;
       }
       window.location.href = `/api/admin/download?path=${encodeURIComponent(target)}`;
+    }
+
+    function fileExtension(pathValue){
+      const match = normalizePath(pathValue).match(/\.([^.\/?#]+)$/);
+      return match ? match[1].toLowerCase() : "";
+    }
+
+    function isPdfPath(pathValue){
+      return fileExtension(pathValue) === "pdf";
+    }
+
+    function isHwpPath(pathValue){
+      return fileExtension(pathValue) === "hwp";
+    }
+
+    function managedPreviewUrl(pathValue){
+      const target = normalizePath(pathValue);
+      if (isHwpPath(target)) return `/api/admin/hwp-preview?path=${encodeURIComponent(target)}`;
+      return `./${target}`;
+    }
+
+    function documentKindLabel(pathValue){
+      const ext = fileExtension(pathValue);
+      if (ext === "pdf") return "PDF";
+      if (ext === "hwp") return "HWP";
+      return ext ? ext.toUpperCase() : "파일";
+    }
+
+    function defaultPreviewTargetForItem(item){
+      const hwpAnswer = answerFilesForItem(item).find((file) => isHwpPath(file));
+      if (hwpAnswer) return { path: hwpAnswer, role: "정답" };
+      return { path: normalizePath(item?.questionPdf), role: "문제" };
     }
 
     function makeQuizUrl(item){
@@ -1036,13 +1244,103 @@
       }
     }
 
+    function itemWorkStateLabel(item){
+      const fallbackSteps = [
+        item?.correctJson ? "정답JSON" : "",
+        item?.anchorMap ? "위치맵" : "",
+        item?.hasManualAnchorEdits ? "앵커편집" : "",
+        item?.derivedPdf ? "OCR사본" : "",
+      ].filter(Boolean);
+      return item?.workState || (fallbackSteps.length ? fallbackSteps.join(" · ") : "초기");
+    }
+
+    function resetStateTone(value, okWhenPresent = true){
+      const present = Boolean(String(value || "").trim());
+      return present === okWhenPresent ? "ok" : "warn";
+    }
+
+    function renderResetStateSummary(item){
+      const el = $("resetStateSummary");
+      if (!el) return;
+      if (!item) {
+        el.innerHTML = `<div class="status warn">초기화할 회차를 먼저 선택하세요.</div>`;
+        return;
+      }
+      const anchorConfidence = item.anchorMap ? `${Math.round(Number(item.anchorConfidence || 0) * 100)}%` : "없음";
+      const values = [
+        ["문제 상태", itemWorkStateLabel(item), itemWorkStateLabel(item) === "초기" ? "warn" : "ok"],
+        ["정답 JSON", item.correctJson ? "연결됨" : "없음", resetStateTone(item.correctJson)],
+        ["위치맵", item.anchorMap ? `${item.anchorStatus || "생성됨"} · ${anchorConfidence}` : "미생성", resetStateTone(item.anchorMap)],
+        ["수동 편집", item.hasManualAnchorEdits ? "있음" : "없음", item.hasManualAnchorEdits ? "warn" : "ok"],
+      ];
+      el.innerHTML = values.map(([label, value, tone]) => `
+        <div class="resetStateItem">
+          <span>${escapeHtml(label)}</span>
+          <strong class="${escapeHtml(tone)}" title="${escapeHtml(value)}">${escapeHtml(value)}</strong>
+        </div>
+      `).join("");
+    }
+
+    function populateResetChoiceSelect(item){
+      const select = $("resetChoiceNo");
+      if (!select) return;
+      const current = Number(select.value || 1);
+      const count = Math.max(1, Math.min(9, Math.trunc(Number(item?.choiceCount || 4) || 4)));
+      select.innerHTML = Array.from({ length: count }, (_, idx) => {
+        const value = idx + 1;
+        return `<option value="${value}">${value}번</option>`;
+      }).join("");
+      select.value = String(Math.min(count, Math.max(1, current || 1)));
+    }
+
+    function setResetScopeButtonsEnabled(enabled){
+      for (const id of ["btnResetQuestionAnchor", "btnResetChoiceAnchor", "btnResetChoiceArea", "btnResetAllChoiceAreas"]) {
+        const el = $(id);
+        if (el) el.disabled = !enabled;
+      }
+    }
+
+    function updateResetScopeControls(item){
+      populateResetChoiceSelect(item);
+      const hasAnchorMap = Boolean(item?.anchorMap);
+      setResetScopeButtonsEnabled(hasAnchorMap);
+      const qInput = $("resetQuestionNo");
+      const hint = $("resetScopeHint");
+      if (!item) {
+        if (qInput) qInput.value = "";
+        if (hint) hint.value = "회차를 먼저 선택하세요.";
+        return;
+      }
+      if (qInput && !qInput.value) qInput.value = String(Number(item.questionStartNo || 1) || 1);
+      if (hint) {
+        const qCount = item.questionCount ? `${item.questionCount}문항` : "문항 수 미확인";
+        hint.value = hasAnchorMap ? `${qCount} · 위치맵 단위 초기화 가능` : `${qCount} · 위치맵 생성 후 사용`;
+      }
+    }
+
     function renderQuestion(){
       const item = state.item;
       if (!item) {
         $("pageMeta").textContent = "회차를 찾을 수 없습니다.";
         $("summaryGrid").innerHTML = `<div class="status warn">목록에서 다시 선택하세요.</div>`;
+        $("btnCheckAnchorMap").disabled = true;
+        $("btnDeleteAnchorMap").disabled = true;
+        $("btnRunAnchorOcr").disabled = true;
+        $("btnResetQuestionInitial").disabled = true;
+        renderResetStateSummary(null);
+        updateResetScopeControls(null);
         return;
       }
+      const hasAnchorMap = Boolean(item.anchorMap);
+      $("btnRunAnchorOcr").disabled = !item.questionPdf;
+      $("btnRunAnchorOcr").title = item.questionPdf ? "문제 PDF에서 위치맵을 생성합니다." : "문제 PDF가 없습니다.";
+      $("btnCheckAnchorMap").disabled = !hasAnchorMap;
+      $("btnCheckAnchorMap").title = hasAnchorMap ? "저장된 위치맵을 확인합니다." : "위치맵 생성 후 확인할 수 있습니다.";
+      $("btnDeleteAnchorMap").disabled = !hasAnchorMap;
+      $("btnDeleteAnchorMap").title = hasAnchorMap ? "저장된 위치맵을 삭제합니다." : "삭제할 저장 위치맵이 없습니다.";
+      $("btnResetQuestionInitial").disabled = false;
+      renderResetStateSummary(item);
+      updateResetScopeControls(item);
       $("backLink").href = state.returnUrl || "./admin.html";
       $("pageMeta").textContent = `${item.catNm} · ${item.datasetLabel} · ${item.questionNo}`;
       $("quizLink").href = makeQuizUrl(item);
@@ -1066,6 +1364,7 @@
         ["문제 파일", fileNameFromPath(item.questionPdf) || item.questionNm || "-"],
         ["등록명", item.questionNm || "-"],
         ["분류", `${item.catNm || "-"} · ${item.gNm || "-"}`],
+        ["처리상태", itemWorkStateLabel(item)],
         ["풀이 상태", item.published ? "게시 가능" : (item.issue || "미게시")],
         ["문항", item.questionCount ? `${item.questionCount}문항` : "-"],
         ["정답", answerLabel],
@@ -1092,10 +1391,14 @@
       answerSelect.innerHTML = answerFiles.map((file, idx) => `<option value="${escapeHtml(file)}">${escapeHtml(answerFiles.length > 1 ? `정답 ${idx + 1}: ${fileNameFromPath(file) || file}` : fileNameFromPath(file) || file)}</option>`).join("");
       answerSelect.hidden = answerFiles.length <= 1;
       $("btnAnswerPdf").disabled = !answerFiles.length;
+      $("btnAnswerPdf").textContent = answerFiles.some((file) => !isPdfPath(file)) ? "정답 파일" : "정답 PDF";
       $("btnAnswerPdf").setAttribute("aria-disabled", answerFiles.length ? "false" : "true");
       $("btnDownloadQuestionPdf").disabled = !item.questionPdf;
       $("btnDownloadAnswerPdf").disabled = !answerFiles.length;
-      if (!$("pdfTargetPath").value) selectPdfTarget(item.questionPdf, "문제", { silent: true });
+      if (!$("pdfTargetPath").value) {
+        const previewTarget = defaultPreviewTargetForItem(item);
+        selectPdfTarget(previewTarget.path, previewTarget.role, { silent: true });
+      }
     }
 
     async function loadQuestion(options = {}){
@@ -1129,31 +1432,40 @@
     function selectPdfTarget(path, role = "PDF", options = {}){
       const target = normalizePath(path);
       if (!target) {
-        showToast("선택할 PDF 경로가 없습니다.", { title: "PDF 선택 실패", tone: "warn" });
+        showToast("선택할 문서 경로가 없습니다.", { title: "문서 선택 실패", tone: "warn" });
         return "";
       }
       setPdfTabRole(role);
-      const isPdf = /\.pdf$/i.test(target);
+      const isPdf = isPdfPath(target);
+      const isHwp = isHwpPath(target);
+      const kind = documentKindLabel(target);
       $("pdfTargetPath").value = target;
       $("pdfTargetPath").dataset.pdfRole = role;
-      $("pdfTargetHelp").textContent = `${role} ${isPdf ? "PDF를 미리보기로 표시했습니다." : "파일을 선택했습니다."}`;
-      if (isPdf) {
-        $("pdfPreviewFrame").src = `./${target}`;
+      $("pdfTargetHelp").textContent = `${role} ${isPdf || isHwp ? `${kind}를 미리보기로 표시했습니다.` : "파일을 선택했습니다."}`;
+      if (isPdf || isHwp) {
+        $("pdfPreviewFrame").src = managedPreviewUrl(target);
+        $("pdfPreviewFrame").title = `${role} ${kind} 미리보기`;
         $("pdfPreviewFrame").hidden = false;
         $("emptyPreview").hidden = true;
       } else {
         $("pdfPreviewFrame").hidden = true;
         $("emptyPreview").hidden = false;
-        $("emptyPreview").textContent = `${role} 파일은 PDF 미리보기를 지원하지 않습니다. 다운로드로 확인하세요.`;
+        $("emptyPreview").textContent = `${role} ${kind} 파일은 미리보기를 지원하지 않습니다. 다운로드로 확인하세요.`;
       }
+      $("btnPdfDiagnose").disabled = !isPdf;
+      $("btnPdfDiagnose").title = isPdf ? "선택한 PDF를 진단합니다." : "PDF 파일만 진단할 수 있습니다.";
+      $("btnRunOcr").disabled = !isPdf;
+      $("btnRunOcr").title = isPdf ? "선택한 PDF에 보조 OCR을 실행합니다." : "PDF 파일만 OCR을 실행할 수 있습니다.";
+      $("ocrMode").disabled = !isPdf;
+      $("ocrOutputMode").disabled = !isPdf;
       $("pdfDiagnoseStatus").classList.remove("warn");
       if (isDerivedPdfPath(target)) {
         $("pdfDiagnoseStatus").classList.add("warn");
         $("pdfDiagnoseStatus").innerHTML = `<div class="status">[${escapeHtml(role)} PDF 보기]</div>${derivedNoticeHtml(target)}`;
       } else {
-        $("pdfDiagnoseStatus").textContent = `[${role} ${isPdf ? "PDF 보기" : "파일 선택"}]\n${target}\n\n${isPdf ? "문제·문항 위치맵 생성, PDF 진단 또는 보조 OCR을 실행할 수 있습니다." : "PDF가 아닌 정답 파일은 다운로드로 확인하세요."}`;
+        $("pdfDiagnoseStatus").textContent = `[${role} ${kind} ${isPdf || isHwp ? "보기" : "선택"}]\n${target}\n\n${isPdf ? "문제·문항 위치맵 생성, PDF 진단 또는 보조 OCR을 실행할 수 있습니다." : (isHwp ? "HWP는 미리보기와 다운로드를 지원합니다. PDF 진단/OCR 대상은 아닙니다." : "미리보기를 지원하지 않는 파일은 다운로드로 확인하세요.")}`;
       }
-      if (!options.silent) showToast(`${role} ${isPdf ? "PDF를 미리보기로 표시했습니다." : "파일을 선택했습니다."}`, { title: isPdf ? "PDF 보기" : "파일 선택", tone: "ok", timeout: 2600 });
+      if (!options.silent) showToast(`${role} ${isPdf || isHwp ? `${kind}를 미리보기로 표시했습니다.` : "파일을 선택했습니다."}`, { title: isPdf || isHwp ? `${kind} 보기` : "파일 선택", tone: "ok", timeout: 2600 });
       return target;
     }
     // SOFTM-ADMIN: 문제 PDF와 정답 PDF를 탭처럼 전환하며 현재 대상을 표시 - 2026-05-30
@@ -1164,7 +1476,7 @@
       const fallback = normalizePath(state.item?.questionPdf);
       if (fallback) {
         selectPdfTarget(fallback, "문제", { silent: true });
-        showToast(`문제 PDF를 ${actionLabel} 대상으로 설정했습니다.`, { title: "PDF 자동 선택", tone: "ok", timeout: 2600 });
+        showToast(`문제 PDF를 ${actionLabel} 대상으로 설정했습니다.`, { title: "문서 자동 선택", tone: "ok", timeout: 2600 });
       }
       return fallback;
     }
@@ -1172,11 +1484,11 @@
     function openSelectedPdf(){
       const target = ensurePdfTargetForAction("열기");
       if (!target) {
-        showToast("열 PDF를 먼저 선택하세요.", { title: "PDF 선택 필요", tone: "warn" });
+        showToast("열 문서를 먼저 선택하세요.", { title: "문서 선택 필요", tone: "warn" });
         return;
       }
-      const opened = window.open(`./${target}`, "_blank", "noopener");
-      if (!opened) showToast("새 탭이 차단되었을 수 있습니다.", { title: "PDF 열기 실패", tone: "warn" });
+      const opened = window.open(managedPreviewUrl(target), "_blank", "noopener");
+      if (!opened) showToast("새 탭이 차단되었을 수 있습니다.", { title: "문서 열기 실패", tone: "warn" });
     }
 
     function formatNumber(value){
@@ -1632,7 +1944,7 @@
           return data;
         });
       } finally {
-        $("btnDeleteAnchorMap").disabled = false;
+        $("btnDeleteAnchorMap").disabled = !state.item?.anchorMap;
       }
     }
     // SOFTM-위치맵: 상세 화면에서 저장 위치맵을 확인 후 삭제하고 상태를 갱신하는 기능 추가 - 2026-06-01
@@ -1703,6 +2015,153 @@
       }
     }
     // SOFTM-ANCHOR: 상세 화면에서 수동 편집 앵커가 있을 때만 삭제 버튼을 활성화하고 원본 위치맵으로 복원 - 2026-06-01
+
+    function scopedResetButtonIds(){
+      return ["btnResetQuestionAnchor", "btnResetChoiceAnchor", "btnResetChoiceArea", "btnResetAllChoiceAreas"];
+    }
+
+    function setScopedResetBusy(busy){
+      for (const id of scopedResetButtonIds()) {
+        const el = $(id);
+        if (!el) continue;
+        el.disabled = busy || !state.item?.anchorMap;
+      }
+    }
+
+    function readScopedResetTarget(scope){
+      const item = state.item;
+      if (!item?.questionNo) throw new Error("초기화할 회차를 먼저 선택하세요.");
+      const anchorPath = normalizePath(item.anchorMap || "");
+      if (!anchorPath) throw new Error("초기화할 위치맵이 없습니다. 먼저 위치맵을 생성하세요.");
+      const q = Math.trunc(Number($("resetQuestionNo")?.value || 0));
+      const choice = Math.trunc(Number($("resetChoiceNo")?.value || 0));
+      if (scope !== "choiceAreaAll" && q <= 0) throw new Error("초기화할 문제 번호를 입력하세요.");
+      if ((scope === "choice" || scope === "choiceArea") && choice <= 0) throw new Error("초기화할 문항 번호를 선택하세요.");
+      const labels = {
+        question: `${q}번 문제 위치`,
+        choice: `${q}-${choice} 문항 위치`,
+        choiceArea: `${q}-${choice} 문항 영역`,
+        choiceAreaAll: "전체 문항 영역",
+      };
+      const messages = {
+        question: "해당 문제의 시작 위치와 문제 영역을 수동 편집 전 값으로 되돌립니다.",
+        choice: "해당 선택지 앵커와 클릭영역을 수동 편집 전 값으로 되돌립니다.",
+        choiceArea: "해당 선택지 클릭영역만 초기화하고 문제/문항 앵커 좌표는 유지합니다.",
+        choiceAreaAll: "모든 선택지 클릭영역을 초기화하고 문제/문항 앵커 좌표는 유지합니다.",
+      };
+      const resetManual = scope === "choiceAreaAll" ? { scope } : { q, scope, choice };
+      if (scope === "question") delete resetManual.choice;
+      return { item, anchorPath, q, choice, label: labels[scope] || "선택 범위", message: messages[scope] || "", resetManual };
+    }
+
+    async function resetScopedAnchorForCurrentQuestion(scope){
+      const target = readScopedResetTarget(scope);
+      const confirmed = await showConfirmDialog({
+        title: `${target.label} 초기화`,
+        message: `${target.message}\n\n대상 위치맵: ${target.anchorPath}`,
+        confirmText: "초기화",
+        cancelText: "취소",
+        danger: scope === "choiceAreaAll",
+      });
+      if (!confirmed) return;
+      setScopedResetBusy(true);
+      try{
+        await withProgress({
+          title: `${target.label} 초기화`,
+          steps: ["초기화 확인", "위치맵 원복", "회차 상태 갱신"],
+          message: "선택한 범위의 위치맵 수동 편집값을 원복하고 있습니다.",
+          doneMessage: "선택 범위 초기화가 완료되었습니다.",
+        }, async (progress) => {
+          progress.step(0, "done", "초기화 확인 완료");
+          progress.step(1, "running", `${target.label} 원복 중`);
+          const data = await api("/api/admin/anchor-manual", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              anchorMapPath: target.anchorPath,
+              resetManual: target.resetManual,
+            }),
+          });
+          progress.step(1, "done", data.manualEditedAt ? `수정 시각: ${formatAnchorGeneratedAtTitle(data.manualEditedAt) || data.manualEditedAt}` : "위치맵 원복 완료");
+          progress.step(2, "running", "회차 상태를 다시 읽고 있습니다.");
+          await loadQuestion({ keepTarget: true });
+          await refreshManualAnchorDeleteButton(state.item);
+          progress.step(2, "done");
+          $("pdfDiagnoseStatus").innerHTML = `
+            <div class="diagnosisResult ok">
+              <div class="diagnosisHeadline">
+                <div>
+                  <h3 class="diagnosisTitle">${escapeHtml(target.label)} 초기화: ${diagPill("완료", "ok")}</h3>
+                  <div class="desc">${escapeHtml(target.message)}</div>
+                </div>
+              </div>
+            </div>
+          `;
+          showToast(`${target.label}을 초기화했습니다.`, { title: "범위 초기화", tone: "ok", timeout: 3200 });
+          return data;
+        });
+      } finally {
+        setScopedResetBusy(false);
+      }
+    }
+    // SOFTM-ADMIN: 관리자 상세에서 문제/문항/문항영역 단위 초기화를 직접 실행하도록 추가 - 2026-06-02
+
+    async function resetQuestionInitialForCurrentQuestion(){
+      const item = state.item;
+      if (!item?.questionNo) {
+        showToast("초기화할 회차를 먼저 선택하세요.", { title: "회차 초기화", tone: "warn" });
+        return;
+      }
+      const confirmed = await showConfirmDialog({
+        title: "회차 초기화",
+        message: `이 회차를 처음 문서를 생성했을 때의 상태로 되돌립니다.\n\n제거 대상: 위치맵 연결/파일, 정답JSON 연결, 앵커 편집 정보\n유지 대상: 원본 문제 PDF, 정답 PDF, 회차 기본 정보\n\n대상: ${item.questionNm || item.questionPdf || item.questionNo}`,
+        confirmText: "초기화",
+        cancelText: "취소",
+        danger: true,
+      });
+      if (!confirmed) return;
+      $("btnResetQuestionInitial").disabled = true;
+      try{
+        await withProgress({
+          title: "회차 초기화",
+          steps: ["초기화 확인", "생성 산출물 연결 제거", "회차 상태 갱신"],
+          message: "회차를 처음 문서 생성 상태로 되돌리고 있습니다.",
+          doneMessage: "회차가 초기화되었습니다.",
+        }, async (progress) => {
+          progress.step(0, "done", "초기화 확인 완료");
+          progress.step(1, "running", "위치맵 파일과 생성 산출물 연결을 제거하고 있습니다.");
+          const data = await api("/api/admin/question-reset", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              dataset: state.dataset,
+              questionNo: state.questionNo,
+              path: item.questionPdf || "",
+            }),
+          });
+          const deletedLabel = data.deleted?.length ? `삭제: ${data.deleted.join(", ")}` : "삭제할 위치맵 파일 없음";
+          progress.step(1, "done", deletedLabel);
+          progress.step(2, "running", "회차 상태를 다시 읽고 있습니다.");
+          await loadQuestion({ keepTarget: true });
+          progress.step(2, "done");
+          $("pdfDiagnoseStatus").innerHTML = `
+            <div class="diagnosisResult warn">
+              <div class="diagnosisHeadline">
+                <div>
+                  <h3 class="diagnosisTitle">회차 초기화: ${diagPill("초기", "warn")}</h3>
+                  <div class="desc">${escapeHtml(data.message || "회차를 초기화했습니다.")}</div>
+                </div>
+              </div>
+            </div>
+          `;
+          showToast("회차가 초기화되었습니다.", { title: "회차 초기화", tone: "ok", timeout: 3200 });
+          return data;
+        });
+      } finally {
+        $("btnResetQuestionInitial").disabled = false;
+      }
+    }
+    // SOFTM-ADMIN: 상세 화면에서 회차 생성 산출물을 확인 후 초기 상태로 되돌리는 기능 추가 - 2026-06-02
 
     function renderOcrJobStatus(job){
       const logs = Array.isArray(job.logs) ? job.logs.slice(-30).join("\n") : "";
@@ -1920,6 +2379,31 @@
       refreshManualAnchorDeleteButton(state.item).catch(() => setManualAnchorDeleteButton(false, "수정된 앵커 상태 확인 실패"));
       if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
       showToast(err.message, { title: "앵커 초기화 실패", tone: "error" });
+    }));
+    $("btnResetQuestionInitial").addEventListener("click", () => resetQuestionInitialForCurrentQuestion().catch((err) => {
+      $("btnResetQuestionInitial").disabled = false;
+      if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
+      showToast(err.message, { title: "회차 초기화 실패", tone: "error" });
+    }));
+    $("btnResetQuestionAnchor").addEventListener("click", () => resetScopedAnchorForCurrentQuestion("question").catch((err) => {
+      setScopedResetBusy(false);
+      if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
+      showToast(err.message, { title: "문제 위치 초기화 실패", tone: "error" });
+    }));
+    $("btnResetChoiceAnchor").addEventListener("click", () => resetScopedAnchorForCurrentQuestion("choice").catch((err) => {
+      setScopedResetBusy(false);
+      if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
+      showToast(err.message, { title: "문항 위치 초기화 실패", tone: "error" });
+    }));
+    $("btnResetChoiceArea").addEventListener("click", () => resetScopedAnchorForCurrentQuestion("choiceArea").catch((err) => {
+      setScopedResetBusy(false);
+      if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
+      showToast(err.message, { title: "문항 영역 초기화 실패", tone: "error" });
+    }));
+    $("btnResetAllChoiceAreas").addEventListener("click", () => resetScopedAnchorForCurrentQuestion("choiceAreaAll").catch((err) => {
+      setScopedResetBusy(false);
+      if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
+      showToast(err.message, { title: "전체 문항 영역 초기화 실패", tone: "error" });
     }));
     // SOFTM-OCR: OCR 실패 시 진행 로그 카드가 단순 오류 문구로 덮이지 않도록 보정 - 2026-05-30
     // SOFTM-위치맵: 위치맵 생성 버튼 오류도 토스트와 상태 영역에 명확히 표시 - 2026-05-30

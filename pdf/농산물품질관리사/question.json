@@ -63,11 +63,11 @@
     "ocrPublished": false,
     "anchorMap": "quiz/pdf/농산물품질관리사/2023년 제20회 농산물품질관리사 1차 시험문제지_anchor.json",
     "anchorStatus": "위치맵 생성",
-    "anchorConfidence": 0.90485,
+    "anchorConfidence": 0.9036,
     "anchorWarnings": [
-      "선택지 위치 감지가 부족합니다(313/400). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
+      "선택지 위치 감지가 부족합니다(248/400). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
     ],
-    "anchorGeneratedAt": "2026-06-01T03:41:12.267Z",
+    "anchorGeneratedAt": "2026-06-02T10:49:57.714Z",
     "choiceCount": 4
   },
   {

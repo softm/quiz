@@ -18,6 +18,7 @@ const mimeTypes = {
   ".json": "application/json; charset=utf-8",
   ".pdf": "application/pdf",
   ".hwp": "application/octet-stream",
+  ".hwpx": "application/octet-stream",
   ".txt": "text/plain; charset=utf-8",
 };
 
@@ -26,18 +27,36 @@ function getArg(name){
   return idx >= 0 ? process.argv[idx + 1] : "";
 }
 
+function adminCorsHeaders(){
+  return {
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-headers": "content-type",
+  };
+}
+
 function sendJson(res, status, data){
   const body = `${JSON.stringify(data, null, 2)}\n`;
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
+    ...adminCorsHeaders(),
   });
   res.end(body);
 }
 
 function sendText(res, status, text){
-  res.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
+  res.writeHead(status, { "content-type": "text/plain; charset=utf-8", ...adminCorsHeaders() });
   res.end(text);
+}
+
+function sendHtml(res, status, html){
+  res.writeHead(status, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-store",
+    ...adminCorsHeaders(),
+  });
+  res.end(html);
 }
 
 function normalizeRelPath(value){
@@ -115,6 +134,77 @@ function normalizeAnchorMapRelPath(value){
   return rel;
 }
 
+function parseAnchorQuestionList(value){
+  const out = new Set();
+  for (const part of String(value || "").split(",")){
+    const q = Math.trunc(Number(part));
+    if (Number.isInteger(q) && q > 0 && q <= 999) out.add(q);
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+function pickAnchorQuestionMap(map, questions){
+  if (!map || typeof map !== "object" || !Array.isArray(questions) || !questions.length) return null;
+  const out = {};
+  for (const q of questions){
+    const key = String(q);
+    if (Object.prototype.hasOwnProperty.call(map, key)) out[key] = map[key];
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function buildAnchorDataResponse(anchorData, questions = []){
+  const includeDetails = Array.isArray(questions) && questions.length > 0;
+  const base = {
+    version: anchorData.version,
+    kind: anchorData.kind,
+    questionNo: anchorData.questionNo,
+    questionPdf: anchorData.questionPdf,
+    pageCount: anchorData.pageCount,
+    questionCount: anchorData.questionCount,
+    choiceCount: anchorData.choiceCount,
+    questionStartNo: anchorData.questionStartNo,
+    questionEndNo: anchorData.questionEndNo,
+    printedQuestionNoMap: Array.isArray(anchorData.printedQuestionNoMap) ? anchorData.printedQuestionNoMap : null,
+    questionLabelMap: anchorData.questionLabelMap && typeof anchorData.questionLabelMap === "object" ? anchorData.questionLabelMap : null,
+    questionColumnBoundsMap: anchorData.questionColumnBoundsMap && typeof anchorData.questionColumnBoundsMap === "object" ? anchorData.questionColumnBoundsMap : null,
+    questionPageMap: Array.isArray(anchorData.questionPageMap) ? anchorData.questionPageMap : null,
+    questionTopRatioMap: Array.isArray(anchorData.questionTopRatioMap) ? anchorData.questionTopRatioMap : null,
+    anchors: Array.isArray(anchorData.anchors) ? anchorData.anchors : null,
+    rawAnchorCount: anchorData.rawAnchorCount,
+    sourceStats: anchorData.sourceStats || null,
+    confidence: anchorData.confidence,
+    warnings: anchorData.warnings || [],
+    generatedAt: anchorData.generatedAt || "",
+    manualEditedAt: anchorData.manualEditedAt || "",
+    partial: true,
+  };
+  if (includeDetails) {
+    base.detailQuestions = questions;
+    base.questionSegments = pickAnchorQuestionMap(anchorData.questionSegments, questions);
+    base.choiceAnchorMap = pickAnchorQuestionMap(anchorData.choiceAnchorMap, questions);
+    base.choiceClickAreaMap = pickAnchorQuestionMap(anchorData.choiceClickAreaMap, questions);
+  }
+  return base;
+}
+
+async function handleAnchorData(req, res, url){
+  try{
+    const rel = normalizeAnchorMapRelPath(url.searchParams.get("path") || url.searchParams.get("anchorMap") || "");
+    const abs = assertManagedPath(rel);
+    const anchorData = JSON.parse(await fsp.readFile(abs, "utf8"));
+    if (anchorData.kind !== "question-anchor-map") throw new Error("question-anchor-map 형식이 아닙니다.");
+    const questions = parseAnchorQuestionList(url.searchParams.get("questions") || url.searchParams.get("q") || "");
+    sendJson(res, 200, {
+      ok: true,
+      anchorMap: rel,
+      anchorData: buildAnchorDataResponse(anchorData, questions),
+    });
+  }catch(err){
+    sendJson(res, 400, { ok: false, error: err?.message || String(err) });
+  }
+}
+
 function finiteNumber(value, fallback = null){
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -169,6 +259,30 @@ function cleanManualChoiceAnchor(value, q){
   };
 }
 
+function cleanManualChoiceClickArea(value, q){
+  if (!value || typeof value !== "object") return null;
+  const page = Math.trunc(finiteNumber(value.page, 0));
+  const choice = Math.trunc(finiteNumber(value.choice, 0));
+  const xRatio = clampRatio(value.xRatio, null);
+  const yRatio = clampRatio(value.yRatio, null);
+  const wRatio = Math.max(0.001, Math.min(1, finiteNumber(value.wRatio, null)));
+  const hRatio = Math.max(0.001, Math.min(1, finiteNumber(value.hRatio, null)));
+  if (!page || !choice || !Number.isFinite(xRatio) || !Number.isFinite(yRatio) || !Number.isFinite(wRatio) || !Number.isFinite(hRatio)) return null;
+  if (xRatio + wRatio <= 0 || yRatio + hRatio <= 0) return null;
+  return {
+    ...value,
+    q,
+    choice,
+    page,
+    xRatio: Math.max(0, Math.min(1, xRatio)),
+    yRatio: Math.max(0, Math.min(1, yRatio)),
+    wRatio: Math.max(0.001, Math.min(1 - Math.max(0, Math.min(1, xRatio)), wRatio)),
+    hRatio: Math.max(0.001, Math.min(1 - Math.max(0, Math.min(1, yRatio)), hRatio)),
+    source: "manual-click-area",
+    confidence: 1,
+  };
+}
+
 function cleanManualQuestionSegment(value){
   if (!value || typeof value !== "object") return null;
   const page = Math.trunc(finiteNumber(value.page, 0));
@@ -187,7 +301,7 @@ function cloneJsonValue(value){
 
 function ensureManualAnchorBase(anchorData, patch = {}){
   if (!anchorData._manualBase || typeof anchorData._manualBase !== "object") anchorData._manualBase = {};
-  for (const key of ["questionLabelMap", "questionPageMap", "questionTopRatioMap", "questionSegments", "choiceAnchorMap"]){
+  for (const key of ["questionLabelMap", "questionPageMap", "questionTopRatioMap", "questionSegments", "choiceAnchorMap", "choiceClickAreaMap"]){
     const values = patch[key];
     if (!values || typeof values !== "object") continue;
     if (!anchorData._manualBase[key] || typeof anchorData._manualBase[key] !== "object") anchorData._manualBase[key] = {};
@@ -204,9 +318,9 @@ function ensureManualAnchorBase(anchorData, patch = {}){
 }
 
 function restoreManualAnchorBase(anchorData, reset = {}){
+  const scope = reset.scope === "question" || reset.scope === "choice" || reset.scope === "choiceArea" || reset.scope === "choiceAreaAll" ? reset.scope : "all";
   const q = Math.trunc(finiteNumber(reset.q, 0));
-  if (q <= 0) throw new Error("초기화할 문제 번호가 없습니다.");
-  const scope = reset.scope === "question" || reset.scope === "choice" ? reset.scope : "all";
+  if (scope !== "choiceAreaAll" && q <= 0) throw new Error("초기화할 문제 번호가 없습니다.");
   const choice = Math.trunc(finiteNumber(reset.choice, 0));
   const storeKey = String(q);
   const base = anchorData._manualBase && typeof anchorData._manualBase === "object" ? anchorData._manualBase : {};
@@ -231,24 +345,52 @@ function restoreManualAnchorBase(anchorData, reset = {}){
     for (const key of questionKeys) restoreWholeKey(key);
   }
 
+  if (scope === "choiceAreaAll") {
+    const keyBase = base.choiceClickAreaMap && typeof base.choiceClickAreaMap === "object" ? base.choiceClickAreaMap : {};
+    if (!anchorData.choiceClickAreaMap || typeof anchorData.choiceClickAreaMap !== "object") anchorData.choiceClickAreaMap = {};
+    for (const key of Object.keys(keyBase)) {
+      const value = cloneJsonValue(keyBase[key]);
+      if (value == null || (Array.isArray(value) && !value.length)) delete anchorData.choiceClickAreaMap[key];
+      else anchorData.choiceClickAreaMap[key] = value;
+      delete keyBase[key];
+    }
+    for (const [key, value] of Object.entries(anchorData.choiceClickAreaMap || {})) {
+      if (Object.prototype.hasOwnProperty.call(keyBase, key)) continue;
+      const currentList = Array.isArray(value) ? value : [];
+      const nextList = currentList.filter((item) => !String(item?.source || "").includes("manual-click-area"));
+      if (nextList.length) anchorData.choiceClickAreaMap[key] = nextList;
+      else delete anchorData.choiceClickAreaMap[key];
+    }
+  }
+
   if (scope === "all") {
     restoreWholeKey("choiceAnchorMap");
-  } else if (scope === "choice") {
+    restoreWholeKey("choiceClickAreaMap");
+  } else if (scope === "choice" || scope === "choiceArea") {
     if (choice <= 0) throw new Error("초기화할 문항 번호가 없습니다.");
-    const keyBase = base.choiceAnchorMap && typeof base.choiceAnchorMap === "object" ? base.choiceAnchorMap : {};
-    if (Object.prototype.hasOwnProperty.call(keyBase, storeKey)) {
-      const baseList = Array.isArray(keyBase[storeKey]) ? cloneJsonValue(keyBase[storeKey]) : [];
-      const baseChoice = baseList.find((item) => Number(item?.choice) === choice) || null;
-      const currentList = Array.isArray(anchorData.choiceAnchorMap?.[storeKey]) ? cloneJsonValue(anchorData.choiceAnchorMap[storeKey]) : [];
-      const nextList = currentList.filter((item) => Number(item?.choice) !== choice);
-      if (baseChoice) nextList.push(baseChoice);
-      nextList.sort((a, b) => Number(a.choice) - Number(b.choice) || Number(a.yRatio) - Number(b.yRatio) || Number(a.xRatio) - Number(b.xRatio));
-      if (!anchorData.choiceAnchorMap || typeof anchorData.choiceAnchorMap !== "object") anchorData.choiceAnchorMap = {};
-      if (nextList.length) anchorData.choiceAnchorMap[storeKey] = nextList;
-      else delete anchorData.choiceAnchorMap[storeKey];
-      const currentJson = JSON.stringify(anchorData.choiceAnchorMap?.[storeKey] || null);
-      const baseJson = JSON.stringify(baseList.length ? baseList : null);
-      if (currentJson === baseJson) delete keyBase[storeKey];
+    const mapKeys = scope === "choiceArea" ? ["choiceClickAreaMap"] : ["choiceAnchorMap", "choiceClickAreaMap"];
+    for (const mapKey of mapKeys) {
+      const keyBase = base[mapKey] && typeof base[mapKey] === "object" ? base[mapKey] : {};
+      if (Object.prototype.hasOwnProperty.call(keyBase, storeKey)) {
+        const baseList = Array.isArray(keyBase[storeKey]) ? cloneJsonValue(keyBase[storeKey]) : [];
+        const baseChoice = baseList.find((item) => Number(item?.choice) === choice) || null;
+        const currentList = Array.isArray(anchorData[mapKey]?.[storeKey]) ? cloneJsonValue(anchorData[mapKey][storeKey]) : [];
+        const nextList = currentList.filter((item) => Number(item?.choice) !== choice);
+        if (baseChoice) nextList.push(baseChoice);
+        nextList.sort((a, b) => Number(a.choice) - Number(b.choice) || Number(a.yRatio) - Number(b.yRatio) || Number(a.xRatio) - Number(b.xRatio));
+        if (!anchorData[mapKey] || typeof anchorData[mapKey] !== "object") anchorData[mapKey] = {};
+        if (nextList.length) anchorData[mapKey][storeKey] = nextList;
+        else delete anchorData[mapKey][storeKey];
+        const currentJson = JSON.stringify(anchorData[mapKey]?.[storeKey] || null);
+        const baseJson = JSON.stringify(baseList.length ? baseList : null);
+        if (currentJson === baseJson) delete keyBase[storeKey];
+      } else if (scope === "choiceArea" && mapKey === "choiceClickAreaMap") {
+        const currentList = Array.isArray(anchorData[mapKey]?.[storeKey]) ? cloneJsonValue(anchorData[mapKey][storeKey]) : [];
+        const nextList = currentList.filter((item) => Number(item?.choice) !== choice);
+        if (!anchorData[mapKey] || typeof anchorData[mapKey] !== "object") anchorData[mapKey] = {};
+        if (nextList.length) anchorData[mapKey][storeKey] = nextList;
+        else delete anchorData[mapKey][storeKey];
+      }
     }
   }
 
@@ -328,6 +470,16 @@ function restoreAllManualAnchorBase(anchorData){
         restored += list.length - next.length;
       }
     }
+    if (anchorData.choiceClickAreaMap && typeof anchorData.choiceClickAreaMap === "object") {
+      for (const [storeKey, value] of Object.entries(anchorData.choiceClickAreaMap)) {
+        const list = Array.isArray(value) ? value : [];
+        const next = list.filter((item) => !isManualValue(item));
+        if (next.length === list.length) continue;
+        if (next.length) anchorData.choiceClickAreaMap[storeKey] = next;
+        else delete anchorData.choiceClickAreaMap[storeKey];
+        restored += list.length - next.length;
+      }
+    }
     delete anchorData.manualEditedAt;
   }
   if (restored > 0) anchorData.generatedAt = new Date().toISOString();
@@ -404,6 +556,23 @@ function applyManualAnchorPatch(anchorData, patch = {}){
         .sort((a, b) => a.choice - b.choice || a.yRatio - b.yRatio || a.xRatio - b.xRatio);
       if (q > 0 && anchors.length) anchorData.choiceAnchorMap[String(q)] = anchors;
       else if (q > 0) delete anchorData.choiceAnchorMap[String(q)];
+    }
+  }
+
+  if (patch.choiceClickAreaMap && typeof patch.choiceClickAreaMap === "object"){
+    if (!anchorData.choiceClickAreaMap || typeof anchorData.choiceClickAreaMap !== "object") anchorData.choiceClickAreaMap = {};
+    for (const [key, value] of Object.entries(patch.choiceClickAreaMap)){
+      const q = Math.trunc(finiteNumber(key, 0));
+      if (q > 0 && (value == null || (Array.isArray(value) && !value.length))) {
+        delete anchorData.choiceClickAreaMap[String(q)];
+        continue;
+      }
+      const areas = (Array.isArray(value) ? value : [value])
+        .map((item) => cleanManualChoiceClickArea(item, q))
+        .filter(Boolean)
+        .sort((a, b) => a.choice - b.choice || a.yRatio - b.yRatio || a.xRatio - b.xRatio);
+      if (q > 0 && areas.length) anchorData.choiceClickAreaMap[String(q)] = areas;
+      else if (q > 0) delete anchorData.choiceClickAreaMap[String(q)];
     }
   }
 
@@ -600,15 +769,52 @@ function inferAnchorMapPath(row){
   return manifestFileExists(inferred) ? inferred : explicit;
 }
 
+function containsManualAnchorValue(value){
+  if (!value || typeof value !== "object") return false;
+  if (String(value.source || "").includes("manual")) return true;
+  if (String(value.anchorMode || "").includes("manual")) return true;
+  if (Array.isArray(value)) return value.some(containsManualAnchorValue);
+  return Object.values(value).some(containsManualAnchorValue);
+}
+
+function hasManualAnchorEdits(anchorData){
+  const base = anchorData?._manualBase;
+  if (base && typeof base === "object" && Object.values(base).some((group) => group && typeof group === "object" && Object.keys(group).length > 0)) {
+    return true;
+  }
+  return containsManualAnchorValue(anchorData?.questionLabelMap)
+    || containsManualAnchorValue(anchorData?.questionSegments)
+    || containsManualAnchorValue(anchorData?.choiceAnchorMap)
+    || containsManualAnchorValue(anchorData?.choiceClickAreaMap);
+}
+
+function questionWorkState(row, anchorMapPath, anchorMeta = {}){
+  const steps = [];
+  const correctJson = stripManifestPrefix(row?.correctJson || "");
+  if (correctJson) steps.push(manifestFileExists(correctJson) ? "정답JSON" : "정답JSON 없음");
+  if (anchorMapPath) steps.push("위치맵");
+  if (anchorMeta.hasManualEdits) steps.push("앵커편집");
+  if (isDerivedPdfPath(row?.questionPdf || "")) steps.push("OCR사본");
+  return {
+    initial: steps.length === 0,
+    label: steps.length ? steps.join(" · ") : "초기",
+    steps,
+    tone: steps.length ? "ok" : "warn",
+  };
+}
+
 function readAnchorMapMeta(relPath){
   const rel = stripManifestPrefix(relPath);
   if (!rel || !manifestFileExists(rel)) return {};
   try{
     const data = JSON.parse(fs.readFileSync(resolveWorkspacePath(rel), "utf8"));
+    const hasManualEdits = hasManualAnchorEdits(data);
     return {
       confidence: data.confidence,
       warnings: Array.isArray(data.warnings) ? data.warnings : [],
       generatedAt: data.generatedAt || "",
+      manualEditedAt: data.manualEditedAt || "",
+      hasManualEdits,
       status: Number(data.confidence || 0) >= 0.32 ? "위치맵 생성" : "위치맵 확인 필요",
     };
   }catch(_){
@@ -715,6 +921,7 @@ async function buildCatalogDataset(dataset, datasetLabel, categories, questions)
     const answerDiag = answerDiagSummary({ ...row, answerPdf: primaryAnswerPdf, answerPdfs }, answerDiagnostics);
     const anchorMapPath = inferAnchorMapPath(row);
     const anchorMeta = readAnchorMapMeta(anchorMapPath);
+    const workState = questionWorkState(row, anchorMapPath, anchorMeta);
     const ocrIssue = questionDiag.status !== "정상" ? questionDiag.status : "";
     const countIssue = questionAnswerCountIssue(row);
     const answerStatus = String(answerDiag.status || "");
@@ -755,6 +962,12 @@ async function buildCatalogDataset(dataset, datasetLabel, categories, questions)
       anchorConfidence: row?.anchorConfidence || anchorMeta.confidence || "",
       anchorWarnings: Array.isArray(row?.anchorWarnings) && row.anchorWarnings.length ? row.anchorWarnings : (anchorMeta.warnings || []),
       anchorGeneratedAt: row?.anchorGeneratedAt || anchorMeta.generatedAt || "",
+      anchorManualEditedAt: anchorMeta.manualEditedAt || "",
+      hasManualAnchorEdits: Boolean(anchorMeta.hasManualEdits),
+      workState: workState.label,
+      workStateSteps: workState.steps,
+      workStateInitial: workState.initial,
+      workStateTone: workState.tone,
       answerSourceId: row?.answerSourceId || "",
       published,
       issue,
@@ -1888,6 +2101,52 @@ async function handleAnchorDelete(req, res){
 }
 // SOFTM-위치맵: 생성된 _anchor.json과 manifest 연결을 확인 후 삭제하는 관리자 API 추가 - 2026-06-01
 
+async function handleQuestionResetInitial(req, res){
+  const body = JSON.parse((await readBody(req)).toString("utf8") || "{}");
+  const found = findQuestionManifestRow(body);
+  const row = found.row;
+  const explicit = stripManifestPrefix(row.anchorMap || "");
+  const inferred = anchorOutputRelForQuestion(row);
+  const candidates = [...new Set([explicit, inferred].filter(Boolean))]
+    .filter((rel) => rel.startsWith("pdf/") && /_anchor\.json$/i.test(rel));
+  const deleted = [];
+  for (const rel of candidates){
+    try{
+      const abs = resolveWorkspacePath(rel);
+      if (fs.existsSync(abs)) {
+        await fsp.unlink(abs);
+        deleted.push(rel);
+      }
+    }catch(err){
+      throw new Error(`위치맵 삭제 실패: ${rel} (${err?.message || err})`);
+    }
+  }
+  const fields = {
+    correctJson: "",
+    anchorMap: "",
+    anchorStatus: "",
+    anchorConfidence: "",
+    anchorWarnings: [],
+    anchorGeneratedAt: "",
+  };
+  const cleared = {
+    correctJson: stripManifestPrefix(row.correctJson || ""),
+    anchorMap: explicit || inferred || "",
+  };
+  found.rows[found.index] = { ...found.rows[found.index], ...fields };
+  await writeJsonFile(found.manifestName, found.rows);
+  await updateCategoryQuestionManifest(row, fields);
+  sendJson(res, 200, {
+    ok: true,
+    deleted,
+    cleared,
+    manifestName: found.manifestName,
+    questionNo: row.questionNo || "",
+    message: "회차를 처음 생성 직후 상태로 초기화했습니다. 원본 PDF와 정답 PDF 연결은 유지했습니다.",
+  });
+}
+// SOFTM-ADMIN: 회차 상세에서 생성 산출물 연결을 제거하고 문서 생성 직후 상태로 되돌리는 초기화 API 추가 - 2026-06-02
+
 async function processReport(){
   const questions = readJsonFile("question.json", []);
   const rawRows = Array.isArray(questions) ? questions : [];
@@ -2228,9 +2487,147 @@ async function handleAdminDownload(req, res, url){
   fs.createReadStream(filePath).pipe(res);
 }
 
+function escapeHtmlPreview(value){
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function extractHtmlPart(html, tagName){
+  const match = String(html || "").match(new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`, "i"));
+  return match ? match[1] : "";
+}
+
+function buildHwpPreviewHtml(html, title = "HWP 문서"){
+  const htmlText = String(html || "");
+  const headContent = extractHtmlPart(htmlText, "head");
+  const bodyContent = extractHtmlPart(htmlText, "body") || htmlText;
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${escapeHtmlPreview(title)}</title>
+${headContent}
+<style>
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #f3f6fb;
+  overflow: auto;
+}
+body {
+  box-sizing: border-box;
+  padding: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.hwp-viewer-root {
+  width: max-content;
+  min-width: 100%;
+  margin: 0 auto;
+  transform-origin: top left;
+}
+.hwp-viewer-root *,
+.hwp-viewer-root *::before,
+.hwp-viewer-root *::after {
+  box-sizing: border-box;
+}
+.hwp-viewer-root > * {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+.hwp-viewer-root [class*="page"],
+.hwp-viewer-root [class*="Page"],
+.hwp-viewer-root [class*="paper"],
+.hwp-viewer-root [class*="Paper"] {
+  background: #fff;
+  box-shadow: 0 1px 8px rgba(15, 23, 42, 0.14);
+}
+.hwp-viewer-root img,
+.hwp-viewer-root svg,
+.hwp-viewer-root canvas {
+  max-width: 100%;
+  height: auto;
+}
+</style>
+</head>
+<body>
+<div class="hwp-viewer-root">${bodyContent}</div>
+</body>
+</html>`;
+}
+
+function buildHwpPreviewErrorHtml(message, relPath = ""){
+  const downloadHref = relPath ? `/api/admin/download?path=${encodeURIComponent(relPath)}` : "";
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body{margin:0;padding:24px;background:#f8fafc;color:#1f2937;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.box{max-width:720px;margin:40px auto;padding:24px;border:1px solid #dbe3ef;border-radius:18px;background:#fff;box-shadow:0 12px 32px rgba(15,23,42,.08)}
+h1{margin:0 0 12px;font-size:22px}
+p{line-height:1.65;color:#5b6878}
+a{display:inline-flex;margin-top:10px;padding:10px 14px;border-radius:12px;background:#287987;color:white;text-decoration:none;font-weight:800}
+</style>
+</head>
+<body>
+<div class="box">
+<h1>HWP 미리보기를 열 수 없습니다.</h1>
+<p>${escapeHtmlPreview(message)}</p>
+${downloadHref ? `<a href="${downloadHref}">원본 다운로드</a>` : ""}
+</div>
+</body>
+</html>`;
+}
+
+function hwp5html(filePath){
+  return new Promise((resolve, reject) => {
+    execFile("hwp5html", ["--html", filePath], { cwd: root, maxBuffer: 120 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) {
+        err.message = stderr || stdout || err.message;
+        reject(err);
+        return;
+      }
+      resolve(stdout || "");
+    });
+  });
+}
+
+async function handleHwpPreview(req, res, url){
+  const rel = stripManifestPrefix(url.searchParams.get("path") || "");
+  if (!rel) {
+    sendHtml(res, 400, buildHwpPreviewErrorHtml("HWP 파일 경로가 없습니다."));
+    return;
+  }
+  let filePath;
+  try{
+    filePath = assertManagedPath(rel);
+    const stat = await fsp.stat(filePath);
+    if (!stat.isFile()) throw new Error("파일만 미리보기할 수 있습니다.");
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext !== ".hwp") throw new Error("현재 HWP 미리보기는 .hwp 파일만 지원합니다.");
+    const html = await hwp5html(filePath);
+    if (!html.trim()) throw new Error("hwp5html 변환 결과가 비어 있습니다.");
+    sendHtml(res, 200, buildHwpPreviewHtml(html, path.basename(filePath)));
+  }catch(err){
+    sendHtml(res, 200, buildHwpPreviewErrorHtml(err?.message || String(err), rel));
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   try{
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+    if (req.method === "OPTIONS" && url.pathname.startsWith("/api/admin/")) {
+      res.writeHead(204, adminCorsHeaders());
+      res.end();
+      return;
+    }
     if (url.pathname === "/api/admin/state") return sendJson(res, 200, await manifestState());
     if (url.pathname === "/api/admin/catalog") return sendJson(res, 200, await catalogState());
     if (url.pathname === "/api/admin/process-report") return sendJson(res, 200, await processReport());
@@ -2240,11 +2637,14 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/admin/ocr/jobs") return await handleOcrJobs(req, res);
     if (url.pathname === "/api/admin/ocr/cancel" && req.method === "POST") return await handleOcrCancel(req, res, url);
     if (url.pathname === "/api/admin/ocr" && req.method === "POST") return await handleOcr(req, res);
+    if (url.pathname === "/api/admin/anchor-data") return await handleAnchorData(req, res, url);
     if (url.pathname === "/api/admin/anchor-manual" && req.method === "POST") return await handleAnchorManualSave(req, res);
     if (url.pathname === "/api/admin/anchor-manual-delete" && req.method === "POST") return await handleAnchorManualDelete(req, res);
     if (url.pathname === "/api/admin/anchor-ocr" && req.method === "POST") return await handleAnchorOcr(req, res);
     if (url.pathname === "/api/admin/anchor-delete" && req.method === "POST") return await handleAnchorDelete(req, res);
+    if (url.pathname === "/api/admin/question-reset" && req.method === "POST") return await handleQuestionResetInitial(req, res);
     if (url.pathname === "/api/admin/download") return await handleAdminDownload(req, res, url);
+    if (url.pathname === "/api/admin/hwp-preview") return await handleHwpPreview(req, res, url);
     if (url.pathname === "/api/admin/git-status") return sendJson(res, 200, await gitStatus());
     if (url.pathname === "/api/admin/rebuild" && req.method === "POST") {
       const results = await runGenerateManifest();
