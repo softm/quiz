@@ -1686,6 +1686,88 @@ for q in range(1, question_count + 1):
             return None
     # SOFTM-위치맵: 2행 그리드의 아래 행(③④)을 한 줄 가로형(①②③④)으로 오판하면 위 행 ①②를 보간하고 아래 행 번호를 보존 - 2026-06-01
 
+    def score_short_segment_horizontal(row_candidates, question_start, question_end, compact=False):
+        if compact or choice_count != 4 or raw_band > 0.122:
+            return None
+        xs = [0.095, 0.310, 0.522, 0.734]
+        rows = rows_from(row_candidates)
+        best = None
+        for row in rows:
+            try:
+                row_y = float(row.get("y") or 0)
+                start_y = float(question_start) if question_start is not None else start
+                end_y = float(question_end) if question_end is not None else high
+            except Exception:
+                continue
+            if row_y < start_y + 0.045 or row_y > end_y + 0.020:
+                continue
+            if next_question_start is not None and row_y >= float(next_question_start) - 0.018:
+                continue
+            used = set()
+            anchors = []
+            dx_sum = 0.0
+            for choice, expected_x in enumerate(xs, start=1):
+                best_item = None
+                best_idx = None
+                best_dx = 999.0
+                for idx, item in enumerate(row.get("items", [])):
+                    if idx in used:
+                        continue
+                    try:
+                        dx = abs(float(item.get("xRatio") or 0) - expected_x)
+                        wr = float(item.get("wRatio") or 0)
+                        hr = float(item.get("hRatio") or 0)
+                        aspect = float(item.get("aspect", wr / max(0.0001, hr)) or 1.0)
+                        fill = float(item.get("fill") or 0)
+                        left_density = float(item.get("leftDensity") or 0)
+                    except Exception:
+                        continue
+                    if dx > 0.034:
+                        continue
+                    if wr < 0.005 or wr > 0.026 or hr < 0.004 or hr > 0.020:
+                        continue
+                    if aspect < 0.42 or aspect > 1.90:
+                        continue
+                    if fill < 0.075 or fill > 0.42:
+                        continue
+                    if left_density > 0.12:
+                        continue
+                    if dx < best_dx:
+                        best_item = item
+                        best_idx = idx
+                        best_dx = dx
+                if best_item is None:
+                    anchors = []
+                    break
+                used.add(best_idx)
+                local = dict(best_item)
+                local["source"] = f'{local.get("source", "anchor-image")}-short-rescue'
+                anchors.append((choice, local))
+                dx_sum += best_dx
+            if len(anchors) < choice_count:
+                continue
+            y_values = [float(item.get("yRatio") or row_y) for _, item in anchors]
+            x_values = [float(item.get("xRatio") or 0) for _, item in anchors]
+            if max(y_values) - min(y_values) > 0.018:
+                continue
+            if max(x_values) - min(x_values) < 0.55:
+                continue
+            score = 54.0 - (dx_sum * 80) - (abs(row_y - expected_horizontal_y) * 12)
+            candidate = {
+                "score": score,
+                "anchors": anchors,
+                "layout": "horizontal",
+                "foundCount": len(anchors),
+                "yDistance": abs(row_y - expected_horizontal_y),
+                "firstY": min(y_values),
+                "lastY": max(y_values),
+                "shortSegmentRescue": True,
+            }
+            if best is None or score > float(best.get("score", 0)):
+                best = candidate
+        return best
+    # SOFTM-위치맵: 3번처럼 아주 짧은 전폭 문항은 새 문제를 만들지 않고 기존 문제영역 안의 완전한 ①~④ 가로행만 복구 - 2026-06-02
+
     compact_column = compact_bounds
     rows = rows_from(candidates)
     horizontal = normalize_layout_score(score_horizontal(rows, choice_count, expected_horizontal_y, start, compact_column))
@@ -1705,6 +1787,12 @@ for q in range(1, question_count + 1):
         )
         if right_non_outline and float(outline_vertical.get("firstY", 1.0)) <= float(picked.get("firstY", 1.0)) + 0.018 and float(outline_vertical.get("lastY", 0.0)) >= float(picked.get("lastY", 0.0)) - 0.014:
             picked = outline_vertical
+    if not picked:
+        short_horizontal = normalize_layout_score(score_short_segment_horizontal(candidates, choice_question_start, high, compact_column))
+        if short_horizontal:
+            short_horizontal["titleLinePenalty"] = False
+            picked = short_horizontal
+            picked["shortSegmentFallback"] = True
     if not picked:
         if box_floor is not None and box_floor_low is not None:
             fallback_low = max(choice_question_start + 0.040, float(box_floor) - 0.010)

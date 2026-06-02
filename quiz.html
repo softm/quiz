@@ -1915,6 +1915,7 @@
   const DEFAULT_QUESTION_PDF_URL = "./2025년 제22회 농산물품질관리사 1차 시험문제지.pdf";
   const DEFAULT_ANSWER_PDF_URL = "./최종정답.pdf";
   const params = new URLSearchParams(window.location.search);
+  normalizeInitialPdfQueryParams(params);
   const DATASET = params.get("dataset") === "knou" ? "knou" : "default"; // SOFTM-KNOU: 기존/방통대 데이터셋 구분 추가 - 2026-05-29
   const CATEGORY_NO = params.get("catNo") || ""; // SOFTM-KNOU: 카테고리 복귀 경로 유지를 위한 catNo 추가 - 2026-05-29
   const CATEGORY_NAME = params.get("category") || "농산물품질관리사";
@@ -1986,6 +1987,27 @@
     const i = Math.trunc(n);
     return Math.max(min, Math.min(max, i));
   }
+
+  function normalizeInitialPdfQueryParams(searchParams){
+    if (!searchParams || !window.history || !history.replaceState) return;
+    let changed = false;
+    for (const key of ["category", "exam", "question", "answer", "correct"]){
+      const value = searchParams.get(key);
+      if (!value) continue;
+      const normalized = String(value).normalize("NFC");
+      if (normalized !== value) {
+        searchParams.set(key, normalized);
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    try{
+      const nextUrl = new URL(location.href);
+      nextUrl.search = searchParams.toString();
+      history.replaceState(null, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+    }catch(_){}
+  }
+  // SOFTM-배포: GitHub Pages는 NFC 파일명으로 배포되므로 초기 NFD 쿼리를 PDF 로딩 전에 NFC로 정규화 - 2026-06-02
 
   function normalizeOptionalInt(value, min, max){
     if (value == null || String(value).trim() === "") return null;
@@ -4220,7 +4242,7 @@
   function inferAnchorColumnForQuestion(q){
     const anchor = getQuestionAnchorForEditFind(Number(q));
     if (anchor && Number.isFinite(Number(anchor.xRatio))) return Number(anchor.xRatio) >= 0.5 ? 2 : 1;
-    const choices = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]) || [];
+    const choices = getReliableChoiceAnchorsForQuestion(q) || [];
     const xs = choices.map((item) => Number(item?.xRatio)).filter(Number.isFinite);
     if (xs.length) {
       const avg = xs.reduce((sum, x) => sum + x, 0) / xs.length;
@@ -4590,7 +4612,7 @@
     const safeQ = Math.trunc(anchorEditFiniteNumber(q, 0));
     const safeChoice = Math.trunc(anchorEditFiniteNumber(choice, 0));
     if (safeQ <= 0 || safeChoice <= 0) return null;
-    const anchors = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(safeQ)]) || [];
+    const anchors = getReliableChoiceAnchorsForQuestion(safeQ) || [];
     const anchor = anchors.find((item) => Number(item?.choice) === safeChoice);
     if (!anchor) return null;
     const page = Math.trunc(anchorEditFiniteNumber(anchor.page, 0));
@@ -5330,7 +5352,7 @@
     for (const q of (questionList.length ? questionList : normalizeAnchorQuestionList(state.focusQ || 1))){
       const mappedPage = Array.isArray(pageMap) ? Number(pageMap[q]) : NaN;
       if (Number.isFinite(mappedPage) && Math.floor(mappedPage) !== Number(pageNo)) continue;
-      const storedChoices = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
+      const storedChoices = getReliableChoiceAnchorsForQuestion(q, pageNo);
       const hasManualChoiceArea = getManualChoiceClickAreas(q).some((area) => Number(area.page) === Number(pageNo));
       if ((!Array.isArray(storedChoices) || !storedChoices.length) && !hasManualChoiceArea) continue;
       const qPoints = [];
@@ -5367,7 +5389,7 @@
     for (const q of (questionList.length ? questionList : normalizeAnchorQuestionList(state.focusQ || 1))){
       const mappedPage = Array.isArray(pageMap) ? Number(pageMap[q]) : NaN;
       if (Number.isFinite(mappedPage) && Math.floor(mappedPage) !== Number(pageNo)) continue;
-      const storedChoices = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
+      const storedChoices = getReliableChoiceAnchorsForQuestion(q, pageNo);
       const qPoints = [];
       for (const item of (Array.isArray(storedChoices) ? storedChoices : [])){
         if (Number(item?.page || pageNo) !== Number(pageNo)) continue;
@@ -5408,7 +5430,7 @@
       srcWidth: Math.max(1, Number(meta.cropWidthPx || fullWidth)),
       srcHeight: Math.max(1, Number(meta.cropHeightPx || fullHeight)),
     };
-    const storedChoices = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
+    const storedChoices = getReliableChoiceAnchorsForQuestion(q, pageNo);
     const qPoints = [];
     for (const item of (Array.isArray(storedChoices) ? storedChoices : [])){
       if (Number(item?.page || pageNo) !== Number(pageNo)) continue;
@@ -5504,7 +5526,7 @@
     if (!canvas || !meta || !Number.isFinite(Number(q)) || !Number.isFinite(Number(pageNo))) return [];
     const fullWidth = Math.max(1, Number(pointOrMeta?.fullWidth || meta.fullWidth || 1));
     const fullHeight = Math.max(1, Number(pointOrMeta?.fullHeight || meta.fullHeight || 1));
-    const anchors = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
+    const anchors = getReliableChoiceAnchorsForQuestion(q, pageNo);
     const points = [];
     for (const item of (Array.isArray(anchors) ? anchors : [])){
       if (Number(item?.page || pageNo) !== Number(pageNo)) continue;
@@ -5579,7 +5601,7 @@
     for (let q = 1; q <= QUESTION_COUNT; q++){
       const mappedPage = Array.isArray(pageMap) ? Number(pageMap[q]) : NaN;
       if (Number.isFinite(mappedPage) && Math.floor(mappedPage) !== pageNo) continue;
-      const storedChoices = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
+      const storedChoices = getReliableChoiceAnchorsForQuestion(q, pageNo);
       if (!Array.isArray(storedChoices) || !storedChoices.length) continue;
       for (const item of storedChoices){
         if (Number(item?.page || pageNo) !== pageNo) continue;
@@ -5654,7 +5676,7 @@
     const fullWidth = Math.max(1, Number(meta.fullWidthPx || 1));
     const fullHeight = Math.max(1, Number(meta.fullHeightPx || 1));
     let bestChoice = null;
-    const storedChoices = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
+    const storedChoices = getReliableChoiceAnchorsForQuestion(q, pageNo);
     if (Array.isArray(storedChoices)) {
       for (const item of storedChoices){
         if (Number(item?.page || pageNo) !== pageNo) continue;
@@ -6549,6 +6571,16 @@
     // SOFTM-위치맵: 로컬 pdf 경로는 정규화 후보 탐색 전에 바로 사용해 경로 확인 단계 지연을 방지 - 2026-05-30
     const decodedRaw = tryDecodeURIComponent(baseRaw);
     const decodedTwice = tryDecodeURIComponent(decodedRaw);
+    if (!isAdminHost && /^pdf\//.test(localPdfPath)) {
+      return encodeURI(localPdfPath.normalize("NFC"));
+    }
+    if (!isAdminHost && /^\.?\/?pdf\//.test(decodedRaw)) {
+      return encodeURI(decodedRaw.replace(/^\.\//, "").normalize("NFC"));
+    }
+    if (!isAdminHost && /^\.?\/?pdf\//.test(decodedTwice)) {
+      return encodeURI(decodedTwice.replace(/^\.\//, "").normalize("NFC"));
+    }
+    // SOFTM-배포: 정적 서버에서는 한글 NFD 경로 확인이 지연될 수 있어 pdf 상대경로는 NFC URL로 즉시 사용 - 2026-06-02
     const candidates = [];
     const pushCandidate = (raw) => {
       const safe = String(raw || "").trim();
@@ -9616,7 +9648,7 @@
   async function drawChoiceAnchorDebugMarkersSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight){
     if (!ANCHOR_DEBUG || !fullCanvas || !Number.isFinite(q) || !Number.isFinite(pageNo)) return;
     let sourceTone = "anchor";
-    let list = getReliableStoredChoiceAnchors(state.pdfNav.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
+    let list = getReliableChoiceAnchorsForQuestion(q, pageNo);
     if (!Array.isArray(list) || !list.length) {
       sourceTone = "pdf";
       const startRatio = Math.max(0, Math.min(1, Number(srcTop || 0) / Math.max(1, Number(fullCanvas.height || 1))));
@@ -9659,7 +9691,7 @@
       srcWidth,
       srcHeight,
     };
-    const list = getReliableStoredChoiceAnchors(state.pdfNav.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
+    const list = getReliableChoiceAnchorsForQuestion(q, pageNo);
     const points = [];
     for (const item of (Array.isArray(list) ? list : [])){
       if (Number(item?.page || pageNo) !== Number(pageNo)) continue;
@@ -9914,7 +9946,7 @@
 
   function drawChoiceAnchorDebugMarkersAll(pageNo, q){
     if (!ANCHOR_DEBUG || !Number.isFinite(pageNo) || !Number.isFinite(q)) return false;
-    const list = getReliableStoredChoiceAnchors(state.pdfNav.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
+    const list = getReliableChoiceAnchorsForQuestion(q, pageNo);
     if (!Array.isArray(list) || !list.length) return false;
     const canvas = state.allPageCanvases[pageNo];
     const meta = state.allPageCanvasMeta[pageNo];
@@ -10238,7 +10270,7 @@
     if (!isTwoColumnQuestionPage(pageNo)) return true;
     if (activeColumn !== 1 && activeColumn !== 2) return true;
     const isActiveX = (x) => activeColumn === 2 ? x >= 0.5 : x < 0.5;
-    const storedChoices = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]) || [];
+    const storedChoices = getReliableChoiceAnchorsForQuestion(q, pageNo) || [];
     const xs = storedChoices
       .filter((anchor) => pageNo == null || !Number.isFinite(Number(anchor.page)) || Number(anchor.page) === Number(pageNo))
       .map((anchor) => Number(anchor.xRatio))
@@ -10744,6 +10776,70 @@
   }
   // SOFTM-위치맵: 저장 위치맵에서도 기하 추정/채움 좌표는 실제 선택지 앵커로 사용하지 않음 - 2026-05-30
 
+  function getStoredQuestionSegment(q, pageNo = null){
+    const raw = state.pdfNav?.questionSegments?.[String(q)];
+    if (!Array.isArray(raw)) return null;
+    const safePage = Number(pageNo);
+    for (const item of raw){
+      if (!item || typeof item !== "object") continue;
+      const page = Number(item.page);
+      if (Number.isFinite(safePage) && Number.isFinite(page) && Number(page) !== Number(safePage)) continue;
+      const top = Number(item.top);
+      const bottom = Number(item.bottom);
+      const left = Number.isFinite(Number(item.left)) ? Math.max(0, Math.min(1, Number(item.left))) : 0;
+      const right = Number.isFinite(Number(item.right)) ? Math.max(0, Math.min(1, Number(item.right))) : 1;
+      if (!Number.isFinite(page) || !Number.isFinite(top) || !Number.isFinite(bottom)) continue;
+      if (bottom <= top + 0.035 || right <= left + 0.20) continue;
+      return { ...item, page, top: Math.max(0, Math.min(1, top)), bottom: Math.max(0, Math.min(1, bottom)), left, right };
+    }
+    return null;
+  }
+
+  function getSegmentFallbackChoiceAnchors(q, pageNo = null, options = {}){
+    const safeQ = Number(q);
+    if (!Number.isFinite(safeQ) || safeQ <= 0) return [];
+    const segment = getStoredQuestionSegment(safeQ, pageNo);
+    if (!segment) return [];
+    const height = Number(segment.bottom) - Number(segment.top);
+    const width = Number(segment.right) - Number(segment.left);
+    // 아주 짧은 전폭 문항에서만 한 줄 보기 fallback을 허용한다. 긴 문항/2행 문항은 오표시 위험이 더 크다.
+    if (height > 0.122 || width < 0.70) return [];
+    const page = Number(segment.page || pageNo || (Array.isArray(state.pdfNav?.questionPageMap) ? state.pdfNav.questionPageMap[safeQ] : 0));
+    if (!Number.isFinite(page) || page <= 0) return [];
+    const choiceCount = Math.max(1, Math.min(5, Number(state.pdfNav?.choiceCount) || CHOICE_COUNT));
+    const localXs = choiceCount === 5
+      ? [0.085, 0.245, 0.405, 0.585, 0.765]
+      : (choiceCount === 4
+        ? [0.095, 0.310, 0.522, 0.734]
+        : Array.from({ length: choiceCount }, (_, idx) => 0.095 + (idx * (0.64 / Math.max(1, choiceCount - 1)))));
+    const rawY = Number(segment.top) + (height * 0.72);
+    const yRatio = Math.max(Number(segment.top) + 0.045, Math.min(Number(segment.bottom) - 0.010, rawY));
+    const optStart = Number(options.startRatio);
+    const optEnd = Number(options.endRatio);
+    if (Number.isFinite(optStart) && yRatio < optStart - 0.010) return [];
+    if (Number.isFinite(optEnd) && yRatio > optEnd + 0.060) return [];
+    return localXs.map((localX, idx) => ({
+      choice: idx + 1,
+      page,
+      xRatio: Math.max(0, Math.min(1, Number(segment.left) + (width * localX))),
+      yRatio,
+      wRatio: Math.max(0.010, Math.min(0.024, width * 0.016)),
+      hRatio: 0.014,
+      source: "segment-short-horizontal",
+      anchorMode: "center",
+      layout: "horizontal",
+      confidence: 0.56,
+      inferred: true,
+    }));
+  }
+
+  function getReliableChoiceAnchorsForQuestion(q, pageNo = null, options = {}){
+    const stored = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
+    if (stored.length) return stored;
+    return getSegmentFallbackChoiceAnchors(q, pageNo, options);
+  }
+  // SOFTM-위치맵: 짧은 문항은 새 문제를 만들지 않고 기존 문제영역 안에서만 한 줄 보기 앵커를 제한적으로 추정 - 2026-06-02
+
   function parseChoiceNumberToken(token){
     const t = String(token || "").trim();
     if (!t) return null;
@@ -10800,7 +10896,7 @@
     const cacheKey = `${pageNo}:${q}`;
     if (!hasOptions && state.questionChoiceAnchorCache[cacheKey]) return state.questionChoiceAnchorCache[cacheKey];
     await ensureAnchorDetailsForQuestions([q]);
-    const storedChoices = getReliableStoredChoiceAnchors(state.pdfNav.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
+    const storedChoices = getReliableChoiceAnchorsForQuestion(q, pageNo);
     if (Array.isArray(storedChoices) && storedChoices.length) {
       const optStart = (hasOptions && Number.isFinite(options.startRatio)) ? Math.max(0, Math.min(1, Number(options.startRatio))) : null;
       const optEnd = (hasOptions && Number.isFinite(options.endRatio)) ? Math.max(0, Math.min(1, Number(options.endRatio))) : null;
@@ -11032,6 +11128,12 @@
           const alt = pickChoices(anchors, bestCenter);
           if (alt.length >= result.length) result = alt;
         }
+      }
+    }
+    if (result.length < CHOICE_COUNT) {
+      const segmentFallback = getSegmentFallbackChoiceAnchors(q, pageNo, { startRatio, endRatio });
+      if (segmentFallback.length >= CHOICE_COUNT || segmentFallback.length > result.length) {
+        result = segmentFallback;
       }
     }
     if (!hasOptions) {

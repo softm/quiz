@@ -1957,6 +1957,303 @@ async function handleOcr(req, res){
 // SOFTM-OCR: 기본 OCR 엔진을 워크스페이스 임시 파일 기반 fallback 파이프라인으로 전환 - 2026-05-30
 /* SOFTM-OCR 끝 */
 
+/* SOFTM-위치맵 시작: 위치맵 생성 작업 진행률 조회 API 추가 - 2026-06-02 */
+const anchorJobs = new Map();
+const anchorLogLimit = 160;
+const anchorTimeoutMs = 10 * 60 * 1000;
+const anchorEstimateMsPerPage = 12 * 1000;
+
+function anchorStatusText(status){
+  return {
+    running: "실행 중",
+    canceling: "취소 중",
+    canceled: "취소됨",
+    completed: "완료",
+    failed: "실패",
+  }[status] || status;
+}
+
+function appendAnchorLog(job, chunk, stream){
+  const text = sanitizeOcrText(chunk);
+  job[stream] = `${job[stream] || ""}${text}`.slice(-40000);
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines){
+    job.logs.push(line);
+    if (job.logs.length > anchorLogLimit) job.logs.shift();
+    if (/^ANCHOR render/i.test(line)) {
+      job.progress = Math.max(job.progress || 0, 6);
+      job.progressUpdatedMs = Date.now();
+    }
+    const pageMatch = line.match(/^ANCHOR page\s+(\d+)\/(\d+)/i);
+    if (pageMatch) {
+      job.processedPages = Math.max(job.processedPages || 0, Number(pageMatch[1]));
+      job.pageCount = Number(pageMatch[2]) || job.pageCount;
+      if (job.pageCount) {
+        job.progress = Math.max(job.progress || 0, Math.min(88, 8 + Math.round((job.processedPages / job.pageCount) * 78)));
+        job.progressUpdatedMs = Date.now();
+      }
+    }
+    if (/^ANCHOR done/i.test(line)) {
+      job.progress = Math.max(job.progress || 0, 94);
+      job.progressUpdatedMs = Date.now();
+    }
+  }
+  job.updatedAt = new Date().toISOString();
+}
+
+function currentAnchorProgress(job){
+  let progress = Math.max(0, Math.min(100, Math.round(job.progress || 0)));
+  let estimated = false;
+  if ((job.status === "running" || job.status === "canceling") && progress < 84) {
+    const elapsedMs = Math.max(0, Date.now() - job.startedMs);
+    const estimatedTotalMs = Math.max(60 * 1000, (job.pageCount || 8) * anchorEstimateMsPerPage);
+    const elapsedEstimate = Math.min(82, Math.max(2, Math.round((elapsedMs / estimatedTotalMs) * 82)));
+    if (elapsedEstimate > progress) {
+      progress = elapsedEstimate;
+      estimated = true;
+    }
+  }
+  return { progress, estimated };
+}
+
+function snapshotAnchorJob(job){
+  const currentProgress = currentAnchorProgress(job);
+  return {
+    ok: true,
+    id: job.id,
+    status: job.status,
+    statusText: anchorStatusText(job.status),
+    progress: currentProgress.progress,
+    progressEstimated: currentProgress.estimated,
+    pageCount: job.pageCount || 0,
+    processedPages: job.processedPages || 0,
+    source: job.sourceRel,
+    output: job.outputRel,
+    pid: job.pid || 0,
+    command: job.command,
+    logs: job.logs.slice(-80),
+    stdout: sanitizeOcrText(job.stdout).trim(),
+    stderr: sanitizeOcrText(job.stderr).trim(),
+    error: job.error || "",
+    startedAt: job.startedAt,
+    updatedAt: job.updatedAt,
+    lastProgressAt: job.progressUpdatedMs ? new Date(job.progressUpdatedMs).toISOString() : "",
+    lastProgressAgeMs: job.progressUpdatedMs ? Date.now() - job.progressUpdatedMs : Date.now() - job.startedMs,
+    endedAt: job.endedAt || "",
+    elapsedMs: Date.now() - job.startedMs,
+    result: job.result || null,
+  };
+}
+
+function activeAnchorJobForRel(relPath){
+  const rel = stripManifestPrefix(relPath);
+  return [...anchorJobs.values()].find((job) => {
+    return ["running", "canceling"].includes(job.status) && sameManagedRelPath(job.sourceRel, rel);
+  }) || null;
+}
+
+async function buildAnchorJobConfig(body){
+  const found = findQuestionManifestRow(body);
+  const row = found.row;
+  const questionPdfRel = stripManifestPrefix(row.questionPdf || body.path || "");
+  const inputAbs = assertPdfManagedPath(questionPdfRel);
+  if (isDerivedPdfPath(questionPdfRel)) throw new Error("문제·문항 위치맵은 원본 문제 PDF에서만 생성합니다.");
+  const outputRel = anchorOutputRelForQuestion(row);
+  const outputAbs = resolveWorkspacePath(outputRel);
+  const questionCount = expectedQuestionCount(row);
+  if (!questionCount) throw new Error("문항 수 정보가 없어 문제·문항 위치맵을 생성할 수 없습니다.");
+  const choiceCount = Math.max(1, Math.min(5, Number(row.choiceCount || body.choiceCount || 4) || 4));
+  const args = [
+    path.join(scriptDir, "anchor-ocr.mjs"),
+    "--input", inputAbs,
+    "--output", outputAbs,
+    "--question-no", String(row.questionNo || ""),
+    "--question-count", String(questionCount),
+    "--choice-count", String(choiceCount),
+    "--question-pdf", questionPdfRel,
+  ];
+  if (row.questionStartNo) args.push("--question-start-no", String(row.questionStartNo));
+  if (row.questionEndNo) args.push("--question-end-no", String(row.questionEndNo));
+  let pageCount = 0;
+  try{
+    const infoRaw = (await runCommand("pdfinfo", [inputAbs], { maxBuffer: 4 * 1024 * 1024 })).stdout;
+    pageCount = Number(parsePdfInfoText(infoRaw).pages || 0);
+  }catch(_){
+    pageCount = 0;
+  }
+  return { found, row, inputAbs, outputAbs, outputRel, questionPdfRel, questionCount, choiceCount, args, pageCount };
+}
+
+async function finalizeAnchorJob(job){
+  const anchorData = JSON.parse(await fsp.readFile(job.outputAbs, "utf8"));
+  const fields = {
+    anchorMap: `quiz/${job.outputRel}`,
+    anchorStatus: Number(anchorData.confidence || 0) >= 0.32 ? "위치맵 생성" : "위치맵 확인 필요",
+    anchorConfidence: Number(anchorData.confidence || 0),
+    anchorWarnings: Array.isArray(anchorData.warnings) ? anchorData.warnings : [],
+    anchorGeneratedAt: anchorData.generatedAt || new Date().toISOString(),
+    questionStartNo: anchorData.questionStartNo || job.row.questionStartNo || "",
+    questionEndNo: anchorData.questionEndNo || job.row.questionEndNo || "",
+  };
+  job.found.rows[job.found.index] = { ...job.found.rows[job.found.index], ...fields };
+  await writeJsonFile(job.found.manifestName, job.found.rows);
+  await updateCategoryQuestionManifest(job.row, fields);
+  job.result = {
+    ok: true,
+    output: job.outputRel,
+    manifestOutput: fields.anchorMap,
+    status: fields.anchorStatus,
+    confidence: fields.anchorConfidence,
+    warnings: fields.anchorWarnings,
+    detected: Array.isArray(anchorData.anchors) ? anchorData.anchors.length : 0,
+    rawDetected: anchorData.rawAnchorCount || 0,
+    pageCount: anchorData.pageCount || 0,
+    questionCount: anchorData.questionCount || job.questionCount,
+    choiceCount: anchorData.choiceCount || job.choiceCount,
+    questionStartNo: anchorData.questionStartNo || "",
+    questionEndNo: anchorData.questionEndNo || "",
+    generatedAt: fields.anchorGeneratedAt,
+    elapsedMs: Date.now() - job.startedMs,
+    stdout: sanitizeOcrText(job.stdout).trim(),
+    stderr: sanitizeOcrText(job.stderr).trim(),
+  };
+  return job.result;
+}
+
+async function startAnchorJob(body){
+  const config = await buildAnchorJobConfig(body);
+  const sourceRel = toRel(config.inputAbs);
+  const existingJob = activeAnchorJobForRel(sourceRel);
+  if (existingJob) {
+    existingJob.reused = true;
+    appendAnchorLog(existingJob, "이미 실행 중인 위치맵 생성 작업에 연결했습니다.", "stdout");
+    return existingJob;
+  }
+  const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const startedAt = new Date().toISOString();
+  const job = {
+    id,
+    status: "running",
+    progress: 2,
+    processedPages: 0,
+    pageCount: config.pageCount,
+    progressUpdatedMs: Date.now(),
+    logs: [],
+    stdout: "",
+    stderr: "",
+    startedAt,
+    updatedAt: startedAt,
+    startedMs: Date.now(),
+    sourceRel,
+    outputRel: config.outputRel,
+    inputAbs: config.inputAbs,
+    outputAbs: config.outputAbs,
+    found: config.found,
+    row: config.row,
+    questionCount: config.questionCount,
+    choiceCount: config.choiceCount,
+    reused: false,
+    command: `${process.execPath} ${config.args.map((arg) => /\s/.test(arg) ? `"${arg}"` : arg).join(" ")}`,
+  };
+  anchorJobs.set(id, job);
+  const child = spawn(process.execPath, config.args, { cwd: root, detached: true, env: { ...process.env, PYTHONUNBUFFERED: "1" } });
+  job.child = child;
+  job.pid = child.pid;
+  appendAnchorLog(job, `위치맵 생성 작업을 시작했습니다. PID ${child.pid || "-"}`, "stdout");
+  child.stdout.on("data", (chunk) => appendAnchorLog(job, chunk, "stdout"));
+  child.stderr.on("data", (chunk) => appendAnchorLog(job, chunk, "stderr"));
+  child.on("error", (err) => {
+    job.status = "failed";
+    job.error = err?.message || String(err);
+    job.endedAt = new Date().toISOString();
+    job.updatedAt = job.endedAt;
+  });
+  const timeout = setTimeout(() => {
+    if (job.status === "running") {
+      job.status = "failed";
+      job.error = `위치맵 생성 시간이 ${Math.round(anchorTimeoutMs / 60000)}분을 초과해 중단했습니다.`;
+      appendAnchorLog(job, job.error, "stderr");
+      stopOcrProcess(job);
+    }
+  }, anchorTimeoutMs);
+  child.on("close", (code, signal) => {
+    clearTimeout(timeout);
+    (async () => {
+      if (job.status === "canceling") {
+        job.status = "canceled";
+        job.progress = Math.min(job.progress || 0, 99);
+        job.error = "사용자가 위치맵 생성 작업을 취소했습니다.";
+        return;
+      }
+      if (job.status === "failed") return;
+      if (code === 0) {
+        job.progress = 96;
+        await finalizeAnchorJob(job);
+        job.status = "completed";
+        job.progress = 100;
+      } else {
+        job.status = "failed";
+        job.error = `위치맵 생성 작업이 실패했습니다. 종료 코드 ${code ?? "-"}${signal ? `, signal ${signal}` : ""}`;
+      }
+    })().catch((err) => {
+      job.status = "failed";
+      job.error = err?.message || String(err);
+    }).finally(() => {
+      job.endedAt = new Date().toISOString();
+      job.updatedAt = job.endedAt;
+      delete job.child;
+    });
+  });
+  return job;
+}
+
+async function handleAnchorOcrStart(req, res){
+  const body = JSON.parse((await readBody(req)).toString("utf8") || "{}");
+  const job = await startAnchorJob(body);
+  const snapshot = snapshotAnchorJob(job);
+  snapshot.reused = Boolean(job.reused);
+  sendJson(res, 200, snapshot);
+}
+
+async function handleAnchorOcrStatus(_req, res, url){
+  const job = anchorJobs.get(url.searchParams.get("id") || "");
+  if (!job) throw new Error("위치맵 생성 작업을 찾을 수 없습니다.");
+  sendJson(res, 200, snapshotAnchorJob(job));
+}
+
+async function handleAnchorOcrJobs(_req, res){
+  sendJson(res, 200, { ok: true, jobs: [...anchorJobs.values()].map((job) => snapshotAnchorJob(job)) });
+}
+
+async function handleAnchorOcrCancel(req, res, url){
+  let id = url.searchParams.get("id") || "";
+  const body = req.method === "POST" ? await readSmallJsonRequest(req).catch(() => ({})) : {};
+  if (!id && body.id) id = String(body.id || "");
+  let job = id ? anchorJobs.get(id) : null;
+  if (!job && body.path) job = activeAnchorJobForRel(body.path);
+  if (!job) {
+    sendJson(res, 200, {
+      ok: true,
+      id: "",
+      status: "canceled",
+      statusText: "취소됨",
+      progress: 100,
+      message: "취소할 위치맵 생성 작업이 없습니다.",
+    });
+    return;
+  }
+  if (job.status === "running" && job.child) {
+    job.status = "canceling";
+    job.updatedAt = new Date().toISOString();
+    stopOcrProcess(job);
+    setTimeout(() => {
+      if (job.status === "canceling" || job.status === "running") stopOcrProcess(job, "SIGKILL");
+    }, 5000);
+  }
+  sendJson(res, 200, snapshotAnchorJob(job));
+}
+/* SOFTM-위치맵 끝 */
+
 function anchorManifestName(dataset){
   return dataset === "knou" ? "knou_question.json" : "question.json";
 }
@@ -2512,25 +2809,89 @@ function buildHwpPreviewHtml(html, title = "HWP 문서"){
 <title>${escapeHtmlPreview(title)}</title>
 ${headContent}
 <style>
+:root {
+  --hwp-bg: #edf2f7;
+  --hwp-panel: #ffffff;
+  --hwp-ink: #1f2933;
+  --hwp-muted: #66727f;
+  --hwp-line: #d8e0e6;
+  --hwp-accent: #256d7b;
+}
 html,
 body {
   width: 100%;
   min-height: 100%;
   margin: 0;
   padding: 0;
-  background: #f3f6fb;
+  background: var(--hwp-bg);
   overflow: auto;
 }
 body {
   box-sizing: border-box;
-  padding: 14px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Pretendard", "SUIT", "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--hwp-ink);
+}
+.hwp-preview-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.hwp-preview-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hwp-line);
+  background: rgba(244, 247, 251, 0.92);
+  backdrop-filter: blur(10px);
+}
+.hwp-preview-toolbar button {
+  min-width: 38px;
+  height: 36px;
+  border: 1px solid #c8d3e2;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--hwp-ink);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.hwp-preview-toolbar button:hover {
+  border-color: var(--hwp-accent);
+  color: var(--hwp-accent);
+}
+.hwp-preview-toolbar button:active {
+  transform: translateY(1px);
+}
+.hwp-zoom-label {
+  min-width: 58px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hwp-line);
+  border-radius: 9px;
+  background: var(--hwp-panel);
+  color: var(--hwp-muted);
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.hwp-preview-stage {
+  overflow: auto;
+  padding: 18px;
 }
 .hwp-viewer-root {
   width: max-content;
-  min-width: 100%;
+  min-width: 0;
   margin: 0 auto;
-  transform-origin: top left;
+  transform-origin: top center;
 }
 .hwp-viewer-root *,
 .hwp-viewer-root *::before,
@@ -2557,7 +2918,52 @@ body {
 </style>
 </head>
 <body>
-<div class="hwp-viewer-root">${bodyContent}</div>
+<div class="hwp-preview-shell">
+  <div class="hwp-preview-toolbar" aria-label="HWP 미리보기 확대 축소">
+    <button type="button" id="hwpZoomOut" title="축소" aria-label="축소">−</button>
+    <span class="hwp-zoom-label" id="hwpZoomLabel">100%</span>
+    <button type="button" id="hwpZoomIn" title="확대" aria-label="확대">＋</button>
+    <button type="button" id="hwpZoomReset" title="원래대로" aria-label="원래대로">↺</button>
+  </div>
+  <div class="hwp-preview-stage">
+    <div class="hwp-viewer-root" id="hwpViewerRoot">${bodyContent}</div>
+  </div>
+</div>
+<script>
+(function(){
+  var root = document.getElementById("hwpViewerRoot");
+  var label = document.getElementById("hwpZoomLabel");
+  var zoomIn = document.getElementById("hwpZoomIn");
+  var zoomOut = document.getElementById("hwpZoomOut");
+  var zoomReset = document.getElementById("hwpZoomReset");
+  var scale = 1;
+  function clamp(value){
+    return Math.max(0.5, Math.min(2.2, value));
+  }
+  function applyZoom(next){
+    scale = clamp(next);
+    if (root) root.style.zoom = String(scale);
+    if (label) label.textContent = Math.round(scale * 100) + "%";
+  }
+  if (zoomIn) zoomIn.addEventListener("click", function(){ applyZoom(scale + 0.1); });
+  if (zoomOut) zoomOut.addEventListener("click", function(){ applyZoom(scale - 0.1); });
+  if (zoomReset) zoomReset.addEventListener("click", function(){ applyZoom(1); });
+  document.addEventListener("keydown", function(event){
+    if (!(event.ctrlKey || event.metaKey)) return;
+    if (event.key === "+" || event.key === "=") {
+      event.preventDefault();
+      applyZoom(scale + 0.1);
+    } else if (event.key === "-") {
+      event.preventDefault();
+      applyZoom(scale - 0.1);
+    } else if (event.key === "0") {
+      event.preventDefault();
+      applyZoom(1);
+    }
+  });
+  applyZoom(1);
+})();
+</script>
 </body>
 </html>`;
 }
@@ -2640,6 +3046,10 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/admin/anchor-data") return await handleAnchorData(req, res, url);
     if (url.pathname === "/api/admin/anchor-manual" && req.method === "POST") return await handleAnchorManualSave(req, res);
     if (url.pathname === "/api/admin/anchor-manual-delete" && req.method === "POST") return await handleAnchorManualDelete(req, res);
+    if (url.pathname === "/api/admin/anchor-ocr/start" && req.method === "POST") return await handleAnchorOcrStart(req, res);
+    if (url.pathname === "/api/admin/anchor-ocr/status") return await handleAnchorOcrStatus(req, res, url);
+    if (url.pathname === "/api/admin/anchor-ocr/jobs") return await handleAnchorOcrJobs(req, res);
+    if (url.pathname === "/api/admin/anchor-ocr/cancel" && req.method === "POST") return await handleAnchorOcrCancel(req, res, url);
     if (url.pathname === "/api/admin/anchor-ocr" && req.method === "POST") return await handleAnchorOcr(req, res);
     if (url.pathname === "/api/admin/anchor-delete" && req.method === "POST") return await handleAnchorDelete(req, res);
     if (url.pathname === "/api/admin/question-reset" && req.method === "POST") return await handleQuestionResetInitial(req, res);

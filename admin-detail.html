@@ -744,6 +744,7 @@
       questionNo: params.get("questionNo") || "",
       item: null,
       activeOcrJobId: "",
+      activeAnchorJobId: "",
       returnUrl: safeReturnUrl(params.get("return") || ""),
     };
 
@@ -752,9 +753,9 @@
       if (!raw) return "./admin.html";
       try{
         const decoded = decodeURIComponent(raw);
-        if (/^\.\/admin\.html(?:\?|$)/.test(decoded) || /^admin\.html(?:\?|$)/.test(decoded)) return decoded.startsWith(".") ? decoded : `./${decoded}`;
+        if (/^\.\/admin(?:-questions)?\.html(?:\?|$)/.test(decoded) || /^admin(?:-questions)?\.html(?:\?|$)/.test(decoded)) return decoded.startsWith(".") ? decoded : `./${decoded}`;
       }catch(_){}
-      if (/^\.\/admin\.html(?:\?|$)/.test(raw) || /^admin\.html(?:\?|$)/.test(raw)) return raw.startsWith(".") ? raw : `./${raw}`;
+      if (/^\.\/admin(?:-questions)?\.html(?:\?|$)/.test(raw) || /^admin(?:-questions)?\.html(?:\?|$)/.test(raw)) return raw.startsWith(".") ? raw : `./${raw}`;
       return "./admin.html";
     }
 
@@ -1831,6 +1832,80 @@
     }
     // SOFTM-ANCHOR: 저장된 위치맵이 실제로 쓸 수 있는 구조인지 관리자에서 점검하고 풀이화면 오버레이로 연결 - 2026-05-30
 
+    function renderAnchorJobStatus(job){
+      const logs = Array.isArray(job.logs) ? job.logs.slice(-30).join("\n") : "";
+      const progressLabel = `${Number(job.progress || 0)}%${job.progressEstimated ? "(추정)" : ""}`;
+      const pageLabel = job.pageCount
+        ? (job.processedPages ? `페이지 ${Number(job.processedPages || 0)}/${job.pageCount}` : `페이지 준비 중/${job.pageCount}`)
+        : "";
+      const waitMessage = job.progressEstimated
+        ? `<div class="diagnosisMessage warn">렌더링 또는 초기 분석 로그를 기다리는 동안 추정 진행률로 표시합니다.</div>`
+        : "";
+      const errorHtml = job.error ? `<div><h3>오류</h3><div class="status warn">${escapeHtml(job.error)}</div></div>` : "";
+      $("pdfDiagnoseStatus").innerHTML = `
+        <div class="diagnosisResult ${job.status === "failed" || job.status === "canceled" ? "warn" : ""}">
+          <div class="diagnosisHeadline">
+            <div>
+              <h3 class="diagnosisTitle">위치맵 생성 상태: ${diagPill(job.statusText || job.status, job.status === "failed" || job.status === "canceled" ? "warn" : "ok")}</h3>
+              <div class="desc">진행률 ${progressLabel} · 경과 ${formatDuration(job.elapsedMs)}${pageLabel ? ` · ${pageLabel}` : ""}</div>
+            </div>
+            <div class="desc">${escapeHtml(job.output || "")}</div>
+          </div>
+          ${waitMessage}
+          ${errorHtml}
+          ${logs ? `<div><h3>최근 로그</h3><div class="sampleBlock">${escapeHtml(logs)}</div></div>` : ""}
+        </div>
+      `;
+    }
+
+    async function pollAnchorJob(id, progress){
+      let statusFetchFailures = 0;
+      while (true) {
+        let job;
+        try{
+          job = await api(`/api/admin/anchor-ocr/status?id=${encodeURIComponent(id)}`);
+          statusFetchFailures = 0;
+        }catch(err){
+          statusFetchFailures += 1;
+          $("progressCancel").hidden = false;
+          setProgressLog(`${err.message}\n\n위치맵 생성 상태를 다시 연결하는 중입니다. 취소를 누르면 실행 중인 위치맵 생성 프로세스 종료를 요청합니다.`);
+          progress.step(0, "running", `관리자 서버 응답 대기 중 · 재시도 ${statusFetchFailures}회 · 취소 가능`);
+          if (statusFetchFailures >= 120) throw err;
+          await sleep(1500);
+          continue;
+        }
+        renderAnchorJobStatus(job);
+        setProgressPercent(job.progress);
+        setProgressLog((job.logs || []).slice(-40).join("\n"));
+        const progressLabel = `${job.progress}%${job.progressEstimated ? "(추정)" : ""}`;
+        const pageLabel = job.pageCount ? (job.processedPages ? ` · 페이지 ${job.processedPages}/${job.pageCount}` : ` · 페이지 준비 중/${job.pageCount}`) : "";
+        progress.step(0, job.status === "failed" || job.status === "canceled" ? "failed" : "running", `위치맵 ${job.statusText} · 진행률 ${progressLabel} · 경과 ${formatDuration(job.elapsedMs)}${pageLabel}`);
+        if (job.status === "completed") return job;
+        if (job.status === "failed" || job.status === "canceled") {
+          throw new Error([
+            job.error || `위치맵 생성 작업이 ${job.statusText} 상태로 종료되었습니다.`,
+            job.stderr ? `\n[stderr]\n${job.stderr}` : "",
+            job.logs?.length ? `\n[최근 로그]\n${job.logs.slice(-30).join("\n")}` : "",
+          ].filter(Boolean).join("\n"));
+        }
+        await sleep(1000);
+      }
+    }
+
+    async function findCancelableAnchorJobId(){
+      if (state.activeAnchorJobId) return state.activeAnchorJobId;
+      const target = normalizePath($("pdfTargetPath").value);
+      const data = await api("/api/admin/anchor-ocr/jobs");
+      const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+      const active = jobs
+        .filter((job) => ["running", "canceling"].includes(job.status))
+        .filter((job) => !target || samePath(job.source, target) || samePath(job.output, target))
+        .sort((a, b) => String(b.startedAt || "").localeCompare(String(a.startedAt || "")))[0];
+      if (active?.id) state.activeAnchorJobId = active.id;
+      return active?.id || "";
+    }
+    // SOFTM-위치맵: 위치맵 생성 로그를 폴링해 진행률/페이지 처리 상태를 다이얼로그에 표시 - 2026-06-02
+
     async function runAnchorOcrForTarget(){
       let target = ensurePdfTargetForAction("위치맵");
       if (!target) {
@@ -1860,12 +1935,15 @@
       try{
         await withProgress({
           title: "문제·문항 위치맵 생성",
-          steps: ["문제 위치 분석", "문항 위치 저장", "회차 상태 갱신"],
-          message: "PDF 이미지에서 문제 시작 위치와 선택지 위치를 분석하고 있습니다.",
+          steps: ["PDF 렌더링/페이지 분석", "문항 위치 저장", "회차 상태 갱신"],
+          message: "위치맵 생성 작업을 시작하고 있습니다.",
           doneMessage: "문제·문항 위치맵이 생성되었습니다.",
+          toast: false,
         }, async (progress) => {
-          progress.step(0, "running", "문제 PDF 이미지에서 문제번호 기준 위치를 분석하고 있습니다.");
-          const data = await api("/api/admin/anchor-ocr", {
+          state.activeAnchorJobId = "";
+          progress.step(0, "running", "위치맵 생성 작업을 백그라운드로 시작하고 있습니다.");
+          setProgressPercent(2);
+          const started = await api("/api/admin/anchor-ocr/start", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
@@ -1874,6 +1952,13 @@
               path: target,
             }),
           });
+          state.activeAnchorJobId = started.id;
+          $("progressCancel").hidden = false;
+          renderAnchorJobStatus(started);
+          if (started.reused) showToast("이미 실행 중인 위치맵 생성 작업에 연결했습니다.", { title: "위치맵 진행 중", tone: "warn", timeout: 3600 });
+          const job = await pollAnchorJob(started.id, progress);
+          $("progressCancel").hidden = true;
+          const data = job.result;
           progress.step(0, "done");
           progress.step(1, "done", `위치맵 저장 완료: ${data.output || ""}`);
           renderAnchorOcrResult(data);
@@ -1884,6 +1969,8 @@
           return data;
         });
       } finally {
+        state.activeAnchorJobId = "";
+        $("progressCancel").hidden = true;
         $("btnRunAnchorOcr").disabled = false;
       }
     }
@@ -2409,6 +2496,24 @@
     // SOFTM-위치맵: 위치맵 생성 버튼 오류도 토스트와 상태 영역에 명확히 표시 - 2026-05-30
     $("btnReload").addEventListener("click", () => reloadQuestionWithProgress().catch((err) => showToast(err.message, { title: "다시 읽기 실패", tone: "error" })));
     $("progressCancel").addEventListener("click", async () => {
+      if (state.activeAnchorJobId) {
+        const jobId = await findCancelableAnchorJobId().catch(() => state.activeAnchorJobId);
+        const target = normalizePath($("pdfTargetPath").value);
+        $("progressMessage").textContent = "위치맵 생성 취소를 요청했습니다.";
+        $("progressCancel").hidden = true;
+        try{
+          await api(jobId ? `/api/admin/anchor-ocr/cancel?id=${encodeURIComponent(jobId)}` : "/api/admin/anchor-ocr/cancel", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ id: jobId, path: target }),
+          });
+          showToast("위치맵 생성 취소를 요청했습니다.", { title: "위치맵 취소", tone: "ok", timeout: 2600 });
+        }catch(err){
+          showToast(err.message, { title: "위치맵 취소 실패", tone: "error" });
+          $("progressCancel").hidden = false;
+        }
+        return;
+      }
       const jobId = await findCancelableOcrJobId().catch(() => "");
       const target = normalizePath($("pdfTargetPath").value);
       $("progressMessage").textContent = "OCR 작업 취소를 요청했습니다.";
