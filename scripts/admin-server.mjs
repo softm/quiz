@@ -3353,6 +3353,82 @@ function hwp5html(filePath){
   });
 }
 
+function simplifyHwpHtmlForViewer(html, title = "HWP 문서"){
+  const htmlText = String(html || "");
+  let bodyContent = extractHtmlPart(htmlText, "body") || htmlText;
+  bodyContent = bodyContent
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<colgroup\b[^>]*>[\s\S]*?<\/colgroup>/gi, "")
+    .replace(/<col\b[^>]*\/?>/gi, "")
+    .replace(/<(\/?)span\b[^>]*>/gi, "")
+    .replace(/<p\b[^>]*>/gi, "<div>")
+    .replace(/<\/p>/gi, "</div>")
+    .replace(/<div\b[^>]*>/gi, "<div>")
+    .replace(/\s(?:class|style|id|width|height|valign|align|border|cellspacing|cellpadding)="[^"]*"/gi, "")
+    .replace(/\s(?:class|style|id|width|height|valign|align|border|cellspacing|cellpadding)=[^\s>]+/gi, "")
+    .replace(/&#13;|&#10;/g, "")
+    .replace(/<div>\s*<\/div>/gi, "")
+    .replace(/>\s+</g, "><");
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${escapeHtmlPreview(title)}</title>
+<style>
+html,body{margin:0;padding:0;background:#f8fafc;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{padding:18px}
+.hwp-simple-root{max-width:1180px;margin:0 auto}
+.hwp-simple-title{margin:0 0 14px;font-size:18px;font-weight:900;color:#1f2937}
+table{width:100%;border-collapse:collapse;margin:10px 0 18px;background:#fff;table-layout:auto}
+td,th{border:1px solid #cbd5e1;padding:5px 7px;vertical-align:middle;font-size:13px;line-height:1.45;word-break:keep-all}
+th{background:#eef2f7;font-weight:900}
+div{min-height:1em}
+</style>
+</head>
+<body>
+<div class="hwp-simple-root">
+<h1 class="hwp-simple-title">${escapeHtmlPreview(title)}</h1>
+${bodyContent}
+</div>
+</body>
+</html>`;
+}
+
+const hwpHtmlCache = new Map();
+
+async function hwp5htmlCached(filePath, stat){
+  const key = `${filePath}:${Number(stat?.mtimeMs || 0)}:${Number(stat?.size || 0)}`;
+  const cached = hwpHtmlCache.get(key);
+  if (cached?.html) return cached.html;
+  if (cached?.promise) return await cached.promise;
+  const promise = hwp5html(filePath)
+    .then((html) => {
+      hwpHtmlCache.clear();
+      hwpHtmlCache.set(key, { html });
+      return html;
+    })
+    .catch((err) => {
+      hwpHtmlCache.delete(key);
+      throw err;
+    });
+  hwpHtmlCache.set(key, { promise });
+  return await promise;
+}
+
+async function handleHwpHtml(req, res, url){
+  const rel = stripManifestPrefix(url.searchParams.get("path") || "");
+  if (!rel) throw new Error("HWP 파일 경로가 없습니다.");
+  const filePath = assertManagedPath(rel);
+  const stat = await fsp.stat(filePath);
+  if (!stat.isFile()) throw new Error("파일만 미리보기할 수 있습니다.");
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext !== ".hwp") throw new Error("현재 HWP 미리보기는 .hwp 파일만 지원합니다.");
+  const html = await hwp5htmlCached(filePath, stat);
+  if (!String(html || "").trim()) throw new Error("hwp5html 변환 결과가 비어 있습니다.");
+  sendHtml(res, 200, simplifyHwpHtmlForViewer(html, path.basename(filePath)));
+}
+
 async function handleHwpPreview(req, res, url){
   const rel = stripManifestPrefix(url.searchParams.get("path") || "");
   if (!rel) {
@@ -3366,7 +3442,7 @@ async function handleHwpPreview(req, res, url){
     if (!stat.isFile()) throw new Error("파일만 미리보기할 수 있습니다.");
     const ext = path.extname(filePath).toLowerCase();
     if (ext !== ".hwp") throw new Error("현재 HWP 미리보기는 .hwp 파일만 지원합니다.");
-    const html = await hwp5html(filePath);
+    const html = await hwp5htmlCached(filePath, stat);
     if (!html.trim()) throw new Error("hwp5html 변환 결과가 비어 있습니다.");
     sendHtml(res, 200, buildHwpPreviewHtml(html, path.basename(filePath)));
   }catch(err){
@@ -3403,6 +3479,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/admin/anchor-delete" && req.method === "POST") return await handleAnchorDelete(req, res);
     if (url.pathname === "/api/admin/question-reset" && req.method === "POST") return await handleQuestionResetInitial(req, res);
     if (url.pathname === "/api/admin/download") return await handleAdminDownload(req, res, url);
+    if (url.pathname === "/api/admin/hwp-html") return await handleHwpHtml(req, res, url);
     if (url.pathname === "/api/admin/hwp-preview") return await handleHwpPreview(req, res, url);
     if (url.pathname === "/api/admin/git-status") return sendJson(res, 200, await gitStatus());
     if (url.pathname === "/api/admin/rebuild" && req.method === "POST") {

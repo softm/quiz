@@ -117,8 +117,7 @@
       <div class="message" id="message">HWP 문서를 불러오는 중입니다.</div>
     </div>
   </div>
-  <script type="module">
-    const HWPJS_CDN_URL = "https://esm.sh/@ohah/hwpjs?bundle";
+  <script>
     const params = new URLSearchParams(location.search);
     const rawFile = params.get("file") || params.get("path") || "";
     const stage = document.getElementById("stage");
@@ -140,7 +139,13 @@
     function fileUrlFor(path){
       const rel = normalizePath(path);
       if (!rel) return "";
-      return `./${encodeURI(rel)}`;
+      return `./${rel}`;
+    }
+
+    function apiUrlFor(path){
+      const rel = normalizePath(path);
+      const qs = new URLSearchParams({ path: rel });
+      return `/api/admin/hwp-html?${qs.toString()}`;
     }
 
     function setMessage(text, title = ""){
@@ -154,14 +159,6 @@
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
-    }
-
-    function getToHtml(module){
-      return module && (
-        module.toHtml
-        || (module.Hwpjs && module.Hwpjs.toHtml)
-        || (module.default && module.default.toHtml)
-      );
     }
 
     function extractHtmlPart(html, tagName){
@@ -212,19 +209,11 @@ body{box-sizing:border-box;padding:10px;font-family:-apple-system,BlinkMacSystem
         return;
       }
       try{
-        setMessage("HWP 파일을 읽는 중입니다.");
-        const response = await fetch(fileUrl);
+        const rel = normalizePath(rawFile);
+        setMessage("HWP 문서를 변환하는 중입니다.\\n처음 여는 문서는 몇 초 정도 걸릴 수 있습니다.");
+        const response = await fetch(apiUrlFor(rel), { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = new Uint8Array(await response.arrayBuffer());
-        setMessage("HWP 문서를 변환하는 중입니다.");
-        const hwpjs = await import(HWPJS_CDN_URL);
-        const toHtml = getToHtml(hwpjs);
-        if (typeof toHtml !== "function") throw new Error("HWPJS toHtml API not found");
-        const html = toHtml(data, {
-          includeVersion: false,
-          includePageInfo: false,
-          cssClassPrefix: "hwpjs-",
-        });
+        const html = await response.text();
         message.hidden = true;
         frame = document.createElement("iframe");
         frame.className = "viewerFrame";
