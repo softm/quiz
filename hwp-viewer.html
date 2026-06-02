@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HWP Viewer</title>
+  <style>
+    :root{
+      --bg:#eef3f8;
+      --panel:#fff;
+      --ink:#1f2933;
+      --muted:#66727f;
+      --line:#d8e0e6;
+      --accent:#256d7b;
+    }
+    html,body{
+      width:100%;
+      min-height:100%;
+      margin:0;
+      background:var(--bg);
+      color:var(--ink);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    }
+    .shell{
+      min-height:100vh;
+      display:grid;
+      grid-template-rows:auto minmax(0,1fr);
+    }
+    .toolbar{
+      position:sticky;
+      top:0;
+      z-index:10;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      padding:10px 12px;
+      border-bottom:1px solid var(--line);
+      background:rgba(244,247,251,.94);
+      backdrop-filter:blur(10px);
+    }
+    .toolbar button{
+      min-width:38px;
+      height:36px;
+      border:1px solid #c8d3e2;
+      border-radius:9px;
+      background:var(--panel);
+      color:var(--ink);
+      font-size:15px;
+      font-weight:800;
+      line-height:1;
+      cursor:pointer;
+    }
+    .toolbar button:hover{
+      border-color:var(--accent);
+      color:var(--accent);
+    }
+    .zoomLabel{
+      min-width:58px;
+      height:36px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      border:1px solid var(--line);
+      border-radius:9px;
+      background:var(--panel);
+      color:var(--muted);
+      font-size:13px;
+      font-weight:800;
+      font-variant-numeric:tabular-nums;
+    }
+    .stage{
+      overflow:auto;
+      padding:18px;
+    }
+    .viewerFrame{
+      width:100%;
+      min-height:calc(100vh - 78px);
+      border:0;
+      background:#fff;
+      box-shadow:0 1px 8px rgba(15,23,42,.14);
+      transform-origin:top center;
+    }
+    .message{
+      max-width:720px;
+      margin:80px auto;
+      padding:18px 20px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:var(--panel);
+      color:var(--muted);
+      font-size:14px;
+      line-height:1.6;
+      white-space:pre-wrap;
+    }
+    .message strong{
+      display:block;
+      margin-bottom:8px;
+      color:var(--ink);
+      font-size:16px;
+    }
+    .message a{
+      color:var(--accent);
+      font-weight:800;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="toolbar" aria-label="HWP 미리보기 확대 축소">
+      <button type="button" id="zoomOut" title="축소" aria-label="축소">−</button>
+      <span class="zoomLabel" id="zoomLabel">100%</span>
+      <button type="button" id="zoomIn" title="확대" aria-label="확대">＋</button>
+      <button type="button" id="zoomReset" title="원래대로" aria-label="원래대로">↺</button>
+    </div>
+    <div class="stage" id="stage">
+      <div class="message" id="message">HWP 문서를 불러오는 중입니다.</div>
+    </div>
+  </div>
+  <script type="module">
+    const HWPJS_CDN_URL = "https://esm.sh/@ohah/hwpjs?bundle";
+    const params = new URLSearchParams(location.search);
+    const rawFile = params.get("file") || params.get("path") || "";
+    const stage = document.getElementById("stage");
+    const message = document.getElementById("message");
+    const label = document.getElementById("zoomLabel");
+    const zoomIn = document.getElementById("zoomIn");
+    const zoomOut = document.getElementById("zoomOut");
+    const zoomReset = document.getElementById("zoomReset");
+    let frame = null;
+    let scale = 1;
+
+    function normalizePath(value){
+      let out = String(value || "").trim().replace(/^["']|["']$/g, "");
+      try { out = decodeURIComponent(out); } catch(_){}
+      out = out.replace(/^\.?\//, "").replace(/^quiz\//, "");
+      return out;
+    }
+
+    function fileUrlFor(path){
+      const rel = normalizePath(path);
+      if (!rel) return "";
+      return `./${encodeURI(rel)}`;
+    }
+
+    function setMessage(text, title = ""){
+      message.hidden = false;
+      message.innerHTML = `${title ? `<strong>${escapeHtml(title)}</strong>` : ""}${escapeHtml(text)}`;
+    }
+
+    function escapeHtml(value){
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function getToHtml(module){
+      return module && (
+        module.toHtml
+        || (module.Hwpjs && module.Hwpjs.toHtml)
+        || (module.default && module.default.toHtml)
+      );
+    }
+
+    function extractHtmlPart(html, tagName){
+      const match = String(html || "").match(new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`, "i"));
+      return match ? match[1] : "";
+    }
+
+    function buildFrameHtml(html){
+      const htmlText = String(html || "");
+      const headContent = extractHtmlPart(htmlText, "head");
+      const bodyContent = extractHtmlPart(htmlText, "body") || htmlText;
+      return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+${headContent}
+<style>
+html,body{width:100%;min-height:100%;margin:0;padding:0;background:#f3f6fb;overflow:auto}
+body{box-sizing:border-box;padding:10px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.hwp-viewer-root{width:max-content;min-width:100%;margin:0 auto;transform-origin:top left}
+.hwp-viewer-root *,.hwp-viewer-root *::before,.hwp-viewer-root *::after{box-sizing:border-box}
+.hwp-viewer-root>*{margin-left:auto!important;margin-right:auto!important}
+.hwp-viewer-root [class*="page"],.hwp-viewer-root [class*="Page"],.hwp-viewer-root [class*="paper"],.hwp-viewer-root [class*="Paper"]{background:#fff;box-shadow:0 1px 8px rgba(15,23,42,.14)}
+.hwp-viewer-root img,.hwp-viewer-root svg,.hwp-viewer-root canvas{max-width:100%;height:auto}
+</style>
+</head>
+<body><div class="hwp-viewer-root">${bodyContent}</div></body>
+</html>`;
+    }
+
+    function applyZoom(){
+      if (!frame) return;
+      scale = Math.max(0.5, Math.min(2.2, scale));
+      frame.style.transform = `scale(${scale})`;
+      frame.style.width = `${100 / scale}%`;
+      frame.style.minHeight = `calc((100vh - 78px) / ${scale})`;
+      label.textContent = `${Math.round(scale * 100)}%`;
+    }
+
+    zoomIn.addEventListener("click", () => { scale += 0.1; applyZoom(); });
+    zoomOut.addEventListener("click", () => { scale -= 0.1; applyZoom(); });
+    zoomReset.addEventListener("click", () => { scale = 1; applyZoom(); });
+
+    async function render(){
+      const fileUrl = fileUrlFor(rawFile);
+      if (!fileUrl) {
+        setMessage("HWP 파일 경로가 없습니다.", "HWP 미리보기 실패");
+        return;
+      }
+      try{
+        setMessage("HWP 파일을 읽는 중입니다.");
+        const response = await fetch(fileUrl);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = new Uint8Array(await response.arrayBuffer());
+        setMessage("HWP 문서를 변환하는 중입니다.");
+        const hwpjs = await import(HWPJS_CDN_URL);
+        const toHtml = getToHtml(hwpjs);
+        if (typeof toHtml !== "function") throw new Error("HWPJS toHtml API not found");
+        const html = toHtml(data, {
+          includeVersion: false,
+          includePageInfo: false,
+          cssClassPrefix: "hwpjs-",
+        });
+        message.hidden = true;
+        frame = document.createElement("iframe");
+        frame.className = "viewerFrame";
+        frame.title = "HWP document viewer";
+        frame.sandbox = "allow-same-origin";
+        frame.srcdoc = buildFrameHtml(html);
+        stage.appendChild(frame);
+        applyZoom();
+      }catch(error){
+        const href = fileUrlFor(rawFile);
+        message.hidden = false;
+        message.innerHTML = `<strong>HWP 미리보기 실패</strong>${escapeHtml(error?.message || String(error))}<br><br><a href="${href}" target="_blank" rel="noopener">파일 다운로드/열기</a>`;
+      }
+    }
+
+    render();
+  </script>
+</body>
+</html>

@@ -268,6 +268,60 @@
       white-space: pre-wrap;
     }
     .status.warn { background: #fff8e8; color: var(--warn); }
+    .changeReport {
+      display: grid;
+      gap: 10px;
+      font-size: 13px;
+    }
+    .changeFile {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      overflow: hidden;
+    }
+    .changeFileHead {
+      padding: 9px 10px;
+      background: #f8fafb;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      word-break: break-all;
+    }
+    .changeItem {
+      padding: 10px;
+      border-top: 1px solid var(--line);
+      display: grid;
+      gap: 7px;
+    }
+    .changeItemTitle {
+      font-weight: 700;
+      line-height: 1.35;
+      word-break: keep-all;
+      overflow-wrap: anywhere;
+    }
+    .changeList {
+      display: grid;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .changeList div { overflow-wrap: anywhere; }
+    .changeTone {
+      display: inline-flex;
+      align-items: center;
+      min-width: 38px;
+      justify-content: center;
+      margin-right: 6px;
+      border-radius: 999px;
+      padding: 2px 7px;
+      background: #eef5f6;
+      color: var(--accent);
+      font-size: 11px;
+    }
+    .changeTone.added { background: #f0faf6; color: var(--ok); }
+    .changeTone.removed, .changeTone.error { background: #fff5f5; color: var(--danger); }
+    /* SOFTM-ADMIN: 문항 변경 리포트 표시 UI 추가 - 2026-06-03 */
     /* SOFTM-ADMIN 시작: 정보성 알림을 토스트로 표시하는 UI 추가 - 2026-05-30 */
     .toastRegion {
       position: fixed;
@@ -554,7 +608,7 @@
 
       <!-- SOFTM-ADMIN 시작: 회차 상세/진단은 별도 페이지로 분리하고 메인은 목록과 운영 도구만 표시 - 2026-05-30 -->
       <aside class="toolsPanel" aria-label="운영 도구">
-        <details class="panel sideUtility">
+        <details class="panel sideUtility" open>
           <summary>
             <span>운영 도구</span>
             <span class="desc">점검 · JSON · Git</span>
@@ -575,6 +629,17 @@
                 <div class="desc" id="processUnpublished" style="margin-top:8px">점검 전</div>
               </div>
               <div class="status" id="processStatus">대기 중</div>
+            </div>
+            <div class="utilityBlock">
+              <div class="row" style="justify-content:space-between">
+                <h3>문항 변경</h3>
+                <div class="row">
+                  <input id="changeBaseRef" value="HEAD" style="width:120px" aria-label="비교 기준 ref" />
+                  <button id="btnQuestionChanges">변경 확인</button>
+                </div>
+              </div>
+              <div class="status" id="questionChangeSummary">대기 중</div>
+              <div id="questionChangeReport" class="changeReport"></div>
             </div>
             <div class="utilityBlock">
               <div class="row" style="justify-content:space-between">
@@ -744,6 +809,11 @@
     function adminApiUrl(value){
       const target = String(value || "");
       if (!target.startsWith("/api/admin/")) return target;
+      const apiPort = new URLSearchParams(location.search).get("apiPort") || "";
+      if (apiPort && location.protocol === "http:") {
+        const localHost = location.hostname === "127.0.0.1" ? "127.0.0.1" : "localhost";
+        return `http://${localHost}:${apiPort}${target}`;
+      }
       if (location.protocol === "http:" && location.port === "8787") return target;
       const localHost = location.hostname === "127.0.0.1" ? "127.0.0.1" : "localhost";
       return `http://${localHost}:8787${target}`;
@@ -1076,7 +1146,7 @@
         const key = categoryKey(item);
         const selected = key === state.selectedCategoryKey;
         return `
-          <tr class="selectableRow${selected ? " selected" : ""}" tabindex="0" data-category-key="${escapeHtml(key)}" aria-selected="${selected ? "true" : "false"}">
+          <tr class="selectableRow${selected ? " selected" : ""}" tabindex="0" data-category-key="${escapeHtml(key)}" aria-selected="${selected ? "true" : "false"}" title="더블클릭하면 문제 회차 관리 화면으로 이동합니다.">
             <td>
               <div class="cellTitle">${escapeHtml(item.fullName || item.catNm)}</div>
               <div class="cellSub">${escapeHtml(item.datasetLabel)} · ${escapeHtml(item.catPath || "")}</div>
@@ -1124,6 +1194,12 @@
       $("categoryFilter").value = key;
       markSelectedCategoryRow();
       writeAdminListState();
+    }
+
+    function openCategoryQuestionPage(key){
+      if (!key) return;
+      selectCategoryRow(key);
+      window.location.href = makeAdminQuestionsUrl({ categoryKey: key, questionKey: "" });
     }
     // SOFTM-ADMIN: 카테고리 선택 버튼 대신 행 포커스/클릭으로 선택 상태를 표시하도록 변경 - 2026-05-29
     // SOFTM-GEN: 선택 카테고리 단위 JSON 갱신에서 사용할 현재 카테고리 조회 유틸 추가 - 2026-05-30
@@ -1379,6 +1455,103 @@
       $("gitStatus").textContent = data.status || data.error || "변경사항 없음";
     }
 
+    function changeStatusLabel(status){
+      if (status === "added") return "추가";
+      if (status === "removed") return "삭제";
+      if (status === "error") return "오류";
+      return "수정";
+    }
+
+    function changeKindLabel(kind){
+      if (kind === "answers") return "정답";
+      if (kind === "anchor") return "위치맵";
+      if (kind === "anchor-meta") return "위치맵 메타";
+      if (kind === "exam") return "회차";
+      return "JSON";
+    }
+
+    function formatChangeValue(value){
+      if (value == null || value === "") return "-";
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+      return JSON.stringify(value);
+    }
+
+    function renderChangeDetails(row){
+      if (row.kind === "answers" && Array.isArray(row.changes)) {
+        return row.changes.map((item) => (
+          `<div>${escapeHtml(item.q)}번: ${escapeHtml(formatChangeValue(item.before))} → ${escapeHtml(formatChangeValue(item.after))}</div>`
+        )).join("");
+      }
+      if (row.kind === "anchor" && Array.isArray(row.questions)) {
+        return row.questions.map((item) => (
+          `<div>${escapeHtml(item.q)}번: ${escapeHtml((item.changes || []).join(", "))}</div>`
+        )).join("");
+      }
+      if (Array.isArray(row.fields) && row.fields.length) {
+        return `<div>${escapeHtml(row.fields.join(", "))}</div>`;
+      }
+      return "";
+    }
+
+    function renderQuestionChanges(data){
+      const reports = Array.isArray(data.reports) ? data.reports : [];
+      const changedJsonFiles = Number(data.changedJsonFiles || reports.length || 0);
+      const reportedItems = Number(data.reportedItems || 0);
+      const answerQuestionCount = Number(data.answerQuestionCount || 0);
+      const anchorQuestionCount = Number(data.anchorQuestionCount || 0);
+      if (!reports.length) {
+        $("questionChangeSummary").classList.remove("warn");
+        $("questionChangeSummary").textContent = `기준 ${data.base || "HEAD"} · 문항 관련 JSON 변경이 없습니다.`;
+        $("questionChangeReport").innerHTML = "";
+        return;
+      }
+      $("questionChangeSummary").classList.toggle("warn", true);
+      $("questionChangeSummary").textContent = [
+        `기준 ${data.base || "HEAD"}`,
+        `변경 JSON ${changedJsonFiles.toLocaleString()}개`,
+        `리포트 ${reportedItems.toLocaleString()}건`,
+        `정답 문항 ${answerQuestionCount.toLocaleString()}개`,
+        `위치맵 문항 ${anchorQuestionCount.toLocaleString()}개`,
+      ].join(" · ");
+      $("questionChangeReport").innerHTML = reports.map((report) => `
+        <section class="changeFile">
+          <div class="changeFileHead">${escapeHtml(report.rel || "")}</div>
+          ${(report.rows || []).map((row) => {
+            const details = renderChangeDetails(row);
+            return `
+              <div class="changeItem">
+                <div class="changeItemTitle">
+                  <span class="changeTone ${escapeHtml(row.status || "modified")}">${escapeHtml(changeStatusLabel(row.status))}</span>
+                  ${escapeHtml(changeKindLabel(row.kind))} · ${escapeHtml(row.label || row.key || "")}
+                </div>
+                ${details ? `<div class="changeList">${details}</div>` : ""}
+              </div>
+            `;
+          }).join("")}
+        </section>
+      `).join("");
+    }
+
+    async function loadQuestionChanges(options = {}){
+      const base = ($("changeBaseRef")?.value || "HEAD").trim() || "HEAD";
+      const run = async (progress) => {
+        $("questionChangeSummary").classList.remove("warn");
+        $("questionChangeSummary").textContent = "문항 변경 확인 중...";
+        if (progress) progress.step(0, "running", `${base} 기준으로 JSON 변경을 분석하고 있습니다.`);
+        const data = await api(`/api/admin/question-changes?base=${encodeURIComponent(base)}&limit=80`);
+        renderQuestionChanges(data);
+        if (progress) progress.step(0, "done");
+        return data;
+      };
+      if (!options.showProgress) return await run();
+      return await withProgress({
+        title: "문항 변경 확인",
+        steps: ["문항 변경 분석"],
+        doneMessage: "문항 변경 확인이 완료되었습니다.",
+      }, run);
+    }
+    // SOFTM-ADMIN: 관리자 운영 도구에서 변경된 회차/문항을 바로 확인하는 화면 동작 추가 - 2026-06-03
+
     async function executeRebuild(progress){
       $("rebuildStatus").textContent = "JSON 재생성 중...";
       if (progress) progress.step(0, "running", "gen_category.py → gen_question.py → gen_correct.py 순서로 실행합니다.");
@@ -1519,6 +1692,7 @@
         loadState(),
         loadCatalog(),
         loadProcessReport(),
+        loadQuestionChanges(),
         loadGitStatus(),
       ]);
       await loadList(listDirValue || $("dirInput").value);
@@ -1561,6 +1735,15 @@
       const row = e.target.closest("tr[data-category-key]");
       if (row) selectCategoryRow(row.dataset.categoryKey);
     });
+
+    $("categoryRows").addEventListener("dblclick", (e) => {
+      if (e.target.closest("a, button, input, select, textarea")) return;
+      const row = e.target.closest("tr[data-category-key]");
+      if (!row) return;
+      e.preventDefault();
+      openCategoryQuestionPage(row.dataset.categoryKey);
+    });
+    // SOFTM-ADMIN: 카테고리 목록 행 더블클릭으로 해당 카테고리 회차관리 화면 이동 - 2026-06-03
 
     $("categoryRows").addEventListener("focusin", (e) => {
       const row = e.target.closest("tr[data-category-key]");
@@ -1637,6 +1820,10 @@
       try{ await refreshAllWithProgress({ keepListDir: true }); }catch(err){ setOffline(err.message); }
     });
     $("btnList").addEventListener("click", () => loadList());
+    $("btnQuestionChanges").addEventListener("click", () => loadQuestionChanges({ showProgress: true }).catch((err) => {
+      $("questionChangeSummary").classList.add("warn");
+      $("questionChangeSummary").textContent = err.message;
+    }));
     $("btnGit").addEventListener("click", () => withProgress({
       title: "Git 상태 확인",
       steps: ["Git 변경 상태 조회"],

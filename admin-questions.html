@@ -100,7 +100,7 @@
     .summaryGrid {
       margin-top: 18px;
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(7, minmax(0, 1fr));
       gap: 8px;
     }
     .countBox {
@@ -146,10 +146,10 @@
       font-size: 12px;
       font-weight: 700;
     }
-    #questionTable th:nth-child(1), #questionTable td:nth-child(1) { width: 38%; }
+    #questionTable th:nth-child(1), #questionTable td:nth-child(1) { width: 40%; }
     #questionTable th:nth-child(2), #questionTable td:nth-child(2) { width: 22%; }
     #questionTable th:nth-child(3), #questionTable td:nth-child(3) { width: 20%; }
-    #questionTable th:nth-child(4), #questionTable td:nth-child(4) { width: 20%; }
+    #questionTable th:nth-child(4), #questionTable td:nth-child(4) { width: 18%; }
     .selectableRow { cursor: pointer; }
     .selectableRow:hover { background: #f9fbfc; }
     .selectableRow.selected { background: #eef8f7; }
@@ -207,6 +207,53 @@
     .structureItem strong.warn { color: var(--warn); }
     .stateItem strong.danger,
     .structureItem strong.danger { color: var(--danger); }
+    .stateItem strong.edit,
+    .structureItem strong.edit { color: var(--accent); }
+    .stateItem strong.muted,
+    .structureItem strong.muted { color: var(--muted); }
+    .pdfTextInline {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .pdfTextInline strong {
+      min-width: 0;
+      flex: 1;
+    }
+    .pdfTextMore {
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--muted);
+      padding: 2px 6px;
+      font-size: 10px;
+      font-weight: 800;
+      line-height: 1.1;
+      cursor: pointer;
+    }
+    .pdfTextMore:hover { color: var(--accent); border-color: #aac0ff; }
+    .pdfTextPopover {
+      position: fixed;
+      z-index: 3000;
+      width: min(360px, calc(100vw - 24px));
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 18px 44px rgba(15, 23, 42, .18);
+      padding: 12px;
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .pdfTextPopover h3 { margin: 0 0 8px; font-size: 14px; }
+    .pdfTextPopover .metricList { display: grid; gap: 5px; margin: 0 0 10px; }
+    .pdfTextPopover .metricRow { display: flex; justify-content: space-between; gap: 10px; }
+    .pdfTextPopover .metricRow span:first-child { color: var(--muted); }
+    .pdfTextPopover .metricRow strong { text-align: right; }
+    .pdfTextPopover .note { color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; }
+    .pdfTextPopover ul { margin: 6px 0 0; padding-left: 18px; }
     .pill {
       display: inline-flex;
       align-items: center;
@@ -222,6 +269,50 @@
     .pill.ok { color: var(--ok); background: #effaf5; border-color: #c9e8db; }
     .pill.warn { color: var(--warn); background: #fff7e8; border-color: #f0dbb5; }
     .pill.danger { color: var(--danger); background: #fff0f0; border-color: #f0c2c2; }
+    .infoSummary {
+      margin-top: 8px;
+      display: grid;
+      gap: 5px;
+    }
+    .infoGroup {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      align-items: start;
+      gap: 7px;
+    }
+    .infoGroupLabel {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 22px;
+    }
+    .chipRow {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+    .infoChip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      max-width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 3px 7px;
+      background: #fff;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .infoChip.ok { color: var(--ok); background: #effaf5; border-color: #c9e8db; }
+    .infoChip.warn { color: var(--warn); background: #fff7e8; border-color: #f0dbb5; }
+    .infoChip.danger { color: var(--danger); background: #fff0f0; border-color: #f0c2c2; }
+    .infoChip.edit { color: var(--accent); background: #eef8f9; border-color: #b7d6dc; }
+    .infoChip.muted { color: var(--muted); background: #f7f9fb; border-color: var(--line); }
     .actionGrid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -323,8 +414,10 @@
             <option value="unpublished">미게시</option>
             <option value="warning">확인 필요</option>
             <option value="initial">초기 상태</option>
-            <option value="anchor-missing">위치맵 없음</option>
-            <option value="manual-edited">수동 편집</option>
+            <option value="anchor-missing">위치맵 미생성</option>
+            <option value="manual-edited">위치맵 수정</option>
+            <option value="question-area-edited">문항영역 수정</option>
+            <option value="derived-pdf">OCR 사본</option>
           </select>
           <select id="categoryFilter">
             <option value="">전체 카테고리</option>
@@ -579,10 +672,12 @@
       if (!status) return true;
       if (status === "published") return Boolean(item.published || item.published > 0);
       if (status === "unpublished") return Boolean(item.unpublished || !item.published);
-      if (status === "warning") return (item.issue && item.issue !== "정상") || item.needsOcr || item.answerIssue || (Array.isArray(item.anchorWarnings) && item.anchorWarnings.length > 0);
+      if (status === "warning") return rowNeedsAttention(item);
       if (status === "initial") return Boolean(item.workStateInitial) || (!item.correctJson && !item.anchorMap && !item.hasManualAnchorEdits);
       if (status === "anchor-missing") return !item.anchorMap;
       if (status === "manual-edited") return Boolean(item.hasManualAnchorEdits);
+      if (status === "question-area-edited") return Boolean(item.hasManualQuestionAreaEdits);
+      if (status === "derived-pdf") return Boolean(item.derivedPdf);
       return true;
     }
 
@@ -603,28 +698,237 @@
       return list.length ? list.slice(0, 3).map((item) => `- ${item}`).join("\n") : "특이사항 없음";
     }
 
-    function formatAnchorGeneratedAt(value){
+    function hasNonNormalText(value){
+      const text = String(value || "").trim();
+      return Boolean(text && text !== "정상");
+    }
+
+    function rowNeedsAttention(item){
+      const anchorWarnings = Array.isArray(item.anchorWarnings) && item.anchorWarnings.length > 0;
+      const questionTone = item.questionDiagTone && item.questionDiagTone !== "ok";
+      const answerTone = item.answerDiagTone && item.answerDiagTone !== "ok";
+      return Boolean(
+        hasNonNormalText(item.issue) ||
+        hasNonNormalText(item.fileIssue) ||
+        item.needsOcr ||
+        hasNonNormalText(item.answerIssue) ||
+        anchorWarnings ||
+        questionTone ||
+        answerTone
+      );
+    }
+
+    function relativeTimeLabel(value){
       if (!value) return "";
       const date = new Date(value);
       if (!Number.isFinite(date.getTime())) return "";
       const diffMs = Date.now() - date.getTime();
       const absMs = Math.abs(diffMs);
+      const suffix = diffMs >= 0 ? "전" : "후";
       const minute = 60 * 1000;
       const hour = 60 * minute;
       const day = 24 * hour;
-      if (absMs < minute) return "방금 전";
-      if (absMs < hour) return `${Math.max(1, Math.round(absMs / minute))}분 전`;
-      if (absMs < day) return `${Math.max(1, Math.round(absMs / hour))}시간 전`;
-      if (absMs < 30 * day) return `${Math.max(1, Math.round(absMs / day))}일 전`;
-      return `${Math.max(1, Math.round(absMs / (30 * day)))}개월 전`;
+      if (absMs < minute) return diffMs >= 0 ? "방금 전" : "곧";
+      if (absMs < hour) return `${Math.max(1, Math.round(absMs / minute))}분 ${suffix}`;
+      if (absMs < day) return `${Math.max(1, Math.round(absMs / hour))}시간 ${suffix}`;
+      if (absMs < 30 * day) return `${Math.max(1, Math.round(absMs / day))}일 ${suffix}`;
+      return `${Math.max(1, Math.round(absMs / (30 * day)))}개월 ${suffix}`;
     }
 
-    function formatAnchorGeneratedAtTitle(value){
+    function dateTimeLabel(value){
       if (!value) return "";
       const date = new Date(value);
       if (!Number.isFinite(date.getTime())) return "";
       const pad = (n) => String(n).padStart(2, "0");
       return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function infoChip({ label, tone = "muted", title = "" }){
+      return `<span class="infoChip ${escapeHtml(tone)}" title="${escapeHtml(title || label)}">${escapeHtml(label)}</span>`;
+    }
+
+    function infoChipGroup(label, chips){
+      return `
+        <div class="infoGroup">
+          <span class="infoGroupLabel">${escapeHtml(label)}</span>
+          <div class="chipRow">${chips.map(infoChip).join("")}</div>
+        </div>
+      `;
+    }
+
+    function statusWarningTitle(item){
+      const notes = [];
+      if (hasNonNormalText(item.issue)) notes.push(item.issue);
+      if (hasNonNormalText(item.fileIssue)) notes.push(item.fileIssue);
+      if (item.needsOcr) notes.push("OCR 확인 필요");
+      if (hasNonNormalText(item.answerIssue)) notes.push(item.answerIssue);
+      if (Array.isArray(item.questionDiagWarnings)) notes.push(...item.questionDiagWarnings);
+      if (Array.isArray(item.answerDiagWarnings)) notes.push(...item.answerDiagWarnings);
+      if (Array.isArray(item.anchorWarnings)) notes.push(...item.anchorWarnings);
+      return notes.length ? notes.slice(0, 4).join("\n") : "확인 필요";
+    }
+
+    function questionTextDiagLabel(item){
+      const status = String(item?.questionDiagStatus || "").trim();
+      if (!status) return "미확인";
+      if (status === "OCR") return "OCR 확인";
+      if (status === "PDF") return "PDF 확인";
+      return status;
+    }
+
+    function questionTextDiagOk(item){
+      const status = String(item?.questionDiagStatus || "").trim();
+      return !item?.needsOcr
+        && (!status || status === "정상")
+        && (!item?.questionDiagTone || item.questionDiagTone === "ok");
+    }
+
+    function percentLabel(value){
+      const n = Number(value);
+      return Number.isFinite(n) ? `${Math.max(0, Math.min(100, Math.round(n)))}%` : "-";
+    }
+
+    function pdfTextTone(item){
+      const status = String(item?.textStatusLabel || questionTextDiagLabel(item) || "").trim();
+      if (!status || status === "미확인") return "muted";
+      return status === "정상" && !item?.needsOcr ? "ok" : "warn";
+    }
+
+    function pdfTextSummaryLabel(item){
+      const status = item?.textStatusLabel || questionTextDiagLabel(item);
+      const textChars = Number(item?.ocrTextChars || 0);
+      if (!status || status === "미확인") return "미확인";
+      if (!Number.isFinite(textChars) || textChars <= 0) return `${status} · 텍스트 0자`;
+      return `${status} · 문제 ${percentLabel(item?.questionDetectRate)} · 선택지 ${percentLabel(item?.choiceDetectRate)}`;
+    }
+
+    function pdfTextExpectedChoiceCount(item){
+      const direct = Number(item?.ocrExpectedChoiceCount || 0);
+      if (direct > 0) return direct;
+      const q = Number(item?.questionCount || item?.ocrExpectedQuestionCount || 0);
+      const c = Number(item?.choiceCount || 4) || 4;
+      return q > 0 ? q * c : 0;
+    }
+
+    function pdfTextDetailHtml(item){
+      const warnings = Array.isArray(item?.questionDiagWarnings) && item.questionDiagWarnings.length
+        ? item.questionDiagWarnings
+        : (Array.isArray(item?.ocrWarnings) ? item.ocrWarnings : []);
+      const expectedQuestion = Number(item?.ocrExpectedQuestionCount || item?.questionCount || 0);
+      const expectedChoice = pdfTextExpectedChoiceCount(item);
+      const reason = item?.textStatusReason || warnings.slice(0, 2).join(" / ") || "PDF 텍스트/구조 인식 기준 통과";
+      return `
+        <h3>PDF 텍스트 상세</h3>
+        <div class="metricList">
+          <div class="metricRow"><span>상태</span><strong>${escapeHtml(item?.textStatusLabel || questionTextDiagLabel(item))}</strong></div>
+          <div class="metricRow"><span>텍스트 추출</span><strong>${Number(item?.ocrTextChars || 0).toLocaleString()}자</strong></div>
+          <div class="metricRow"><span>페이지당 글자</span><strong>${Number(item?.ocrCharsPerPage || 0).toLocaleString()}자</strong></div>
+          <div class="metricRow"><span>문제 인식</span><strong>${escapeHtml(percentLabel(item?.questionDetectRate))} · ${Number(item?.ocrUniqueQuestionLabels || 0).toLocaleString()}/${expectedQuestion || "-"}</strong></div>
+          <div class="metricRow"><span>선택지 인식</span><strong>${escapeHtml(percentLabel(item?.choiceDetectRate))} · ${Number(item?.ocrChoiceLabels || 0).toLocaleString()}/${expectedChoice || "-"}</strong></div>
+          <div class="metricRow"><span>OCR 변형</span><strong>${Number(item?.ocrChoiceVariantLabels || 0).toLocaleString()}개</strong></div>
+          <div class="metricRow"><span>한글 분리</span><strong>${Number(item?.ocrBrokenHangulRuns || 0).toLocaleString()}개</strong></div>
+        </div>
+        ${warnings.length ? `<div><strong>경고</strong><ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul></div>` : `<div class="note">OCR 위험 신호가 없습니다.</div>`}
+        <div class="note">${escapeHtml(reason)}<br>정상은 OCR 100%가 아니라 PDF 텍스트/구조 인식 기준 통과입니다.</div>
+      `;
+    }
+
+    function pdfTextStateItem(item){
+      const label = pdfTextSummaryLabel(item);
+      const tone = pdfTextTone(item);
+      return `
+        <div class="stateItem" title="${escapeHtml(`PDF 텍스트: ${label}`)}">
+          <span>PDF 텍스트</span>
+          <div class="pdfTextInline">
+            <strong class="${escapeHtml(tone)}">${escapeHtml(label)}</strong>
+            <button type="button" class="pdfTextMore" data-pdf-text-more="1" data-popover-html="${escapeHtml(pdfTextDetailHtml(item))}">더보기</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function attentionChipsForRow(item){
+      const chips = [];
+      const hasOcrIssue = Boolean(item.needsOcr || item.questionDiagStatus === "OCR");
+      if (hasNonNormalText(item.issue)) {
+        chips.push({ label: item.issue, tone: item.issue.includes("없음") ? "danger" : "warn", title: item.issue });
+      }
+      if (hasNonNormalText(item.fileIssue)) {
+        chips.push({ label: "파일 확인", tone: "warn", title: item.fileIssue });
+      }
+      if (hasOcrIssue) {
+        chips.push({ label: "OCR 확인", tone: "warn", title: statusWarningTitle(item) });
+      } else if (item.questionDiagTone && item.questionDiagTone !== "ok") {
+        chips.push({ label: questionTextDiagLabel(item), tone: "warn", title: warningText(item.questionDiagWarnings) });
+      }
+      if (hasNonNormalText(item.answerIssue) || (item.answerDiagTone && item.answerDiagTone !== "ok")) {
+        const label = item.answerDiagStatus || item.answerIssue || "정답 확인";
+        chips.push({ label, tone: label.includes("없음") ? "danger" : "warn", title: warningText(item.answerDiagWarnings) });
+      }
+      if (Array.isArray(item.anchorWarnings) && item.anchorWarnings.length) {
+        chips.push({ label: "위치맵 보정", tone: "warn", title: warningText(item.anchorWarnings) });
+      }
+      return chips;
+    }
+
+    function statusChipsForRow(item){
+      const chips = attentionChipsForRow(item);
+      if (matchesStatus(item, "initial")) chips.push({ label: "초기 상태", tone: "warn", title: "정답 JSON, 위치맵, 위치맵 수정 정보가 없는 초기 상태" });
+      if (matchesStatus(item, "anchor-missing") && !questionTextDiagOk(item)) {
+        chips.push({ label: "위치맵 생성 필요", tone: "warn", title: "PDF 텍스트/OCR 진단이 있어 저장 위치맵을 생성해 보정하는 것이 좋습니다." });
+      }
+      if (!chips.length) chips.push({ label: "정상", tone: "ok", title: "확인 필요한 운영 상태가 없습니다." });
+      return chips;
+    }
+
+    function changeChipsForRow(item){
+      const chips = [];
+      if (item.anchorGeneratedAt) {
+        chips.push({
+          label: `위치맵 갱신 ${relativeTimeLabel(item.anchorGeneratedAt)}`,
+          tone: "ok",
+          title: `위치맵 생성/갱신: ${dateTimeLabel(item.anchorGeneratedAt)}`,
+        });
+      }
+      if (item.anchorManualEditedAt || item.hasManualAnchorEdits) {
+        chips.push({
+          label: item.anchorManualEditedAt ? `위치맵 수정 ${relativeTimeLabel(item.anchorManualEditedAt)}` : "위치맵 수정",
+          tone: "edit",
+          title: item.anchorManualEditedAt ? `위치맵 수동 수정: ${dateTimeLabel(item.anchorManualEditedAt)}` : "저장 위치맵이 수동 수정되었습니다.",
+        });
+      }
+      if (item.hasManualQuestionAreaEdits) {
+        chips.push({
+          label: "문항영역 수정",
+          tone: "edit",
+          title: "선택지 클릭 영역 또는 문항 영역이 수동 수정되었습니다.",
+        });
+      }
+      if (item.derivedPdf) {
+        chips.push({
+          label: "OCR 사본",
+          tone: "warn",
+          title: normalizePath(item.derivedPdf),
+        });
+      }
+      if (item.hasCorrectJson || item.correctJson) {
+        chips.push({
+          label: "정답 JSON 연결",
+          tone: "ok",
+          title: item.correctJson ? normalizePath(item.correctJson) : "정답 JSON 연결됨",
+        });
+      }
+      if (!chips.length) chips.push({ label: "변경 없음", tone: "muted", title: "표시할 운영 변경 정보가 없습니다." });
+      return chips;
+    }
+
+    function rowInfoSummary(item){
+      return `
+        <div class="infoSummary">
+          ${infoChipGroup("상태", statusChipsForRow(item))}
+          ${infoChipGroup("변경", changeChipsForRow(item))}
+        </div>
+      `;
     }
 
     function stateItem(label, value, tone = "ok", title = ""){
@@ -649,7 +953,7 @@
       const fallbackSteps = [
         item?.correctJson ? "정답JSON" : "",
         item?.anchorMap ? "위치맵" : "",
-        item?.hasManualAnchorEdits ? "앵커편집" : "",
+        item?.hasManualAnchorEdits ? "위치맵 수정" : "",
         item?.derivedPdf ? "OCR사본" : "",
       ].filter(Boolean);
       const label = item?.workState || (fallbackSteps.length ? fallbackSteps.join(" · ") : "초기");
@@ -661,13 +965,12 @@
 
     function stateSummaryCell(item){
       const work = rowWorkState(item);
-      const questionTone = item.questionDiagTone || (item.questionDiagStatus === "정상" ? "ok" : "warn");
       const answerTone = item.answerDiagTone || (item.answerDiagStatus === "정상" ? "ok" : "warn");
       return `
         <div class="stateGrid">
           ${stateItem("게시", item.published ? "게시" : (item.issue || "미게시"), item.published ? "ok" : "warn")}
           ${stateItem("처리", work.label, work.tone)}
-          ${stateItem("문제", item.questionDiagStatus || "미확인", questionTone, warningText(item.questionDiagWarnings))}
+          ${pdfTextStateItem(item)}
           ${stateItem("정답", item.answerDiagStatus || "미확인", answerTone, warningText(item.answerDiagWarnings))}
         </div>
       `;
@@ -680,16 +983,20 @@
     }
 
     function structureSummaryCell(item){
-      const confidence = item.anchorMap ? `${Math.round(Number(item.anchorConfidence || 0) * 100)}%` : "없음";
-      const anchorTone = item.anchorMap ? ((Array.isArray(item.anchorWarnings) && item.anchorWarnings.length) || Number(item.anchorConfidence || 0) < .8 ? "warn" : "ok") : "warn";
+      const confidence = item.anchorMap ? `${Math.round(Number(item.anchorConfidence || 0) * 100)}%${item.hasManualAnchorEdits ? " · 수정" : ""}` : "미생성";
+      const anchorTone = item.anchorMap
+        ? ((Array.isArray(item.anchorWarnings) && item.anchorWarnings.length) || Number(item.anchorConfidence || 0) < .8 ? "warn" : (item.hasManualAnchorEdits ? "edit" : "ok"))
+        : (questionTextDiagOk(item) ? "muted" : "warn");
+      const anchorTitle = item.anchorMap
+        ? `${item.anchorMap}${item.hasManualAnchorEdits ? "\n저장 위치맵에 수동 수정값이 있습니다." : ""}`
+        : (questionTextDiagOk(item) ? "저장 위치맵은 없지만 PDF 텍스트 진단이 정상입니다." : "저장 위치맵이 없습니다.");
       return `
         <div class="structureGrid">
           ${structureItem("문항", item.questionCount ? `${item.questionCount}개` : "-", item.questionCount ? "ok" : "warn")}
           ${structureItem("범위", questionRangeLabel(item), item.questionStartNo && item.questionEndNo ? "ok" : "warn")}
-          ${structureItem("위치맵", confidence, anchorTone, item.anchorMap || "위치맵 없음")}
-          ${structureItem("수동편집", item.hasManualAnchorEdits ? "있음" : "없음", item.hasManualAnchorEdits ? "warn" : "ok")}
+          ${structureItem("위치맵", confidence, anchorTone, anchorTitle)}
+          ${structureItem("문항영역", item.hasManualQuestionAreaEdits ? "수정" : "없음", item.hasManualQuestionAreaEdits ? "edit" : "muted", item.hasManualQuestionAreaEdits ? "문항/선택지 클릭 영역이 수동 수정되었습니다." : "문항영역 수동 수정이 없습니다.")}
         </div>
-        ${formatAnchorGeneratedAt(item.anchorGeneratedAt) ? `<div class="cellSub" title="${escapeHtml(formatAnchorGeneratedAtTitle(item.anchorGeneratedAt))}">위치맵 수정 ${escapeHtml(formatAnchorGeneratedAt(item.anchorGeneratedAt))}</div>` : ""}
       `;
     }
 
@@ -697,13 +1004,17 @@
       const warningCount = rows.filter((item) => matchesStatus(item, "warning")).length;
       const anchorMissing = rows.filter((item) => matchesStatus(item, "anchor-missing")).length;
       const manualEdited = rows.filter((item) => matchesStatus(item, "manual-edited")).length;
+      const questionAreaEdited = rows.filter((item) => matchesStatus(item, "question-area-edited")).length;
+      const derivedPdf = rows.filter((item) => matchesStatus(item, "derived-pdf")).length;
       const published = rows.filter((item) => item.published).length;
       $("questionCounts").innerHTML = [
         ["회차", rows.length],
-        ["게시", published],
         ["확인 필요", warningCount],
-        ["위치맵 없음", anchorMissing],
-        ["수동 편집", manualEdited],
+        ["위치맵 미생성", anchorMissing],
+        ["위치맵 수정", manualEdited],
+        ["문항영역 수정", questionAreaEdited],
+        ["OCR 사본", derivedPdf],
+        ["게시", published],
       ].map(([label, value]) => `
         <div class="countBox"><strong>${Number(value || 0).toLocaleString()}</strong><span>${escapeHtml(label)}</span></div>
       `).join("");
@@ -760,13 +1071,13 @@
         const questionFolder = folderNameFromPath(item.questionPdf);
         const quizUrl = item.questionPdf ? makeQuizUrl(item) : "";
         const anchorDebugQuizUrl = quizUrl ? `${quizUrl}${quizUrl.includes("?") ? "&" : "?"}anchorDebug=1` : "";
-        const anchorEditQuizUrl = item.anchorMap ? makeAnchorEditQuizUrl(item) : "";
+        const anchorEditQuizUrl = quizUrl ? makeAnchorEditQuizUrl(item) : "";
         const detailUrl = makeAdminDetailUrl(item);
         const quizLink = quizUrl ? `<a class="button" href="${quizUrl}" target="_blank" rel="noopener">풀이</a>` : `<span class="button disabled">풀이</span>`;
         const positionLink = anchorDebugQuizUrl ? `<a class="button" href="${anchorDebugQuizUrl}" target="_blank" rel="noopener">위치확인</a>` : `<span class="button disabled">위치확인</span>`;
-        const anchorEditLink = anchorEditQuizUrl ? `<a class="button secondary" href="${anchorEditQuizUrl}" target="_blank" rel="noopener">앵커편집</a>` : `<span class="button disabled" title="먼저 위치맵을 생성하세요.">앵커편집</span>`;
+        const anchorEditLink = anchorEditQuizUrl ? `<a class="button secondary" href="${anchorEditQuizUrl}" target="_blank" rel="noopener">앵커편집</a>` : `<span class="button disabled">앵커편집</span>`;
         return `
-          <tr class="selectableRow${selected ? " selected" : ""}" tabindex="0" data-question-key="${escapeHtml(key)}" aria-selected="${selected ? "true" : "false"}">
+          <tr class="selectableRow${selected ? " selected" : ""}" tabindex="0" data-question-key="${escapeHtml(key)}" data-detail-url="${escapeHtml(detailUrl)}" aria-selected="${selected ? "true" : "false"}">
             <td>
               <div class="questionTitleLine">
                 <div class="cellTitle"><a href="${detailUrl}" target="_blank" rel="noopener">${escapeHtml(questionFileName)}</a></div>
@@ -774,6 +1085,7 @@
               </div>
               <div class="cellSub">${escapeHtml(item.catNm)} · ${escapeHtml(item.datasetLabel)} · ${escapeHtml(item.gNm || "")}</div>
               <div class="pathCell">${escapeHtml(questionFolder)}</div>
+              ${rowInfoSummary(item)}
             </td>
             <td>${stateSummaryCell(item)}</td>
             <td>${structureSummaryCell(item)}</td>
@@ -823,9 +1135,56 @@
     });
 
     $("questionRows").addEventListener("click", (event) => {
+      const more = event.target.closest("[data-pdf-text-more]");
+      if (more) {
+        event.preventDefault();
+        event.stopPropagation();
+        showPdfTextPopover(more);
+        return;
+      }
       const row = event.target.closest("tr[data-question-key]");
       if (!row || event.target.closest("a, button")) return;
       selectQuestionRow(row.dataset.questionKey);
+    });
+
+    let activePdfTextPopover = null;
+
+    function closePdfTextPopover(){
+      if (activePdfTextPopover) activePdfTextPopover.remove();
+      activePdfTextPopover = null;
+    }
+
+    function showPdfTextPopover(anchor){
+      closePdfTextPopover();
+      const popover = document.createElement("div");
+      popover.className = "pdfTextPopover";
+      popover.innerHTML = anchor.dataset.popoverHtml || "<h3>PDF 텍스트 상세</h3><div class=\"note\">PDF 진단 정보가 아직 없습니다.</div>";
+      document.body.appendChild(popover);
+      const rect = anchor.getBoundingClientRect();
+      const popRect = popover.getBoundingClientRect();
+      const left = Math.max(12, Math.min(window.innerWidth - popRect.width - 12, rect.right - popRect.width));
+      const top = Math.max(12, Math.min(window.innerHeight - popRect.height - 12, rect.bottom + 8));
+      popover.style.left = `${left}px`;
+      popover.style.top = `${top}px`;
+      activePdfTextPopover = popover;
+    }
+
+    document.addEventListener("click", (event) => {
+      if (!activePdfTextPopover) return;
+      if (event.target.closest(".pdfTextPopover") || event.target.closest("[data-pdf-text-more]")) return;
+      closePdfTextPopover();
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closePdfTextPopover();
+    });
+
+    $("questionRows").addEventListener("dblclick", (event) => {
+      const row = event.target.closest("tr[data-question-key]");
+      if (!row || event.target.closest("a, button")) return;
+      selectQuestionRow(row.dataset.questionKey);
+      const detailUrl = row.dataset.detailUrl;
+      if (detailUrl) window.location.href = detailUrl;
     });
 
     $("questionRows").addEventListener("focusin", (event) => {

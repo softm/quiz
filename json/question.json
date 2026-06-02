@@ -63,11 +63,11 @@
     "ocrPublished": false,
     "anchorMap": "quiz/pdf/농산물품질관리사/2023년 제20회 농산물품질관리사 1차 시험문제지_anchor.json",
     "anchorStatus": "위치맵 생성",
-    "anchorConfidence": 0.9036,
+    "anchorConfidence": 0.9198,
     "anchorWarnings": [
-      "선택지 위치 감지가 부족합니다(248/400). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
+      "선택지 위치 감지가 부족합니다(284/400). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
     ],
-    "anchorGeneratedAt": "2026-06-02T10:49:57.714Z",
+    "anchorGeneratedAt": "2026-06-02T17:12:55.628Z",
     "choiceCount": 4,
     "anchorQuestionDetected": 99,
     "anchorQuestionExpected": 100,
@@ -589,10 +589,17 @@
     "questionCount": 25,
     "answerStartNo": 1,
     "answerEndNo": 25,
-    "questionStartNo": 1,
-    "questionEndNo": 25,
+    "questionStartNo": 36,
+    "questionEndNo": 60,
     "ocrStatus": "OCR 확인 필요",
-    "ocrPublished": false
+    "ocrPublished": false,
+    "anchorMap": "quiz/pdf/방통대/모바일앱프로그래밍/[기출문제] [2015학년도 1학기] 기말시험_anchor.json",
+    "anchorStatus": "위치맵 생성",
+    "anchorConfidence": 0.9368,
+    "anchorWarnings": [
+      "일부 선택지 위치가 누락되었습니다(96/100). 틀린 좌표 대신 누락으로 표시합니다."
+    ],
+    "anchorGeneratedAt": "2026-06-02T16:59:48.566Z"
   },
   {
     "gNo": "03",

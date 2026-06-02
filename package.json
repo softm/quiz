@@ -1,6 +1,7 @@
 {
   "scripts": {
     "admin": "node scripts/admin-server.mjs",
+    "changed": "node scripts/report-question-changes.mjs",
     "generate": "python3 scripts/gen_category.py && python3 scripts/gen_question.py && python3 scripts/gen_correct.py",
     "serve": "node scripts/admin-server.mjs"
   }

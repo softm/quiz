@@ -716,34 +716,67 @@
       bottom:16px;
       z-index:90;
       display:none;
-      width:min(520px, calc(100% - 32px));
-      padding:12px;
+      width:min(520px, calc(100% - 24px));
+      padding:8px;
       border:1px solid rgba(42,93,172,.24);
-      border-radius:18px;
+      border-radius:14px;
       background:rgba(248,251,255,.94);
       box-shadow:0 12px 28px rgba(15,23,42,.16);
       backdrop-filter:blur(12px);
     }
     .anchorEditPanel.active{display:block}
     .anchorEditTitle{
-      display:flex;
+      display:grid;
+      grid-template-columns:minmax(0, 1fr) auto;
       align-items:center;
-      justify-content:space-between;
-      gap:10px;
+      gap:8px;
       font-weight:800;
       color:#1e293b;
-      margin-bottom:8px;
+      margin-bottom:6px;
     }
     .anchorEditTitleLeft,
+    .anchorEditTitleControls,
     .anchorEditDockControls{
       display:flex;
       align-items:center;
       gap:6px;
       flex-wrap:wrap;
     }
+    .anchorEditTitleLeft{
+      min-width:0;
+    }
+    #anchorEditTitleText{
+      font-size:15px;
+      font-weight:900;
+      white-space:nowrap;
+    }
+    #anchorEditDirty{
+      padding:3px 7px;
+      border:1px solid rgba(148,163,184,.35);
+      border-radius:999px;
+      background:rgba(255,255,255,.72);
+      color:#475569;
+      font-size:11px;
+      font-weight:900;
+      white-space:nowrap;
+    }
+    #anchorEditDirty[data-state="dirty"]{
+      border-color:rgba(220,38,38,.32);
+      background:#fee2e2;
+      color:#b91c1c;
+    }
+    #anchorEditDirty[data-state="saving"]{
+      border-color:rgba(37,99,235,.30);
+      background:#dbeafe;
+      color:#1d4ed8;
+    }
+    .anchorEditTitleControls{
+      justify-content:flex-end;
+    }
     .anchorEditDockControls button{
-      padding:6px 9px;
-      font-size:12px;
+      min-height:28px;
+      padding:5px 8px;
+      font-size:11px;
       border-radius:999px;
       font-weight:900;
     }
@@ -752,19 +785,26 @@
       background:#dbeafe;
       color:#1d4ed8;
     }
+    #btnAnchorEditClose{
+      min-height:28px;
+      padding:5px 10px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:900;
+    }
     .anchorEditOverlaySwitch{
       display:grid;
       grid-template-columns:repeat(2, minmax(0, 1fr));
       gap:6px;
-      margin:8px 0 2px;
-      padding:4px;
+      margin:6px 0 0;
+      padding:3px;
       border:1px solid rgba(148,163,184,.28);
-      border-radius:14px;
+      border-radius:12px;
       background:rgba(241,245,249,.72);
     }
     .anchorEditOverlaySwitch button{
-      min-height:34px;
-      border-radius:10px;
+      min-height:28px;
+      border-radius:9px;
       font-weight:900;
     }
     .anchorEditOverlaySwitch button.active{
@@ -809,23 +849,32 @@
       align-items:center;
       justify-content:space-between;
       gap:8px;
-      margin:0 0 8px;
-      padding:8px 10px;
+      margin:0;
+      padding:7px 9px;
       border:1px solid rgba(37,99,235,.22);
-      border-radius:14px;
+      border-radius:10px;
       background:#eff6ff;
       color:#1d4ed8;
+      font-size:13px;
       font-weight:900;
+    }
+    #anchorEditHint{
+      margin:4px 2px 0;
+      line-height:1.25;
     }
     .anchorEditActions{
       display:flex;
       align-items:center;
       flex-wrap:wrap;
-      gap:6px;
-      margin-top:8px;
+      gap:8px;
+      margin-top:6px;
     }
     .anchorEditKindRow{
       justify-content:space-between;
+      padding:6px;
+      border:1px solid rgba(148,163,184,.24);
+      border-radius:12px;
+      background:rgba(255,255,255,.68);
     }
     .anchorEditKindControls{
       display:flex;
@@ -835,6 +884,9 @@
     }
     .anchorEditActions.bottom{
       justify-content:space-between;
+      align-items:stretch;
+      padding-top:6px;
+      border-top:1px solid rgba(148,163,184,.22);
     }
     .anchorEditActionMain,
     .anchorEditActionReset{
@@ -842,6 +894,22 @@
       align-items:center;
       flex-wrap:wrap;
       gap:6px;
+    }
+    .anchorEditActionReset{
+      justify-content:flex-end;
+    }
+    .anchorEditActionMain button,
+    .anchorEditActionReset button,
+    .anchorEditKindControls button,
+    .anchorEditModeRow button,
+    .anchorEditChoiceControls button{
+      min-height:30px;
+    }
+    .anchorEditPanel button:disabled{
+      opacity:.45;
+      cursor:not-allowed;
+      filter:saturate(.7);
+      box-shadow:none;
     }
     .columnSelectLayer{
       display:none;
@@ -880,7 +948,7 @@
     .anchorEditKindControls label.toggle{
       font-size:12px;
       font-weight:900;
-      padding:8px 10px;
+      padding:7px 9px;
       border-radius:999px;
       background:#f8fafc;
       border:1px solid rgba(148,163,184,.35);
@@ -892,19 +960,27 @@
       align-items:center;
       flex-wrap:wrap;
       gap:8px;
-      margin-top:8px;
-      padding:8px 10px;
+      margin-top:6px;
+      padding:6px;
       border:1px solid rgba(148,163,184,.28);
-      border-radius:14px;
+      border-radius:12px;
       background:rgba(255,255,255,.72);
     }
     .anchorEditChoiceRow.active{display:flex}
     .anchorEditChoiceRow{justify-content:space-between}
     .anchorEditChoiceControls{
-      display:flex;
+      display:grid;
+      grid-template-columns:118px 118px minmax(0, 1fr);
+      grid-template-areas:
+        "choice find auto"
+        "radius radius reset";
       align-items:center;
-      flex-wrap:wrap;
-      gap:8px;
+      width:100%;
+      gap:6px;
+    }
+    .anchorEditChoicePicker,
+    .anchorEditChoiceTools{
+      display:contents;
     }
     .anchorEditModeRow{
       margin:0 0 0 auto;
@@ -927,27 +1003,58 @@
     }
     .anchorEditChoiceRow label.toggle{
       font-size:12px;
-      padding:6px 8px;
+      min-height:30px;
+      padding:4px 8px;
       border-radius:999px;
       background:#f8fafc;
       border:1px solid rgba(148,163,184,.35);
     }
     .anchorEditChoiceRow label.anchorEditRangeControl{
+      grid-area:radius;
       display:flex;
       align-items:center;
-      gap:6px;
-      padding:6px 8px;
+      gap:5px;
+      padding:4px 6px;
       border-radius:999px;
       background:#f8fafc;
       border:1px solid rgba(148,163,184,.35);
       white-space:nowrap;
     }
-    .anchorEditChoiceRow input[type="range"]{
-      width:118px;
-      accent-color:#ef4444;
+    .anchorEditStepper{
+      display:inline-flex;
+      align-items:center;
+      overflow:hidden;
+      border:1px solid rgba(148,163,184,.45);
+      border-radius:999px;
+      background:#fff;
+    }
+    .anchorEditStepper button{
+      width:28px;
+      min-width:28px;
+      min-height:26px;
+      padding:0;
+      border:0;
+      border-radius:0;
+      background:#f1f5f9;
+      font-size:16px;
+      line-height:1;
+      font-weight:900;
+    }
+    .anchorEditStepper input[type="number"]{
+      width:46px;
+      height:26px;
+      padding:0 4px;
+      border:0;
+      border-left:1px solid rgba(148,163,184,.35);
+      border-right:1px solid rgba(148,163,184,.35);
+      background:#fff;
+      color:#0f172a;
+      text-align:center;
+      font-weight:900;
+      font-size:12px;
     }
     .anchorEditChoiceRow .anchorEditRangeValue{
-      min-width:38px;
+      min-width:34px;
       text-align:right;
       color:#b91c1c;
       font-weight:900;
@@ -959,13 +1066,30 @@
       border-radius:999px;
     }
     .anchorEditChoiceRow select{
-      min-width:120px;
-      padding:8px 10px;
+      grid-area:choice;
+      width:100%;
+      min-width:112px;
+      min-height:32px;
+      padding:6px 10px;
       border:1px solid rgba(148,163,184,.55);
       border-radius:12px;
       background:#fff;
       color:#0f172a;
       font-weight:900;
+    }
+    #anchorEditChoiceFind{
+      grid-area:find;
+      width:100%;
+    }
+    .anchorEditAutoNextChoiceWrap{
+      grid-area:auto;
+      justify-content:center;
+      min-width:0;
+    }
+    #anchorEditChoiceAreaReset{
+      grid-area:reset;
+      justify-self:end;
+      white-space:nowrap;
     }
     .anchorEditActions button.active{
       border-color:#2563eb;
@@ -979,15 +1103,42 @@
     .anchorEditActions button.danger:hover{
       background:#fee2e2;
     }
-    .anchorEditChoiceLabel{
-      min-width:74px;
-      padding:7px 10px;
-      border:1px solid rgba(148,163,184,.45);
-      border-radius:12px;
-      background:#fff;
-      text-align:center;
-      font-weight:800;
-      color:#334155;
+    @media (max-width: 768px){
+      .anchorEditPanel{
+        width:calc(100% - 16px);
+        max-height:calc(100dvh - 88px);
+        overflow:auto;
+        padding:8px;
+      }
+      .anchorEditTitle{
+        grid-template-columns:1fr;
+        align-items:start;
+      }
+      .anchorEditTitleControls{
+        justify-content:space-between;
+      }
+      .anchorEditDockControls{
+        flex:1 1 auto;
+      }
+      .anchorEditChoiceControls{
+        grid-template-columns:1fr;
+        grid-template-areas:
+          "choice"
+          "find"
+          "auto"
+          "radius"
+          "reset";
+      }
+      .anchorEditChoicePicker,
+      .anchorEditChoiceTools,
+      .anchorEditActionMain,
+      .anchorEditActionReset{
+        width:100%;
+        justify-content:flex-start;
+      }
+      .anchorEditStepper input[type="number"]{
+        width:42px;
+      }
     }
     body.anchor-editing #pdfCanvas{cursor:crosshair}
     body.anchor-editing.anchor-edit-dragging #pdfCanvas{cursor:grabbing}
@@ -1689,6 +1840,9 @@
     body.theme-dark .choice.selected:active{
       background:rgba(139,192,255,.08) !important;
     }
+    body.answer-hwp-document #openA{
+      display:inline-flex !important;
+    }
   </style>
 </head>
 <body>
@@ -1725,7 +1879,7 @@
           <button id="btnAnchorDebugToggle" class="secondary" hidden>앵커영역</button>
           <button id="btnAnchorClickAreaToggle" class="secondary" hidden>문항영역</button>
           <button id="btnAnchorEdit" class="secondary" hidden>앵커편집</button>
-          <button id="btnChoiceAreaEditTop" class="secondary" hidden>문항편집</button>
+          <button id="btnChoiceAreaEditTop" class="secondary" hidden>영역편집</button>
           <button id="btnChoiceAreaResetTop" class="secondary danger" hidden>문항영역 초기화</button>
           <button id="btnAnchorResetTop" class="secondary danger" hidden>앵커 초기화</button>
           <button id="openQ">문제 PDF</button>
@@ -1756,18 +1910,21 @@
             <span id="anchorEditTitleText">앵커편집</span>
             <span id="anchorEditDirty">저장됨</span>
           </div>
-          <div class="anchorEditDockControls" aria-label="편집 오버레이 위치">
-            <button id="anchorEditDockLeft" class="secondary" type="button">왼쪽</button>
-            <button id="anchorEditDockTop" class="secondary" type="button">위</button>
-            <button id="anchorEditDockBottom" class="secondary" type="button">아래</button>
-            <button id="anchorEditDockRight" class="secondary active" type="button">오른쪽</button>
+          <div class="anchorEditTitleControls">
+            <div class="anchorEditDockControls" aria-label="편집 오버레이 위치">
+              <button id="anchorEditDockLeft" class="secondary" type="button">왼쪽</button>
+              <button id="anchorEditDockTop" class="secondary" type="button">위</button>
+              <button id="anchorEditDockBottom" class="secondary" type="button">아래</button>
+              <button id="anchorEditDockRight" class="secondary active" type="button">오른쪽</button>
+            </div>
+            <button id="btnAnchorEditClose" class="secondary" type="button" title="앵커편집 종료" aria-label="앵커편집 종료">종료</button>
           </div>
         </div>
         <div class="anchorEditContext" id="anchorEditContext">1번 편집 중 · 1번 문항</div>
         <div class="tiny" id="anchorEditHint">문제 앵커 또는 문항 앵커를 선택한 뒤 PDF 위 실제 위치를 클릭하세요.</div>
         <div class="anchorEditOverlaySwitch" aria-label="편집 오버레이 선택">
-          <button id="anchorEditOverlayAnchor" class="secondary active" type="button">앵커편집</button>
-          <button id="anchorEditOverlayArea" class="secondary" type="button">문항편집</button>
+          <button id="anchorEditOverlayAnchor" class="secondary active" type="button">앵커</button>
+          <button id="anchorEditOverlayArea" class="secondary" type="button">영역편집</button>
         </div>
         <div class="anchorEditActions anchorEditKindRow">
           <div class="anchorEditKindControls">
@@ -1778,22 +1935,28 @@
           <div class="anchorEditModeRow" id="anchorEditModeRow">
             <span class="anchorEditModeLabel">편집 모드</span>
             <button id="anchorEditModeToggle" class="secondary" type="button">선택편집</button>
-            <button id="anchorEditQuestionFind" class="secondary" type="button">찾기</button>
+            <button id="anchorEditQuestionFind" class="secondary" type="button">문항 앵커 찾기</button>
           </div>
         </div>
         <div class="anchorEditChoiceRow active" id="anchorEditChoiceRow">
           <div class="anchorEditChoiceControls" id="anchorEditChoiceControls">
-            <label for="anchorEditChoiceSelect">문항 번호</label>
-            <select id="anchorEditChoiceSelect" aria-label="편집할 문항 번호"></select>
-            <span class="anchorEditChoiceLabel" id="anchorEditChoiceLabel">1번 문항</span>
-            <label class="toggle anchorEditAutoNextChoiceWrap"><input id="anchorEditAutoNextChoice" type="checkbox" checked /> 클릭후 다음 문항</label>
-            <button id="anchorEditChoiceFind" class="secondary" type="button">찾기</button>
-            <button id="anchorEditChoiceAreaReset" class="secondary danger" type="button">현재 문항 영역 초기화</button>
-            <label class="anchorEditRangeControl" for="anchorEditChoiceRadius">원 크기
-              <input id="anchorEditChoiceRadius" type="range" min="25" max="160" step="5" value="100" />
-              <span id="anchorEditChoiceRadiusValue" class="anchorEditRangeValue">100%</span>
-              <button id="anchorEditChoiceRadiusReset" class="secondary anchorEditRangeReset" type="button">초기화</button>
-            </label>
+            <div class="anchorEditChoicePicker">
+              <select id="anchorEditChoiceSelect" aria-label="편집할 문항 번호"></select>
+              <button id="anchorEditChoiceFind" class="secondary" type="button">문항 앵커 찾기</button>
+              <label class="toggle anchorEditAutoNextChoiceWrap"><input id="anchorEditAutoNextChoice" type="checkbox" checked /> 클릭후 다음 문항</label>
+            </div>
+            <div class="anchorEditChoiceTools">
+              <label class="anchorEditRangeControl" for="anchorEditChoiceRadius">원 크기
+                <span class="anchorEditStepper">
+                  <button id="anchorEditChoiceRadiusMinus" class="secondary" type="button" aria-label="원 크기 줄이기">-</button>
+                  <input id="anchorEditChoiceRadius" type="number" min="25" max="160" step="5" value="100" inputmode="numeric" aria-label="원 크기 퍼센트" />
+                  <button id="anchorEditChoiceRadiusPlus" class="secondary" type="button" aria-label="원 크기 키우기">+</button>
+                </span>
+                <span id="anchorEditChoiceRadiusValue" class="anchorEditRangeValue">100%</span>
+                <button id="anchorEditChoiceRadiusReset" class="secondary anchorEditRangeReset" type="button">초기화</button>
+              </label>
+              <button id="anchorEditChoiceAreaReset" class="secondary danger" type="button">영역 초기화</button>
+            </div>
           </div>
         </div>
         <div class="anchorEditActions bottom">
@@ -1801,11 +1964,10 @@
             <button id="btnAnchorEditSave" type="button">저장</button>
             <button id="btnAnchorEditUndo" class="secondary" type="button">실행취소</button>
             <button id="btnAnchorEditRedo" class="secondary" type="button">다시실행</button>
-            <button id="btnAnchorEditDelete" class="secondary danger" type="button">선택 앵커 삭제</button>
-            <button id="btnAnchorEditResetSelected" class="secondary danger" type="button">선택 앵커 초기화</button>
-            <button id="btnAnchorEditClose" class="secondary" type="button">종료</button>
           </div>
           <div class="anchorEditActionReset">
+            <button id="btnAnchorEditDelete" class="secondary danger" type="button">삭제</button>
+            <button id="btnAnchorEditResetSelected" class="secondary danger" type="button">초기화</button>
             <button id="btnAnchorEditReset" class="secondary danger" type="button">전체 초기화</button>
           </div>
         </div>
@@ -2193,6 +2355,7 @@
       questionSegments: null,
       choiceAnchorMap: null,
       choiceClickAreaMap: null,
+      _manualBase: null,
       contentBands: null,
       footerBand: null,
       confidence: 0,
@@ -2260,12 +2423,13 @@
   const anchorEditQuestionLock = document.getElementById("anchorEditQuestionLock");
   const anchorEditPrevChoice = document.getElementById("anchorEditPrevChoice");
   const anchorEditNextChoice = document.getElementById("anchorEditNextChoice");
-  const anchorEditChoiceLabel = document.getElementById("anchorEditChoiceLabel");
   const anchorEditChoiceRow = document.getElementById("anchorEditChoiceRow");
   const anchorEditChoiceControls = document.getElementById("anchorEditChoiceControls");
   const anchorEditChoiceSelect = document.getElementById("anchorEditChoiceSelect");
   const anchorEditAutoNextChoice = document.getElementById("anchorEditAutoNextChoice");
   const anchorEditChoiceRadius = document.getElementById("anchorEditChoiceRadius");
+  const anchorEditChoiceRadiusMinus = document.getElementById("anchorEditChoiceRadiusMinus");
+  const anchorEditChoiceRadiusPlus = document.getElementById("anchorEditChoiceRadiusPlus");
   const anchorEditChoiceRadiusValue = document.getElementById("anchorEditChoiceRadiusValue");
   const anchorEditChoiceRadiusReset = document.getElementById("anchorEditChoiceRadiusReset");
   const anchorEditChoiceAreaReset = document.getElementById("anchorEditChoiceAreaReset");
@@ -2359,6 +2523,10 @@
     suppressNextClick: false,
     lastQuestionQ: 0,
   };
+  const ANCHOR_EDIT_START_RETRY_LIMIT = 12;
+  let anchorEditStartTimer = 0;
+  let anchorEditStartRetryCount = 0;
+  let anchorEditStartCancelled = false;
   const mobileDock = document.getElementById("mobileDock");
   const mobileDockHomeParent = mobileDock ? mobileDock.parentElement : null;
   const landscapeDockMount = document.getElementById("landscapeDockMount");
@@ -2738,8 +2906,19 @@
     anchorEditState.choice = Math.max(1, Math.min(CHOICE_COUNT, Number(anchorEditChoiceSelect.value) || 1));
     setAnchorEditKind("choice");
   });
-  if (anchorEditChoiceRadius) anchorEditChoiceRadius.addEventListener("input", () => {
-    setAnchorChoiceRadiusScale(Number(anchorEditChoiceRadius.value) / 100);
+  if (anchorEditChoiceRadius) anchorEditChoiceRadius.addEventListener("change", () => {
+    const raw = String(anchorEditChoiceRadius.value || "").trim();
+    if (!raw) {
+      syncAnchorChoiceRadiusUi();
+      return;
+    }
+    setAnchorChoiceRadiusScale(Number(raw) / 100);
+  });
+  if (anchorEditChoiceRadiusMinus) anchorEditChoiceRadiusMinus.addEventListener("click", () => {
+    stepAnchorChoiceRadius(-5);
+  });
+  if (anchorEditChoiceRadiusPlus) anchorEditChoiceRadiusPlus.addEventListener("click", () => {
+    stepAnchorChoiceRadius(5);
   });
   if (anchorEditChoiceRadiusReset) anchorEditChoiceRadiusReset.addEventListener("click", () => {
     const initialScale = getAnchorChoiceRadiusInitialScale();
@@ -2749,7 +2928,9 @@
   if (anchorEditModeToggle) anchorEditModeToggle.addEventListener("click", () => {
     setAnchorEditInteractionMode(anchorEditState.interactionMode === "drag" ? "select" : "drag");
   });
-  if (anchorEditQuestionFind) anchorEditQuestionFind.addEventListener("click", () => findAnchorEditTarget("question"));
+  if (anchorEditQuestionFind) anchorEditQuestionFind.addEventListener("click", () => {
+    findAnchorEditTarget(anchorEditState.kind === "question" ? "question" : "choice");
+  });
   if (anchorEditChoiceFind) anchorEditChoiceFind.addEventListener("click", () => findAnchorEditTarget("choice"));
   if (anchorEditChoiceAreaReset) anchorEditChoiceAreaReset.addEventListener("click", () => resetCurrentChoiceClickAreaEdit());
   if (btnAnchorEditSave) btnAnchorEditSave.addEventListener("click", () => saveAnchorEditNow({ silent: false }));
@@ -2761,7 +2942,7 @@
     if (anchorEditState.choiceAreaEditMode) resetAllChoiceClickAreasFromViewer();
     else resetCurrentQuestionAnchorEdits("all");
   });
-  if (btnAnchorEditClose) btnAnchorEditClose.addEventListener("click", () => setAnchorEditEnabled(false));
+  if (btnAnchorEditClose) btnAnchorEditClose.addEventListener("click", () => closeAnchorEditPanel());
   if (btnShareQuestion) btnShareQuestion.addEventListener("click", () => shareCurrentQuestionLinks());
   document.getElementById("btnViewMode").addEventListener("click", toggleViewMode);
   document.getElementById("btnPrevQ").addEventListener("click", () => moveFocus(-1));
@@ -2779,7 +2960,8 @@
     window.open(url, "_blank");
   });
   document.getElementById("openA").addEventListener("click", () => {
-    window.open(state.answerPdfBaseUrl || encodedAnswerPdfUrl, "_blank");
+    const url = getAnswerDocumentOpenUrl();
+    if (url) window.open(url, "_blank", "noopener");
   });
 
   document.getElementById("btnClearSaved").addEventListener("click", () => {
@@ -2855,6 +3037,11 @@
       e.preventDefault();
       return;
     }
+    if (k === "Escape" && anchorEditState.enabled) {
+      closeAnchorEditPanel().catch((err) => setAnchorEditStatus(`앵커편집 종료 실패: ${err?.message || err}`));
+      e.preventDefault();
+      return;
+    }
     const tag = (document.activeElement && document.activeElement.tagName || "").toLowerCase();
     if (tag === "textarea" || tag === "input") return;
 
@@ -2886,6 +3073,7 @@
   updateFontButtonLabels();
   updateOrientationButton();
   enforceMobileReadingMode();
+  updateViewModeUi();
   buildGrid();
   loadSaved();
   loadBookmarks();
@@ -2944,6 +3132,7 @@
     nav.questionSegments = null;
     nav.choiceAnchorMap = null;
     nav.choiceClickAreaMap = null;
+    nav._manualBase = null;
     return nav;
   }
 
@@ -3025,6 +3214,7 @@
           state.pdfNav.questionSegments = null;
           state.pdfNav.choiceAnchorMap = null;
           state.pdfNav.choiceClickAreaMap = null;
+          state.pdfNav._manualBase = null;
           state.pdfNav.contentBands = Array.isArray(ui.pdfNav.contentBands) ? ui.pdfNav.contentBands : null;
           state.pdfNav.footerBand = ui.pdfNav.footerBand && typeof ui.pdfNav.footerBand === "object" ? ui.pdfNav.footerBand : null;
           state.pdfNav.confidence = Number.isFinite(Number(ui.pdfNav.confidence)) ? Number(ui.pdfNav.confidence) : 0;
@@ -3052,6 +3242,7 @@
             state.pdfNav.questionSegments = null;
             state.pdfNav.choiceAnchorMap = null;
             state.pdfNav.choiceClickAreaMap = null;
+            state.pdfNav._manualBase = null;
             state.pdfNav.contentBands = null;
             state.pdfNav.footerBand = null;
             state.pdfNav.confidence = 0;
@@ -3582,6 +3773,38 @@
     return raw.replace(/^\.\//, "");
   }
 
+  function fileExtensionFromPath(pathValue){
+    const clean = String(pathValue || "").split("#")[0].split("?")[0].trim();
+    const match = clean.match(/\.([a-z0-9]+)$/i);
+    return match ? match[1].toLowerCase() : "";
+  }
+
+  function isHwpDocumentPath(pathValue){
+    return fileExtensionFromPath(pathValue) === "hwp";
+  }
+
+  function buildManagedDocumentOpenUrl(pathValue){
+    const target = normalizePdfPathInput(pathValue);
+    if (!target) return "";
+    if (isAdminHost && isHwpDocumentPath(target)) {
+      return `./hwp-viewer.html?file=${encodeURIComponent(target)}`;
+    }
+    return target;
+  }
+
+  function getAnswerDocumentOpenUrl(){
+    return buildManagedDocumentOpenUrl(state.answerPdfBaseUrl || encodedAnswerPdfUrl);
+  }
+
+  function syncAnswerDocumentButtonLabel(){
+    const btn = document.getElementById("openA");
+    if (!btn) return;
+    const target = state.answerPdfBaseUrl || ANSWER_PDF_URL;
+    const isHwp = isHwpDocumentPath(target);
+    btn.textContent = isHwp ? "정답 HWP" : "정답 PDF";
+    document.body.classList.toggle("answer-hwp-document", isHwp);
+  }
+
   function tryDecodeURIComponent(raw){
     try { return decodeURIComponent(raw); } catch(_) { return raw; }
   }
@@ -3785,6 +4008,7 @@
       questionTopRatioMap: topMap,
       choiceAnchorMap: anchorMap.choiceAnchorMap && typeof anchorMap.choiceAnchorMap === "object" ? anchorMap.choiceAnchorMap : null,
       choiceClickAreaMap: anchorMap.choiceClickAreaMap && typeof anchorMap.choiceClickAreaMap === "object" ? anchorMap.choiceClickAreaMap : null,
+      _manualBase: anchorMap._manualBase && typeof anchorMap._manualBase === "object" ? anchorMap._manualBase : null,
       contentBands: null,
       footerBand: null,
       confidence: Number(anchorMap.confidence || 0),
@@ -3797,7 +4021,7 @@
   }
 
   function pushAnchorPathCandidate(list, seen, value){
-    const rel = normalizePdfPathInput(value);
+    const rel = normalizePdfPathInput(value).replace(/^quiz\//, "");
     if (!rel) return;
     for (const candidate of [rel, rel.normalize("NFC"), rel.normalize("NFD")]){
       if (!candidate || seen.has(candidate)) continue;
@@ -3821,6 +4045,85 @@
       }
     }
     return list.filter((path) => /^pdf\//.test(path) && /_anchor\.json$/i.test(path));
+  }
+
+  function getWritableAnchorMapPath(){
+    const candidates = buildQuestionAnchorPathCandidates({
+      anchorMap: currentAnchorMapPath || state.pdfNav?.anchorMapPath || "",
+      questionPdf: QUESTION_PDF_URL,
+    });
+    return candidates[0] || "";
+  }
+
+  function hasUsableAnchorEditBase(){
+    const nav = state.pdfNav || {};
+    return Array.isArray(nav.questionPageMap)
+      && Array.isArray(nav.questionTopRatioMap)
+      && nav.questionPageMap.length >= QUESTION_COUNT + 1
+      && nav.questionTopRatioMap.length >= QUESTION_COUNT + 1;
+  }
+
+  function cloneAnchorEditArray(value){
+    return Array.isArray(value) ? value.slice(0, QUESTION_COUNT + 1) : null;
+  }
+
+  function getAnchorEditBootstrapSnapshot(){
+    const snapshots = Array.isArray(anchorEditState.undoStack) ? anchorEditState.undoStack : [];
+    return snapshots.length ? snapshots[snapshots.length - 1] : captureAnchorEditSnapshot("bootstrap");
+  }
+
+  function buildAnchorEditBootstrapData(snapshot = null){
+    const nav = state.pdfNav || {};
+    const source = snapshot || captureAnchorEditSnapshot("bootstrap");
+    const pageMap = cloneAnchorEditArray(source.questionPageMap) || cloneAnchorEditArray(nav.questionPageMap);
+    const topMap = cloneAnchorEditArray(source.questionTopRatioMap) || cloneAnchorEditArray(nav.questionTopRatioMap);
+    if (!pageMap || !topMap || pageMap.length < QUESTION_COUNT + 1 || topMap.length < QUESTION_COUNT + 1) return null;
+    const now = new Date().toISOString();
+    const questionPdf = normalizePdfPathInput(QUESTION_PDF_URL).replace(/^quiz\//, "");
+    const questionStartNo = Number(nav.questionStartNo) || QUESTION_START_NO || 1;
+    const questionEndNo = Number(nav.questionEndNo) || QUESTION_END_NO || (questionStartNo + QUESTION_COUNT - 1);
+    return {
+      kind: "question-anchor-map",
+      version: 1,
+      questionNo: QUESTION_NO || "",
+      questionPdf,
+      pageCount: Number(nav.pageCount || state.pdfDoc?.numPages || 0) || null,
+      questionCount: QUESTION_COUNT,
+      choiceCount: CHOICE_COUNT,
+      questionStartNo,
+      questionEndNo,
+      printedQuestionNoMap: Array.isArray(nav.printedQuestionNoMap) ? nav.printedQuestionNoMap.slice(0, QUESTION_COUNT + 1) : null,
+      questionLabelMap: cloneAnchorEditValue(source.questionLabelMap || nav.questionAnchorMap || nav.questionLabelMap || null),
+      questionColumnBoundsMap: cloneAnchorEditValue(nav.questionColumnBoundsMap || null),
+      questionPageMap: pageMap,
+      questionTopRatioMap: topMap,
+      questionSegments: cloneAnchorEditValue(source.questionSegments || nav.questionSegments || null),
+      choiceAnchorMap: cloneAnchorEditValue(source.choiceAnchorMap || nav.choiceAnchorMap || null),
+      choiceClickAreaMap: cloneAnchorEditValue(source.choiceClickAreaMap || nav.choiceClickAreaMap || null),
+      confidence: Number.isFinite(Number(nav.confidence)) ? Number(nav.confidence) : 0.32,
+      warnings: [],
+      generatedAt: now,
+    };
+  }
+
+  function buildAnchorManualSavePayload(anchorMapPath, patch){
+    const hasExistingAnchorMap = Boolean(currentAnchorMapPath || state.pdfNav?.anchorMapPath);
+    const payload = {
+      dataset: DATASET,
+      questionNo: QUESTION_NO || "",
+      path: normalizePdfPathInput(QUESTION_PDF_URL).replace(/^quiz\//, ""),
+      questionPdf: normalizePdfPathInput(QUESTION_PDF_URL).replace(/^quiz\//, ""),
+      questionCount: QUESTION_COUNT,
+      choiceCount: CHOICE_COUNT,
+      questionStartNo: QUESTION_START_NO || "",
+      questionEndNo: QUESTION_END_NO || "",
+      anchorMapPath,
+      patch,
+    };
+    if (!hasExistingAnchorMap) {
+      payload.baseAnchorData = buildAnchorEditBootstrapData(getAnchorEditBootstrapSnapshot());
+    }
+    return payload;
   }
 
   async function loadQuestionAnchorPattern(options = {}){
@@ -4002,6 +4305,189 @@
     if (pdfStatus) pdfStatus.textContent = text;
   }
 
+  function stableAnchorResetValue(value){
+    if (value === null || typeof value !== "object") return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(stableAnchorResetValue).join(",")}]`;
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableAnchorResetValue(value[key])}`).join(",")}}`;
+  }
+
+  function normalizeAnchorResetValue(key, value){
+    if (value === undefined) return null;
+    if ((key === "questionSegments" || key === "choiceAnchorMap" || key === "choiceClickAreaMap") && Array.isArray(value) && value.length === 0) return null;
+    return value ?? null;
+  }
+
+  function sameAnchorResetValue(key, currentValue, baseValue){
+    return stableAnchorResetValue(normalizeAnchorResetValue(key, currentValue)) === stableAnchorResetValue(normalizeAnchorResetValue(key, baseValue));
+  }
+
+  function anchorResetBaseGroup(key){
+    const base = state.pdfNav?._manualBase;
+    const group = base && typeof base === "object" ? base[key] : null;
+    return group && typeof group === "object" ? group : {};
+  }
+
+  function anchorArrayMapValueForQ(key, q){
+    const values = state.pdfNav?.[key];
+    return Array.isArray(values) ? values[Number(q)] : undefined;
+  }
+
+  function anchorObjectMapValueForQ(key, q){
+    const values = state.pdfNav?.[key];
+    return values && typeof values === "object" && !Array.isArray(values) ? values[String(q)] : undefined;
+  }
+
+  function anchorStoredValueForQ(key, q){
+    if (key === "questionLabelMap" && !state.pdfNav?.questionLabelMap) {
+      return anchorObjectMapValueForQ("questionAnchorMap", q);
+    }
+    return Array.isArray(state.pdfNav?.[key])
+      ? anchorArrayMapValueForQ(key, q)
+      : anchorObjectMapValueForQ(key, q);
+  }
+
+  function anchorChoiceListForReset(key, q){
+    const value = anchorObjectMapValueForQ(key, q);
+    return Array.isArray(value) ? value : [];
+  }
+
+  function anchorChoiceValue(list, choice){
+    return (Array.isArray(list) ? list : []).find((item) => Number(item?.choice) === Number(choice)) || null;
+  }
+
+  function anchorPatchHasQuestionKey(key, q){
+    const group = anchorEditState.patch?.[key];
+    return !!(group && typeof group === "object" && Object.prototype.hasOwnProperty.call(group, String(q)));
+  }
+
+  function anchorPatchHasChoiceValue(key, q, choice){
+    const group = anchorEditState.patch?.[key];
+    if (!group || typeof group !== "object" || !Object.prototype.hasOwnProperty.call(group, String(q))) return false;
+    const value = group[String(q)];
+    if (!Array.isArray(value)) return true;
+    return value.some((item) => Number(item?.choice) === Number(choice));
+  }
+
+  function anchorContainsManualAnchorValue(value){
+    if (!value || typeof value !== "object") return false;
+    if (String(value.source || "").includes("manual")) return true;
+    if (String(value.anchorMode || "").includes("manual")) return true;
+    if (Array.isArray(value)) return value.some(anchorContainsManualAnchorValue);
+    return Object.values(value).some(anchorContainsManualAnchorValue);
+  }
+
+  function anchorContainsManualClickAreaValue(value){
+    if (!value || typeof value !== "object") return false;
+    if (String(value.source || "").includes("manual-click-area")) return true;
+    if (Array.isArray(value)) return value.some(anchorContainsManualClickAreaValue);
+    return Object.values(value).some(anchorContainsManualClickAreaValue);
+  }
+
+  function anchorHasManualChoiceValue(key, q, choice, areaOnly = false){
+    return anchorChoiceListForReset(key, q).some((item) => {
+      if (Number(item?.choice) !== Number(choice)) return false;
+      const source = String(item?.source || "");
+      const mode = String(item?.anchorMode || "");
+      return areaOnly ? source.includes("manual-click-area") : (source.includes("manual") || mode.includes("manual"));
+    });
+  }
+
+  function anchorHasResetBaseDifference(key, q, choice = 0){
+    const base = anchorResetBaseGroup(key);
+    if (!Object.prototype.hasOwnProperty.call(base, String(q))) return false;
+    const baseValue = base[String(q)];
+    if (choice > 0) {
+      const currentChoice = anchorChoiceValue(anchorChoiceListForReset(key, q), choice);
+      const baseChoice = anchorChoiceValue(Array.isArray(baseValue) ? baseValue : [], choice);
+      return !sameAnchorResetValue(key, currentChoice, baseChoice);
+    }
+    return !sameAnchorResetValue(key, anchorStoredValueForQ(key, q), baseValue);
+  }
+
+  function anchorAnyResetBaseDifference(keys){
+    return keys.some((key) => {
+      const group = anchorResetBaseGroup(key);
+      return Object.keys(group).some((q) => anchorHasResetBaseDifference(key, Number(q), 0));
+    });
+  }
+
+  function getAnchorEditResetAvailability(){
+    const q = getAnchorEditActiveQuestion();
+    const choice = Math.max(1, Math.min(CHOICE_COUNT, Number(anchorEditState.choice) || 1));
+    const questionKeys = ["questionLabelMap", "questionPageMap", "questionTopRatioMap", "questionSegments"];
+    const anchorKeys = questionKeys.concat(["choiceAnchorMap"]);
+    const question = q > 0 && (
+      questionKeys.some((key) => anchorHasResetBaseDifference(key, q) || anchorPatchHasQuestionKey(key, q))
+      || anchorContainsManualAnchorValue(anchorObjectMapValueForQ("questionAnchorMap", q))
+      || anchorContainsManualAnchorValue(anchorObjectMapValueForQ("questionLabelMap", q))
+      || anchorContainsManualAnchorValue(anchorObjectMapValueForQ("questionSegments", q))
+    );
+    const choiceAnchor = q > 0 && choice > 0 && (
+      anchorHasResetBaseDifference("choiceAnchorMap", q, choice)
+      || anchorPatchHasChoiceValue("choiceAnchorMap", q, choice)
+      || anchorHasManualChoiceValue("choiceAnchorMap", q, choice)
+    );
+    const choiceArea = q > 0 && choice > 0 && (
+      anchorHasResetBaseDifference("choiceClickAreaMap", q, choice)
+      || anchorPatchHasChoiceValue("choiceClickAreaMap", q, choice)
+      || anchorHasManualChoiceValue("choiceClickAreaMap", q, choice, true)
+    );
+    const allManualAnchors = anchorAnyResetBaseDifference(anchorKeys)
+      || anchorContainsManualAnchorValue(state.pdfNav?.questionAnchorMap)
+      || anchorContainsManualAnchorValue(state.pdfNav?.questionSegments)
+      || anchorContainsManualAnchorValue(state.pdfNav?.choiceAnchorMap);
+    const choiceAreaAll = anchorAnyResetBaseDifference(["choiceClickAreaMap"])
+      || anchorContainsManualClickAreaValue(state.pdfNav?.choiceClickAreaMap);
+    const hasQuestionAnchor = q > 0 && !!getQuestionAnchorForEditFind(q);
+    const hasChoiceAnchor = q > 0 && choice > 0 && !!getChoiceAnchorForEditFind(q, choice);
+    return {
+      q,
+      choiceNo: choice,
+      question: Boolean(question),
+      choice: Boolean(choiceAnchor || choiceArea),
+      choiceArea: Boolean(choiceArea),
+      allManualAnchors: Boolean(allManualAnchors),
+      choiceAreaAll: Boolean(choiceAreaAll),
+      selectedDelete: Boolean(anchorEditState.kind === "question" ? hasQuestionAnchor : hasChoiceAnchor),
+    };
+  }
+
+  function applyAnchorEditResetAvailability(availability = getAnchorEditResetAvailability()){
+    const saving = !!anchorEditState.saving;
+    const disabledTitle = "초기화할 수정값이 없습니다.";
+    if (anchorEditChoiceAreaReset) {
+      const enabled = !!(anchorEditState.enabled && anchorEditState.kind === "choice" && availability.choiceArea && !saving);
+      anchorEditChoiceAreaReset.disabled = !enabled;
+      anchorEditChoiceAreaReset.title = enabled ? `${anchorEditState.choice}번 문항영역 수정값을 초기화합니다.` : disabledTitle;
+    }
+    if (btnAnchorEditDelete) {
+      const enabled = !!(anchorEditState.enabled && availability.selectedDelete && !saving);
+      btnAnchorEditDelete.disabled = !enabled;
+      const targetLabel = anchorEditState.kind === "question" ? "문제 앵커" : `${anchorEditState.choice}번 문항 앵커`;
+      btnAnchorEditDelete.title = enabled ? `${targetLabel}를 삭제합니다.` : "삭제할 앵커가 없습니다.";
+    }
+    if (btnAnchorEditResetSelected) {
+      const selectedReset = anchorEditState.kind === "question" ? availability.question : availability.choice;
+      const enabled = !!(anchorEditState.enabled && selectedReset && !saving);
+      btnAnchorEditResetSelected.disabled = !enabled;
+      const targetLabel = anchorEditState.kind === "question" ? "문제 앵커" : `${anchorEditState.choice}번 문항 앵커`;
+      btnAnchorEditResetSelected.title = enabled ? `${targetLabel} 수정값을 초기화합니다.` : disabledTitle;
+    }
+    if (btnAnchorEditReset) {
+      const enabled = !!(anchorEditState.enabled && (anchorEditState.choiceAreaEditMode ? availability.choiceAreaAll : availability.allManualAnchors) && !saving);
+      btnAnchorEditReset.disabled = !enabled;
+      btnAnchorEditReset.title = enabled ? (anchorEditState.choiceAreaEditMode ? "수정된 문항영역을 전체 초기화합니다." : "수정된 앵커를 전체 초기화합니다.") : disabledTitle;
+    }
+    if (btnAnchorResetTop) {
+      btnAnchorResetTop.disabled = !availability.allManualAnchors || saving;
+      btnAnchorResetTop.title = availability.allManualAnchors ? "수정된 앵커를 전체 초기화합니다." : disabledTitle;
+    }
+    if (btnChoiceAreaResetTop) {
+      btnChoiceAreaResetTop.disabled = !availability.choiceAreaAll || saving;
+      btnChoiceAreaResetTop.title = availability.choiceAreaAll ? "수정된 문항영역을 전체 초기화합니다." : disabledTitle;
+    }
+  }
+
   function getAnchorChoiceRadiusScale(){
     const scale = Number(state.anchorChoiceRadiusScale);
     return Number.isFinite(scale) ? Math.max(0.25, Math.min(1.6, scale)) : 1;
@@ -4034,6 +4520,14 @@
     if (options.render !== false) scheduleAnchorChoiceRadiusRefresh();
   }
 
+  function stepAnchorChoiceRadius(deltaPercent){
+    const current = Math.round(getAnchorChoiceRadiusScale() * 100);
+    const step = Number(deltaPercent) || 0;
+    const next = Math.max(25, Math.min(160, current + step));
+    setAnchorChoiceRadiusScale(next / 100);
+    setAnchorEditStatus(`문항 앵커 원 크기: ${next}%`);
+  }
+
   function syncAnchorDebugToggleUi(){
     if (!btnAnchorDebugToggle) return;
     btnAnchorDebugToggle.classList.toggle("active", !!ANCHOR_DEBUG);
@@ -4056,9 +4550,9 @@
     if (!btnChoiceAreaEditTop) return;
     const active = !!(anchorEditState.enabled && anchorEditState.choiceAreaEditMode);
     btnChoiceAreaEditTop.classList.toggle("active", active);
-    btnChoiceAreaEditTop.textContent = "문항편집";
+    btnChoiceAreaEditTop.textContent = "영역편집";
     btnChoiceAreaEditTop.setAttribute("aria-pressed", active ? "true" : "false");
-    btnChoiceAreaEditTop.title = active ? "문항편집 끄기" : "문항편집 켜기";
+    btnChoiceAreaEditTop.title = active ? "영역편집 끄기" : "영역편집 켜기";
     btnChoiceAreaEditTop.disabled = !isAdminHost;
   }
 
@@ -4069,6 +4563,7 @@
     syncAnchorDebugToggleUi();
     syncAnchorClickAreaToggleUi();
     syncChoiceAreaEditTopUi();
+    applyAnchorEditResetAvailability();
   }
 
   function updateAnchorDebugUrl(){
@@ -4212,7 +4707,7 @@
       return;
     }
     const rect = getAnchorEditPanelReferenceRect();
-    const panelWidth = anchorEditPanel.offsetWidth || Math.min(520, window.innerWidth - 32);
+    const panelWidth = anchorEditPanel.offsetWidth || Math.min(560, window.innerWidth - 24);
     const panelHeight = anchorEditPanel.offsetHeight || 260;
     const edgeGap = 12;
     const dock = getAnchorEditPanelDock();
@@ -4387,7 +4882,7 @@
       anchorEditPanel.classList.toggle("anchor-mode", !anchorEditState.choiceAreaEditMode);
       anchorEditPanel.classList.toggle("area-mode", !!anchorEditState.choiceAreaEditMode);
     }
-    if (anchorEditTitleText) anchorEditTitleText.textContent = anchorEditState.choiceAreaEditMode ? "문항편집" : "앵커편집";
+    if (anchorEditTitleText) anchorEditTitleText.textContent = anchorEditState.choiceAreaEditMode ? "영역편집" : "앵커편집";
     if (anchorEditOverlayAnchor) {
       anchorEditOverlayAnchor.classList.toggle("active", !anchorEditState.choiceAreaEditMode);
       anchorEditOverlayAnchor.setAttribute("aria-pressed", anchorEditState.choiceAreaEditMode ? "false" : "true");
@@ -4407,10 +4902,10 @@
     if (anchorEditChoice) anchorEditChoice.classList.toggle("active", anchorEditState.kind === "choice");
     if (anchorEditQuestionLock) anchorEditQuestionLock.checked = !!anchorEditState.questionLocked;
     if (anchorEditChoiceRow) anchorEditChoiceRow.classList.toggle("active", anchorEditState.enabled && (anchorEditState.kind === "choice" || state.viewMode === "all"));
-    if (anchorEditChoiceControls) anchorEditChoiceControls.style.display = anchorEditState.kind === "choice" ? "flex" : "none";
+    if (anchorEditChoiceControls) anchorEditChoiceControls.style.display = anchorEditState.kind === "choice" ? "grid" : "none";
     if (anchorEditChoiceAreaReset) {
       anchorEditChoiceAreaReset.disabled = !anchorEditState.enabled || anchorEditState.kind !== "choice";
-      anchorEditChoiceAreaReset.textContent = `${anchorEditState.choice}번 문항 영역 초기화`;
+      anchorEditChoiceAreaReset.textContent = "영역 초기화";
     }
     syncChoiceAreaEditTopUi();
     if (anchorEditModeRow) anchorEditModeRow.classList.toggle("active", anchorEditState.enabled);
@@ -4419,6 +4914,15 @@
       anchorEditModeToggle.classList.toggle("active", dragMode);
       anchorEditModeToggle.textContent = dragMode ? "드래그 편집" : "선택편집";
       anchorEditModeToggle.disabled = state.viewMode !== "all";
+    }
+    if (anchorEditQuestionFind) {
+      const findQuestion = anchorEditState.kind === "question";
+      anchorEditQuestionFind.textContent = findQuestion ? "문제 앵커 찾기" : "문항 앵커 찾기";
+      anchorEditQuestionFind.title = findQuestion ? "선택한 문제 앵커 위치로 이동합니다." : "선택한 문항 앵커 위치로 이동합니다.";
+    }
+    if (anchorEditChoiceFind) {
+      anchorEditChoiceFind.textContent = "문항 앵커 찾기";
+      anchorEditChoiceFind.title = "선택한 문항 앵커 위치로 이동합니다.";
     }
     if (anchorEditChoiceSelect) {
       if (!anchorEditChoiceSelect.options.length || anchorEditChoiceSelect.options.length !== CHOICE_COUNT) {
@@ -4433,7 +4937,6 @@
       anchorEditChoiceSelect.value = String(Math.max(1, Math.min(CHOICE_COUNT, Number(anchorEditState.choice) || 1)));
     }
     syncAnchorChoiceRadiusUi();
-    if (anchorEditChoiceLabel) anchorEditChoiceLabel.textContent = `${anchorEditState.choice}번 문항`;
     if (anchorEditContext) {
       const q = state.viewMode === "single"
         ? Number(state.focusQ)
@@ -4449,16 +4952,17 @@
       anchorEditContext.textContent = `${qLabel} 편집 중 · ${kindLabel}${lockLabel}${modeLabel}`;
     }
     if (btnAnchorEditDelete) {
-      btnAnchorEditDelete.textContent = anchorEditState.kind === "question"
-        ? "문제 앵커 - 삭제"
-        : `${anchorEditState.choice}번 문항 앵커 - 삭제`;
+      btnAnchorEditDelete.textContent = "삭제";
     }
     if (btnAnchorEditResetSelected) {
-      btnAnchorEditResetSelected.textContent = anchorEditState.kind === "question"
-        ? "문제 앵커 - 초기화"
-        : `${anchorEditState.choice}번 문항 앵커 - 초기화`;
+      btnAnchorEditResetSelected.textContent = "초기화";
     }
-    if (btnAnchorEditReset) btnAnchorEditReset.textContent = anchorEditState.choiceAreaEditMode ? "전체 문항영역 초기화" : "전체 초기화";
+    if (btnAnchorEditReset) btnAnchorEditReset.textContent = "전체 초기화";
+    applyAnchorEditResetAvailability();
+    if (btnAnchorEditSave) {
+      btnAnchorEditSave.disabled = !anchorEditState.enabled || anchorEditState.saving || !anchorEditState.dirty;
+      btnAnchorEditSave.title = anchorEditState.dirty ? "변경 사항을 저장합니다." : "저장할 변경 사항이 없습니다.";
+    }
     if (btnAnchorEditUndo) {
       btnAnchorEditUndo.disabled = !anchorEditState.enabled || anchorEditState.saving || !anchorEditState.undoStack.length;
       btnAnchorEditUndo.title = "실행취소: Cmd/Ctrl + Z";
@@ -4469,6 +4973,7 @@
     }
     if (anchorEditDirty) {
       anchorEditDirty.textContent = anchorEditState.saving ? "저장 중" : (anchorEditState.dirty ? "미저장" : "저장됨");
+      anchorEditDirty.dataset.state = anchorEditState.saving ? "saving" : (anchorEditState.dirty ? "dirty" : "saved");
     }
     document.body.classList.toggle("anchor-edit-dragging", anchorEditState.dragging);
     syncAnchorColumnLayerUi();
@@ -4527,13 +5032,13 @@
     syncAnchorEditUi();
     refreshAnchorDebugView();
     setAnchorEditStatus(anchorEditState.choiceAreaEditMode
-      ? `문항편집: ${anchorEditState.choice}번 빨간 문항영역을 드래그하거나 오른쪽 아래를 잡아 조정하세요.`
+      ? `영역편집: ${anchorEditState.choice}번 빨간 문항영역을 드래그하거나 오른쪽 아래를 잡아 조정하세요.`
       : `앵커편집: ${anchorEditState.choice}번 문항 원을 드래그하거나 중심을 클릭하세요.`);
   }
 
   function toggleChoiceAreaEditMode(){
     setChoiceAreaEditModeEnabled(!anchorEditState.choiceAreaEditMode)
-      .catch((err) => setAnchorEditStatus(`문항편집 전환 실패: ${err?.message || err}`));
+      .catch((err) => setAnchorEditStatus(`영역편집 전환 실패: ${err?.message || err}`));
   }
 
   function shiftAnchorEditChoice(delta){
@@ -4772,9 +5277,38 @@
     }
   }
 
+  function cancelScheduledAnchorEditStart(options = {}){
+    if (anchorEditStartTimer) {
+      window.clearTimeout(anchorEditStartTimer);
+      anchorEditStartTimer = 0;
+    }
+    if (options.userCancelled === true) anchorEditStartCancelled = true;
+  }
+
+  function scheduleAnchorEditStart(delayMs = 0){
+    if (!ANCHOR_EDIT_START || !isAdminHost || anchorEditState.enabled || anchorEditStartCancelled) return;
+    if (anchorEditStartRetryCount >= ANCHOR_EDIT_START_RETRY_LIMIT) return;
+    if (anchorEditStartTimer) window.clearTimeout(anchorEditStartTimer);
+    const safeDelay = Math.max(0, Number(delayMs) || 0);
+    anchorEditStartTimer = window.setTimeout(async () => {
+      anchorEditStartTimer = 0;
+      if (!ANCHOR_EDIT_START || !isAdminHost || anchorEditState.enabled || anchorEditStartCancelled) return;
+      anchorEditStartRetryCount += 1;
+      await setAnchorEditEnabled(true, { kind: "question", autoStart: true }).catch(() => {});
+      if (!anchorEditState.enabled && !anchorEditStartCancelled && anchorEditStartRetryCount < ANCHOR_EDIT_START_RETRY_LIMIT) {
+        scheduleAnchorEditStart(hasUsableAnchorEditBase() ? 120 : Math.min(1500, 350 + anchorEditStartRetryCount * 150));
+      }
+    }, safeDelay);
+  }
+
+  async function closeAnchorEditPanel(){
+    await setAnchorEditEnabled(false);
+  }
+
   async function setAnchorEditEnabled(enabled, options = {}){
     const next = enabled === true;
     if (!next) {
+      cancelScheduledAnchorEditStart({ userCancelled: true });
       const ok = await flushAnchorEditBeforeLeave();
       if (!ok) return;
       anchorEditState.enabled = false;
@@ -4794,21 +5328,26 @@
     }
     const areaMode = options.overlay === "area" || options.choiceAreaEditMode === true;
     setAnchorEditOverlayDebugFlags(areaMode, { render: false });
-    if (!currentAnchorMapPath) {
+    if (!currentAnchorMapPath && !state.pdfNav?.anchorMapPath) {
       const pattern = await loadQuestionAnchorPattern({ force: false });
       currentAnchorMapPath = pattern?.anchorMapPath || currentAnchorMapPath;
+      if (currentAnchorMapPath && state.pdfNav) state.pdfNav.anchorMapPath = currentAnchorMapPath;
     }
-    if (!currentAnchorMapPath) {
-      setAnchorEditStatus("저장할 _anchor.json 위치맵이 없습니다. 먼저 위치맵을 생성하세요.");
+    if (!currentAnchorMapPath && !state.pdfNav?.anchorMapPath && !hasUsableAnchorEditBase()) {
+      setAnchorEditStatus("PDF 자동 매핑 분석 후 앵커/문항영역 편집을 시작할 수 있습니다.");
       return;
     }
     const selectedQ = Number(state.focusQ) || anchorEditState.selectedQ || 1;
-    if (state.viewMode === "all") {
-      const totalPages = Math.max(1, (state.allPageCanvases || []).length - 1);
-      await ensureAnchorDetailsForQuestions(getAnchorDetailWindowQuestions(totalPages, selectedQ));
-    } else {
-      await ensureAnchorDetailsForQuestions([selectedQ]);
+    if (currentAnchorMapPath || state.pdfNav?.anchorMapPath) {
+      if (state.viewMode === "all") {
+        const totalPages = Math.max(1, (state.allPageCanvases || []).length - 1);
+        await ensureAnchorDetailsForQuestions(getAnchorDetailWindowQuestions(totalPages, selectedQ));
+      } else {
+        await ensureAnchorDetailsForQuestions([selectedQ]);
+      }
     }
+    cancelScheduledAnchorEditStart();
+    anchorEditStartRetryCount = 0;
     anchorEditState.enabled = true;
     anchorEditState.editOverlay = areaMode ? "area" : "anchor";
     anchorEditState.kind = areaMode ? "choice" : (options.kind || anchorEditState.kind || "choice");
@@ -4832,8 +5371,8 @@
     refreshAnchorDebugView();
     if (areaMode) {
       setAnchorEditStatus(state.viewMode === "all"
-        ? "전체보기 문항편집: 빨간 문항영역을 드래그하거나 오른쪽 아래를 잡아 조정하세요."
-        : "문항편집: 빨간 문항영역을 드래그하거나 오른쪽 아래를 잡아 조정하세요.");
+        ? "전체보기 영역편집: 빨간 문항영역을 드래그하거나 오른쪽 아래를 잡아 조정하세요."
+        : "영역편집: 빨간 문항영역을 드래그하거나 오른쪽 아래를 잡아 조정하세요.");
     } else {
       setAnchorEditStatus(state.viewMode === "all"
         ? "전체보기 앵커편집: 문제/문항 앵커를 선택해 클릭하거나 드래그하세요."
@@ -5067,17 +5606,51 @@
       }
     }
     if (total < Math.max(12, Math.min(80, w * h * 0.002))) return rect;
-    const rowLineLimit = Math.max(18, w * 0.44);
-    const colLineLimit = Math.max(18, h * 0.50);
+    const longestRowRun = (y) => {
+      let best = 0;
+      let run = 0;
+      for (let x = 0; x < w; x += 1){
+        if (dark[y * w + x]) {
+          run += 1;
+          if (run > best) best = run;
+        } else {
+          run = 0;
+        }
+      }
+      return best;
+    };
+    const longestColRun = (x) => {
+      let best = 0;
+      let run = 0;
+      for (let y = 0; y < h; y += 1){
+        if (dark[y * w + x]) {
+          run += 1;
+          if (run > best) best = run;
+        } else {
+          run = 0;
+        }
+      }
+      return best;
+    };
+    const rowLineRunLimit = Math.max(24, w * 0.72);
+    const colLineRunLimit = Math.max(24, h * 0.72);
+    const rowIsLine = new Uint8Array(h);
+    const colIsLine = new Uint8Array(w);
+    for (let y = 0; y < h; y += 1){
+      if (rowCounts[y] >= rowLineRunLimit && longestRowRun(y) >= rowLineRunLimit) rowIsLine[y] = 1;
+    }
+    for (let x = 0; x < w; x += 1){
+      if (colCounts[x] >= colLineRunLimit && longestColRun(x) >= colLineRunLimit) colIsLine[x] = 1;
+    }
     let minX = w;
     let maxX = -1;
     let minY = h;
     let maxY = -1;
     let kept = 0;
     for (let y = 0; y < h; y += 1){
-      if (rowCounts[y] > rowLineLimit) continue;
+      if (rowIsLine[y]) continue;
       for (let x = 0; x < w; x += 1){
-        if (!dark[y * w + x] || colCounts[x] > colLineLimit) continue;
+        if (!dark[y * w + x] || colIsLine[x]) continue;
         minX = Math.min(minX, x);
         maxX = Math.max(maxX, x);
         minY = Math.min(minY, y);
@@ -5191,7 +5764,12 @@
     });
     rows.sort((a, b) => a.y - b.y);
 
+    const singlePointRowCount = rows.filter((row) => row.points.length === 1).length;
+    const verticalChoiceLayout = rows.length >= 3
+      && singlePointRowCount >= Math.max(3, Math.ceil(rows.length * 0.75))
+      && ySpread > Math.max(avgR * 4, xSpread * 0.65);
     const yPad = Math.max(30, avgR * 2.8);
+    const firstRowTopPad = verticalChoiceLayout ? Math.max(24, avgR * 1.8) : yPad;
     const columnWidth = Math.max(1, columnRight - columnLeft);
     const gutter = twoColumnPage ? Math.max(18, canvas.width * 0.018) : 0;
     const textReach = twoColumnPage
@@ -5199,10 +5777,12 @@
       : Math.max(520, avgR * 22);
     const rects = [];
     rows.forEach((row, rowIndex) => {
-      const rowTop = rowIndex === 0 ? row.y - yPad : (rows[rowIndex - 1].y + row.y) * 0.5;
+      const rowTop = rowIndex === 0 ? row.y - firstRowTopPad : (rows[rowIndex - 1].y + row.y) * 0.5;
       const rowBottom = rowIndex === rows.length - 1 ? row.y + yPad : (row.y + rows[rowIndex + 1].y) * 0.5;
       const rowLeftLimit = Math.max(columnLeft, row.minX - Math.max(32, avgR * 2.4));
-      const rowRightLimit = row.points.length > 1
+      const rowRightLimit = verticalChoiceLayout && row.points.length === 1
+        ? Math.max(rowLeftLimit + 24, columnRight - gutter)
+        : row.points.length > 1
         ? Math.max(rowLeftLimit + 24, columnRight - gutter)
         : Math.min(columnRight - gutter, Math.max(row.maxX + Math.max(80, avgR * 5), Math.min(columnRight - gutter, row.maxX + textReach)));
       row.points.forEach((point, idx) => {
@@ -5477,58 +6057,12 @@
     return best;
   }
 
-  function buildFallbackAllModeChoiceAreaPoints(q, pageNo, canvas, meta, pointOrMeta = null){
-    const segmentList = Array.isArray(state.pdfNav?.questionSegments?.[String(q)]) ? state.pdfNav.questionSegments[String(q)] : [];
-    const segment = segmentList.find((item) => Number(item?.page) === Number(pageNo) && Number(item?.bottom) > Number(item?.top));
-    const bounds = getStoredQuestionColumnBoundsForPage(pageNo, q);
-    const pageMap = state.pdfNav?.questionPageMap;
-    const topMap = state.pdfNav?.questionTopRatioMap;
-    const top = Number(segment?.top ?? anchorEditMapValue(topMap, q));
-    const nextTop = Array.isArray(pageMap) && Array.isArray(topMap) && Number(pageMap[Number(q) + 1]) === Number(pageNo)
-      ? Number(topMap[Number(q) + 1])
-      : NaN;
-    if (!Number.isFinite(top)) return [];
-    const bottom = Number.isFinite(Number(segment?.bottom))
-      ? Number(segment.bottom)
-      : (Number.isFinite(nextTop) && nextTop > top ? Math.max(top + 0.04, nextTop - 0.008) : Math.min(1, top + 0.18));
-    const left = Number.isFinite(Number(segment?.left)) ? Number(segment.left) : (Number.isFinite(Number(bounds?.left)) ? Number(bounds.left) : (Number(pointOrMeta?.xRatio) >= 0.5 ? 0.50 : 0));
-    const right = Number.isFinite(Number(segment?.right)) ? Number(segment.right) : (Number.isFinite(Number(bounds?.right)) ? Number(bounds.right) : (left >= 0.5 ? 1 : 0.5));
-    if (![top, bottom, left, right].every(Number.isFinite) || bottom <= top || right <= left) return [];
-    const fullWidth = Math.max(1, Number(meta.fullWidth || 1));
-    const fullHeight = Math.max(1, Number(meta.fullHeight || 1));
-    const sx = Number(meta.srcWidth || fullWidth) / Math.max(1, Number(canvas.width || 1));
-    const sy = fullHeight / Math.max(1, Number(canvas.height || 1));
-    const startY = top + (bottom - top) * 0.52;
-    const stepY = Math.max(0.018, (bottom - startY) / Math.max(CHOICE_COUNT, 1));
-    const xRatio = Math.max(left + 0.035, Math.min(right - 0.035, left + (right - left) * 0.10));
-    const points = [];
-    for (let choice = 1; choice <= CHOICE_COUNT; choice += 1) {
-      const yRatio = Math.max(top + 0.02, Math.min(bottom - 0.01, startY + stepY * (choice - 1)));
-      const x = ((xRatio * fullWidth) - Number(meta.srcLeft || 0)) / sx;
-      const y = (yRatio * fullHeight) / sy;
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-      points.push({
-        q: Number(q),
-        choice,
-        page: Number(pageNo),
-        x,
-        y,
-        r: Math.max(14, Math.min(24, canvas.width * 0.012)),
-        anchor: { q: Number(q), choice, page: Number(pageNo), xRatio, yRatio, wRatio: 0.018, hRatio: 0.018, source: "fallback-click-area", anchorMode: "center" },
-      });
-    }
-    return points;
-  }
-
-  function buildAllModeChoiceAreaPoints(q, pageNo, pointOrMeta = null){
-    const canvas = pointOrMeta?.canvas || state.allPageCanvases?.[pageNo];
-    const meta = pointOrMeta?.meta || state.allPageCanvasMeta?.[pageNo];
-    if (!canvas || !meta || !Number.isFinite(Number(q)) || !Number.isFinite(Number(pageNo))) return [];
+  function buildAllModeChoicePointsFromAnchors(anchors, q, pageNo, canvas, meta, pointOrMeta = null){
+    if (!canvas || !meta || !Array.isArray(anchors)) return [];
     const fullWidth = Math.max(1, Number(pointOrMeta?.fullWidth || meta.fullWidth || 1));
     const fullHeight = Math.max(1, Number(pointOrMeta?.fullHeight || meta.fullHeight || 1));
-    const anchors = getReliableChoiceAnchorsForQuestion(q, pageNo);
     const points = [];
-    for (const item of (Array.isArray(anchors) ? anchors : [])){
+    for (const item of anchors){
       if (Number(item?.page || pageNo) !== Number(pageNo)) continue;
       if (pointOrMeta?.xRatio != null && !isAnchorSameColumnAsPoint(item, pointOrMeta)) continue;
       const choice = Number(item.choice);
@@ -5546,8 +6080,35 @@
       if (!projected || !Number.isFinite(projected.x) || !Number.isFinite(projected.y)) continue;
       points.push({ q: Number(q), choice, page: Number(pageNo), x: projected.x, y: projected.y, r: projected.r, anchor: item });
     }
-    if (points.length || pointOrMeta?.allowFallback === false) return points;
-    return buildFallbackAllModeChoiceAreaPoints(q, pageNo, canvas, meta, pointOrMeta);
+    return points;
+  }
+
+  function buildAllModeChoiceAreaPoints(q, pageNo, pointOrMeta = null){
+    const canvas = pointOrMeta?.canvas || state.allPageCanvases?.[pageNo];
+    const meta = pointOrMeta?.meta || state.allPageCanvasMeta?.[pageNo];
+    if (!canvas || !meta || !Number.isFinite(Number(q)) || !Number.isFinite(Number(pageNo))) return [];
+    const anchors = getReliableChoiceAnchorsForQuestion(q, pageNo);
+    return buildAllModeChoicePointsFromAnchors(Array.isArray(anchors) ? anchors : [], q, pageNo, canvas, meta, pointOrMeta);
+  }
+
+  async function buildAllModeChoiceAreaPointsAsync(q, pageNo, pointOrMeta = null){
+    const canvas = pointOrMeta?.canvas || state.allPageCanvases?.[pageNo];
+    const meta = pointOrMeta?.meta || state.allPageCanvasMeta?.[pageNo];
+    if (!canvas || !meta || !Number.isFinite(Number(q)) || !Number.isFinite(Number(pageNo))) return [];
+    const syncPoints = buildAllModeChoiceAreaPoints(q, pageNo, { ...pointOrMeta, canvas, meta });
+    if (syncPoints.length || pointOrMeta?.allowFallback === false) return syncPoints;
+    const segment = getStoredQuestionSegment(q, pageNo);
+    const options = segment
+      ? { startRatio: Number(segment.top), endRatio: Number(segment.bottom) }
+      : null;
+    let anchors = [];
+    try{
+      anchors = await getChoiceAnchorsForQuestion(pageNo, q, options);
+      if (Array.isArray(anchors) && anchors.length) state.questionChoiceAnchorCache[`${Number(pageNo)}:${Number(q)}`] = anchors;
+    }catch(_){
+      anchors = [];
+    }
+    return buildAllModeChoicePointsFromAnchors(Array.isArray(anchors) ? anchors : [], q, pageNo, canvas, meta, pointOrMeta);
   }
 
   function getAllChoiceClickAreaEditHitFromEvent(e){
@@ -5839,7 +6400,7 @@
     if (!hit) {
       if (anchorEditState.choiceAreaEditMode) {
         e.preventDefault();
-        setAnchorEditStatus("문항편집 중에는 빨간 영역 내부를 드래그하거나 오른쪽 아래 핸들을 잡아 조정하세요.");
+        setAnchorEditStatus("영역편집 중에는 빨간 영역 내부를 드래그하거나 오른쪽 아래 핸들을 잡아 조정하세요.");
       }
       return;
     }
@@ -6427,12 +6988,17 @@
       syncAnchorEditUi();
       return true;
     }
-    const anchorMapPath = currentAnchorMapPath || state.pdfNav?.anchorMapPath || "";
+    const anchorMapPath = getWritableAnchorMapPath();
     if (!anchorMapPath) {
-      setAnchorEditStatus("저장할 _anchor.json 위치맵이 없습니다.");
+      setAnchorEditStatus("저장할 _anchor.json 위치맵 경로를 찾지 못했습니다.");
       return false;
     }
-    const payload = JSON.stringify({ anchorMapPath, patch });
+    const payloadBody = buildAnchorManualSavePayload(anchorMapPath, patch);
+    if (!payloadBody.baseAnchorData && !(currentAnchorMapPath || state.pdfNav?.anchorMapPath)) {
+      setAnchorEditStatus("저장할 PDF 자동 매핑 결과가 없습니다. 잠시 후 다시 시도하세요.");
+      return false;
+    }
+    const payload = JSON.stringify(payloadBody);
     const snapshot = patch;
     anchorEditState.patch = createEmptyAnchorEditPatch();
     anchorEditState.dirty = false;
@@ -6453,10 +7019,32 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
-        currentAnchorMapPath = data.anchorMap || anchorMapPath;
+        const hasAnchorMapField = Object.prototype.hasOwnProperty.call(data, "anchorMap");
+        currentAnchorMapPath = hasAnchorMapField ? (data.anchorMap || "") : anchorMapPath;
+        state.pdfNav.anchorMapPath = currentAnchorMapPath || null;
         state.pdfNav.generatedAt = data.generatedAt || new Date().toISOString();
-        state.pdfNav.manualEditedAt = data.manualEditedAt || state.pdfNav.generatedAt;
+        state.pdfNav.manualEditedAt = data.manualEditedAt || "";
         questionAnchorMapPromise = null;
+        setAnchorDetailPath(currentAnchorMapPath, data.anchorData ? getAnchorDetailVersionKey(data.anchorData) : "");
+        if (data.anchorData) {
+          const pattern = anchorMapToPdfPattern(data.anchorData);
+          if (pattern) {
+            pattern.anchorMapPath = currentAnchorMapPath;
+            pattern.manualEditedAt = data.manualEditedAt || data.anchorData?.manualEditedAt || "";
+            applyPdfPatternResult(pattern, "anchor");
+          }
+        } else if (!currentAnchorMapPath && data.deleted) {
+          state.pdfNav.patternSource = "realtime";
+          state.pdfNav.manualEditedAt = "";
+          state.pdfNav.anchorMapPath = null;
+          state.pdfNav.questionAnchorMap = null;
+          state.pdfNav.questionSegments = null;
+          state.pdfNav.choiceAnchorMap = null;
+          state.pdfNav.choiceClickAreaMap = null;
+          state.pdfNav._manualBase = null;
+          updatePdfInfo();
+          refreshAnchorDebugView();
+        }
         anchorEditState.lastSavedAt = state.pdfNav.manualEditedAt;
         setAnchorEditStatus("저장 되었습니다.");
         showToastAndSnackbar("저장 되었습니다.");
@@ -6487,7 +7075,7 @@
 
   async function handleAnchorEditCanvasClick(e){
     if (anchorEditState.choiceAreaEditMode) {
-      setAnchorEditStatus("문항편집 중에는 빨간 문항영역을 드래그하거나 리사이즈하세요. 문항 앵커 위치는 변경하지 않습니다.");
+      setAnchorEditStatus("영역편집 중에는 빨간 문항영역을 드래그하거나 리사이즈하세요. 문항 앵커 위치는 변경하지 않습니다.");
       return true;
     }
     const point = getSinglePdfPointFromEvent(e);
@@ -6503,7 +7091,7 @@
 
   async function handleAnchorEditAllCanvasClick(e){
     if (anchorEditState.choiceAreaEditMode) {
-      setAnchorEditStatus("문항편집 중에는 빨간 문항영역을 드래그하거나 리사이즈하세요. 문항 앵커 위치는 변경하지 않습니다.");
+      setAnchorEditStatus("영역편집 중에는 빨간 문항영역을 드래그하거나 리사이즈하세요. 문항 앵커 위치는 변경하지 않습니다.");
       return true;
     }
     const point = getAllCanvasPointFromEvent(e);
@@ -6650,6 +7238,7 @@
     setPdfLoading(true, "PDF 경로 확인 중...");
     state.questionPdfBaseUrl = await resolveExistingPdfUrl(QUESTION_PDF_URL, "question");
     state.answerPdfBaseUrl = await resolveExistingPdfUrl(ANSWER_PDF_URL, "answer");
+    syncAnswerDocumentButtonLabel();
     state.answerPdfDoc = null;
     state.answerPdfDocLoading = null;
     state.answerKeyDynamic = null;
@@ -6680,11 +7269,7 @@
     if (!loadedAnswerKey && /\.pdf(?:$|[?#])/i.test(String(ANSWER_PDF_URL || ""))) {
       await buildDynamicAnswerKeyFromPdf({ silent: true });
     }
-    if (ANCHOR_EDIT_START && isAdminHost) {
-      window.setTimeout(() => {
-        setAnchorEditEnabled(true, { kind: "question" }).catch(() => {});
-      }, 500);
-    }
+    scheduleAnchorEditStart(500);
   }
 
   function getPdfPageByQuestion(q){
@@ -6832,6 +7417,7 @@
     state.pdfNav.questionSegments = pattern.questionSegments && typeof pattern.questionSegments === "object" ? pattern.questionSegments : null;
     state.pdfNav.choiceAnchorMap = pattern.choiceAnchorMap && typeof pattern.choiceAnchorMap === "object" ? pattern.choiceAnchorMap : null;
     state.pdfNav.choiceClickAreaMap = pattern.choiceClickAreaMap && typeof pattern.choiceClickAreaMap === "object" ? pattern.choiceClickAreaMap : null;
+    state.pdfNav._manualBase = pattern._manualBase && typeof pattern._manualBase === "object" ? pattern._manualBase : null;
     state.pdfNav.contentBands = Array.isArray(pattern.contentBands) ? pattern.contentBands : null;
     state.pdfNav.footerBand = pattern.footerBand || null;
     state.pdfNav.confidence = Number.isFinite(Number(pattern.confidence)) ? Number(pattern.confidence) : 0;
@@ -6839,6 +7425,7 @@
     state.pdfNav.generatedAt = typeof pattern.generatedAt === "string" ? pattern.generatedAt : new Date().toISOString(); // SOFTM-위치맵: 적용된 패턴의 생성 시각을 저장해 stale 캐시를 판별 - 2026-05-30
     state.pdfNav.manualEditedAt = typeof pattern.manualEditedAt === "string" ? pattern.manualEditedAt : "";
     state.pdfNav.version = PDF_MAP_VERSION;
+    applyAnchorEditResetAvailability();
     if (state.pdfNav.anchorMapPath) setAnchorDetailPath(state.pdfNav.anchorMapPath, getAnchorDetailVersionKey(state.pdfNav));
     mergeAnchorDetailData(pattern);
     clearPdfAnalysisCaches();
@@ -6854,6 +7441,7 @@
         }
       });
     }
+    scheduleAnchorEditStart(0);
   }
 
   function makeRowsFromTextLayer(layer, yTolerance = 2.2){
@@ -7169,6 +7757,7 @@
     state.pdfNav.questionSegments = null;
     state.pdfNav.choiceAnchorMap = null;
     state.pdfNav.choiceClickAreaMap = null;
+    state.pdfNav._manualBase = null;
     state.pdfNav.contentBands = null;
     state.pdfNav.footerBand = null;
     state.pdfNav.confidence = 0.3;
@@ -9944,9 +10533,23 @@
     return true;
   }
 
-  function drawChoiceAnchorDebugMarkersAll(pageNo, q){
+  async function drawChoiceAnchorDebugMarkersAll(pageNo, q){
     if (!ANCHOR_DEBUG || !Number.isFinite(pageNo) || !Number.isFinite(q)) return false;
-    const list = getReliableChoiceAnchorsForQuestion(q, pageNo);
+    let sourceTone = "anchor";
+    let list = getReliableChoiceAnchorsForQuestion(q, pageNo);
+    if (!Array.isArray(list) || !list.length) {
+      sourceTone = "pdf";
+      const segment = getStoredQuestionSegment(q, pageNo);
+      const options = segment
+        ? { startRatio: Number(segment.top), endRatio: Number(segment.bottom) }
+        : null;
+      try{
+        list = await getChoiceAnchorsForQuestion(pageNo, q, options);
+        if (Array.isArray(list) && list.length) state.questionChoiceAnchorCache[`${Number(pageNo)}:${Number(q)}`] = list;
+      }catch(_){
+        list = [];
+      }
+    }
     if (!Array.isArray(list) || !list.length) return false;
     const canvas = state.allPageCanvases[pageNo];
     const meta = state.allPageCanvasMeta[pageNo];
@@ -9973,19 +10576,20 @@
       const printed = localQuestionNoToPrinted(q);
       drawDebugChoiceCircle(ctx, x, y, formatPrintedChoiceLabel(q, choice), {
         r: projected?.r,
-        source: Number.isFinite(printed) && printed !== q ? `앱${q} ${item.source || ""}`.trim() : item.source
+        source: Number.isFinite(printed) && printed !== q ? `앱${q} ${item.source || sourceTone}`.trim() : (item.source || sourceTone),
+        tone: sourceTone
       });
       drawn = true;
     }
     return drawn;
   }
 
-  function drawChoiceClickAreasAll(pageNo, q){
+  async function drawChoiceClickAreasAll(pageNo, q){
     if (!ANCHOR_CLICK_AREA_DEBUG || !Number.isFinite(pageNo) || !Number.isFinite(q)) return false;
     const canvas = state.allPageCanvases[pageNo];
     const meta = state.allPageCanvasMeta[pageNo];
     if (!canvas || !meta) return false;
-    const points = buildAllModeChoiceAreaPoints(q, pageNo, { canvas, meta, fullWidth: meta.fullWidth, fullHeight: meta.fullHeight });
+    const points = await buildAllModeChoiceAreaPointsAsync(q, pageNo, { canvas, meta, fullWidth: meta.fullWidth, fullHeight: meta.fullHeight });
     const rects = getChoiceClickAreaCanvasRects(q, pageNo, canvas, meta, points);
     if (!rects.length) return false;
     const ctx = canvas.getContext("2d");
@@ -10089,8 +10693,8 @@
         if (!Number.isFinite(pageNo)) continue;
         const safePage = Math.max(1, Math.min(totalPages, Math.floor(pageNo)));
         if (ANCHOR_DEBUG) drawAnchorDebugMarkerAll(safePage, q);
-        drawChoiceClickAreasAll(safePage, q);
-        if (ANCHOR_DEBUG) drawChoiceAnchorDebugMarkersAll(safePage, q);
+        await drawChoiceClickAreasAll(safePage, q);
+        if (ANCHOR_DEBUG) await drawChoiceAnchorDebugMarkersAll(safePage, q);
         if (q % 12 === 0) await waitForNextFrame();
       }
     }
@@ -10114,8 +10718,8 @@
         if (!Number.isFinite(pageNo)) continue;
         const safePage = Math.max(1, Math.min(totalPages, Math.floor(pageNo)));
         if (ANCHOR_DEBUG) drawAnchorDebugMarkerAll(safePage, q);
-        drawChoiceClickAreasAll(safePage, q);
-        if (ANCHOR_DEBUG) drawChoiceAnchorDebugMarkersAll(safePage, q);
+        await drawChoiceClickAreasAll(safePage, q);
+        if (ANCHOR_DEBUG) await drawChoiceAnchorDebugMarkersAll(safePage, q);
         if (q % 12 === 0) await waitForNextFrame();
       }
     }
@@ -10836,6 +11440,10 @@
   function getReliableChoiceAnchorsForQuestion(q, pageNo = null, options = {}){
     const stored = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
     if (stored.length) return stored;
+    if (Number.isFinite(Number(pageNo))) {
+      const cached = state.questionChoiceAnchorCache?.[`${Number(pageNo)}:${Number(q)}`];
+      if (Array.isArray(cached) && cached.length) return cached.filter((item) => Number(item?.page || pageNo) === Number(pageNo));
+    }
     return getSegmentFallbackChoiceAnchors(q, pageNo, options);
   }
   // SOFTM-위치맵: 짧은 문항은 새 문제를 만들지 않고 기존 문제영역 안에서만 한 줄 보기 앵커를 제한적으로 추정 - 2026-06-02
@@ -11512,6 +12120,7 @@
       state.pdfNav.questionSegments = null;
       state.pdfNav.choiceAnchorMap = null;
       state.pdfNav.choiceClickAreaMap = null;
+      state.pdfNav._manualBase = null;
       state.pdfNav.contentBands = null;
       state.pdfNav.footerBand = null;
       state.pdfNav.confidence = 0.2;
@@ -11915,7 +12524,11 @@
             e.preventDefault();
             return;
           }
-          commitQuestionAnswer(q, c);
+          commitQuestionAnswer(q, c, {
+            advance: false,
+            scrollPdf: state.viewMode === "all",
+            history: "push",
+          });
         });
 
         choices.appendChild(lab);
@@ -12067,6 +12680,7 @@
     const q = getUrlFocusQuestion() || state.focusQ || 1;
     const mode = getUrlViewMode();
     if (mode) state.viewMode = mode;
+    updateViewModeUi();
     suppressPdfScrollFocusSync();
     focusCard(q, false, { scrollPdf: true, history: false });
   });
