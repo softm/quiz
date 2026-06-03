@@ -447,7 +447,20 @@ function fillMissingAnchors(anchorByLocal, pageCount, questionCount){
       const ratio = (q - prev.q) / span;
       const interpolatedPage = Math.round(prev.page + ((next.page - prev.page) * ratio));
       pageMap[q] = Math.max(1, Math.min(pageCount || next.page || prev.page || 1, interpolatedPage));
-      if (prev.page === next.page) {
+      if (
+        prev.page === next.page
+        && Number.isFinite(Number(prev.anchorColumn))
+        && Number.isFinite(Number(next.anchorColumn))
+        && Number(prev.anchorColumn) !== Number(next.anchorColumn)
+      ) {
+        pageMap[q] = prev.page;
+        const missingCount = Math.max(1, next.q - prev.q - 1);
+        const missingIndex = Math.max(1, q - prev.q);
+        const pageTail = Number(prev.anchorColumn) < Number(next.anchorColumn) ? 0.91 : 0.86;
+        const laneProgress = Math.min(1, missingIndex / missingCount);
+        topMap[q] = Number(prev.yRatio) + ((pageTail - Number(prev.yRatio)) * laneProgress);
+        // SOFTM-위치맵: 2단 같은 페이지에서 왼쪽 컬럼 끝 문제번호가 빠진 경우 오른쪽 컬럼 첫 문제와 세로 보간하지 않고 현재 컬럼 하단으로 배치 - 2026-06-03
+      } else if (prev.page === next.page) {
         topMap[q] = prev.yRatio + ((next.yRatio - prev.yRatio) * ratio);
       } else if (Number(prev.anchorColumn || 0) === 1) {
         const projected = Number(prev.yRatio) + (0.125 * (q - prev.q));
@@ -640,6 +653,104 @@ function buildQuestionColumnBoundsMap(anchorByLocal, pageMap, questionCount, pag
   return out;
 }
 // SOFTM-위치맵: 2단 PDF의 선택지 탐색과 풀이 화면 크롭을 현재 문항 컬럼으로 제한하기 위한 컬럼 경계 저장 - 2026-06-01
+
+function completeQuestionLabelMap(anchorByLocal, pageMap, topMap, questionColumnBoundsMap, questionCount){
+  const out = {};
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const sameLane = (a, b) => {
+    if (!a || !b) return true;
+    const ac = Number(a.column);
+    const bc = Number(b.column);
+    if (Number.isFinite(ac) && Number.isFinite(bc)) return ac === bc;
+    const al = Number(a.left);
+    const ar = Number(a.right);
+    const bl = Number(b.left);
+    const br = Number(b.right);
+    if (![al, ar, bl, br].every(Number.isFinite)) return true;
+    return Math.max(al, bl) < Math.min(ar, br) - 0.08;
+  };
+  const boundsFor = (q) => {
+    const bounds = questionColumnBoundsMap[String(q)] || {};
+    return {
+      page: Number(pageMap[q]),
+      left: Number.isFinite(Number(bounds.left)) ? Number(bounds.left) : 0,
+      right: Number.isFinite(Number(bounds.right)) ? Number(bounds.right) : 1,
+      column: Number.isFinite(Number(bounds.column)) ? Number(bounds.column) : null,
+    };
+  };
+  for (const [q, anchor] of anchorByLocal.entries()){
+    out[String(q)] = {
+      page: anchor.page,
+      xRatio: anchor.xRatio,
+      yRatio: anchor.yRatio,
+      anchorColumn: Number(anchor.anchorColumn || 0),
+    };
+  }
+  const knownXForLane = (q) => {
+    const page = Number(pageMap[q]);
+    const lane = boundsFor(q);
+    const xs = [];
+    for (let other = 1; other <= questionCount; other += 1){
+      const label = out[String(other)];
+      if (!label || Number(label.page) !== page) continue;
+      if (!sameLane(lane, boundsFor(other))) continue;
+      const x = Number(label.xRatio);
+      if (Number.isFinite(x)) xs.push(x);
+    }
+    xs.sort((a, b) => a - b);
+    if (xs.length) return xs[Math.floor(xs.length / 2)];
+    const left = Number.isFinite(lane.left) ? lane.left : 0;
+    const right = Number.isFinite(lane.right) ? lane.right : 1;
+    const width = Math.max(0.10, right - left);
+    return clamp(left + Math.min(0.050, width * 0.095), 0.025, 0.92);
+  };
+  for (let q = 1; q <= questionCount; q += 1){
+    if (out[String(q)]) continue;
+    const page = Number(pageMap[q]);
+    const top = Number(topMap[q]);
+    if (!Number.isFinite(page) || !Number.isFinite(top)) continue;
+    const lane = boundsFor(q);
+    let prev = null;
+    let next = null;
+    for (let other = q - 1; other >= 1; other -= 1){
+      const label = out[String(other)];
+      if (!label || Number(label.page) !== page) continue;
+      if (!sameLane(lane, boundsFor(other))) continue;
+      prev = { q: other, label };
+      break;
+    }
+    for (let other = q + 1; other <= questionCount; other += 1){
+      const label = out[String(other)];
+      if (!label || Number(label.page) !== page) continue;
+      if (!sameLane(lane, boundsFor(other))) continue;
+      next = { q: other, label };
+      break;
+    }
+    let yRatio = null;
+    if (prev && next && next.q > prev.q) {
+      const prevY = Number(prev.label.yRatio);
+      const nextY = Number(next.label.yRatio);
+      const t = (q - prev.q) / Math.max(1, next.q - prev.q);
+      if (Number.isFinite(prevY) && Number.isFinite(nextY) && nextY > prevY + 0.030) {
+        yRatio = prevY + ((nextY - prevY) * t);
+      }
+    }
+    if (!Number.isFinite(yRatio)) {
+      const hasNextSameLane = !!next;
+      yRatio = hasNextSameLane ? top + 0.055 : top;
+    }
+    out[String(q)] = {
+      page,
+      xRatio: knownXForLane(q),
+      yRatio: clamp(yRatio, 0.040, 0.965),
+      anchorColumn: Number.isFinite(lane.column) ? lane.column : 0,
+      inferred: true,
+      source: "inferred-column-flow",
+    };
+  }
+  return out;
+}
+// SOFTM-위치맵: 2단 OCR에서 빠진 문제번호 라벨을 같은 컬럼 흐름으로 보간해 저장 좌표와 선택지 탐색 경계를 안정화 - 2026-06-03
 
 function sameSegmentLane(a, b){
   if (!a || !b) return true;
@@ -2293,15 +2404,7 @@ async function main(){
     const pageColumnLayoutMap = buildQuestionColumnLayoutMap(cropMeta);
     const questionColumnBoundsMap = buildQuestionColumnBoundsMap(anchorByLocal, pageMap, questionCount, pageColumnLayoutMap);
     let questionSegments = {};
-    const questionLabelMap = {};
-    for (const [q, anchor] of anchorByLocal.entries()){
-      questionLabelMap[String(q)] = {
-        page: anchor.page,
-        xRatio: anchor.xRatio,
-        yRatio: anchor.yRatio,
-        anchorColumn: Number(anchor.anchorColumn || 0),
-      };
-    }
+    const questionLabelMap = completeQuestionLabelMap(anchorByLocal, pageMap, topMap, questionColumnBoundsMap, questionCount);
     let baseQuestionSegments = buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questionCount, {}, questionLabelMap);
     // SOFTM-위치맵: 보기 탐색 시 문제번호 라벨 자체를 선택지로 착각하지 않도록 원본 라벨 좌표를 전달 - 2026-05-30
     const printedQuestionNoMap = Array(questionCount + 1).fill(null);

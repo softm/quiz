@@ -17,6 +17,7 @@ const mimeTypes = {
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".pdf": "application/pdf",
+  ".svg": "image/svg+xml",
   ".hwp": "application/octet-stream",
   ".hwpx": "application/octet-stream",
   ".txt": "text/plain; charset=utf-8",

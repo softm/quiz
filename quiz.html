@@ -230,9 +230,13 @@
     }
     #pdfAllPages{
       display:none;
+      position:relative;
+      isolation:isolate;
     }
     #pdfAllPages .pdfPageCanvas{
       display:block;
+      position:relative;
+      z-index:1;
       width:100%;
       height:auto;
       border:1px solid var(--line);
@@ -696,8 +700,31 @@
     .qcard:active{
       background:var(--card) !important;
     }
-    .choice.correct{outline:2px solid rgba(39,209,127,.8)}
-    .choice.wrong{outline:2px solid rgba(255,77,109,.85)}
+    .choice.correct{
+      color:#004eea;
+      border-color:rgba(0,78,234,.5);
+      background:rgba(0,78,234,.06);
+      text-decoration:underline;
+      text-decoration-thickness:2px;
+      text-underline-offset:3px;
+      font-weight:800;
+    }
+    .choice.wrong{
+      color:var(--text);
+      border-color:rgba(255,77,109,.55);
+      background:rgba(255,77,109,.04);
+      outline:0;
+      box-shadow:none;
+      text-decoration-line:line-through;
+      text-decoration-color:#e0000a;
+      text-decoration-thickness:2px;
+      font-weight:700;
+    }
+    .choice.correct.wrong{
+      color:#004eea;
+      text-decoration-line:underline;
+      text-decoration-color:#004eea;
+    }
     .choice.disabled{cursor:not-allowed; filter:grayscale(.2);}
 
     .footerNote{
@@ -870,7 +897,8 @@
       margin-top:6px;
     }
     .anchorEditKindRow{
-      justify-content:space-between;
+      justify-content:flex-start;
+      align-items:stretch;
       padding:6px;
       border:1px solid rgba(148,163,184,.24);
       border-radius:12px;
@@ -881,6 +909,8 @@
       align-items:center;
       flex-wrap:wrap;
       gap:6px;
+      flex:1 1 260px;
+      min-width:0;
     }
     .anchorEditActions.bottom{
       justify-content:space-between;
@@ -983,11 +1013,13 @@
       display:contents;
     }
     .anchorEditModeRow{
-      margin:0 0 0 auto;
+      margin:0;
       padding:0;
       border:0;
       background:transparent;
       align-items:center;
+      justify-content:flex-start;
+      flex:0 1 auto;
       gap:8px;
     }
     .anchorEditModeRow.active{display:flex}
@@ -1145,13 +1177,13 @@
     body.anchor-editing .viewer{box-shadow:0 0 0 3px rgba(37,99,235,.18) inset}
     body.anchor-editing.anchor-area-editing .viewer{box-shadow:0 0 0 3px rgba(220,38,38,.16) inset}
     body.anchor-edit-panel-left .anchorEditActions:not(.bottom),
-    body.anchor-edit-panel-left .anchorEditChoiceRow{justify-content:flex-start}
     body.anchor-edit-panel-right .anchorEditActions:not(.bottom),
-    body.anchor-edit-panel-right .anchorEditChoiceRow{justify-content:flex-end}
     body.anchor-edit-panel-top .anchorEditActions:not(.bottom),
     body.anchor-edit-panel-bottom .anchorEditActions:not(.bottom),
+    body.anchor-edit-panel-left .anchorEditChoiceRow,
+    body.anchor-edit-panel-right .anchorEditChoiceRow,
     body.anchor-edit-panel-top .anchorEditChoiceRow,
-    body.anchor-edit-panel-bottom .anchorEditChoiceRow{justify-content:center}
+    body.anchor-edit-panel-bottom .anchorEditChoiceRow{justify-content:flex-start}
     .anchorDragGhost{
       position:fixed;
       z-index:80;
@@ -1840,6 +1872,22 @@
     body.theme-dark .choice.selected:active{
       background:rgba(139,192,255,.08) !important;
     }
+    body.theme-dark .choice.correct{
+      color:#8bc0ff;
+      border-color:rgba(139,192,255,.7);
+      background:rgba(139,192,255,.10);
+      text-decoration-color:#8bc0ff;
+    }
+    body.theme-dark .choice.wrong{
+      color:#e7edf7;
+      border-color:rgba(255,107,129,.7);
+      background:rgba(255,107,129,.08);
+      text-decoration-color:#ff475b;
+    }
+    body.theme-dark .choice.correct.wrong{
+      color:#8bc0ff;
+      text-decoration-color:#8bc0ff;
+    }
     body.answer-hwp-document #openA{
       display:inline-flex !important;
     }
@@ -2132,8 +2180,8 @@
   const PDF_ANCHOR_MANUAL_SAVE_URL = "/api/admin/anchor-manual";
   const PDF_ANCHOR_MANUAL_DELETE_URL = "/api/admin/anchor-manual-delete";
   const PDF_PATTERN_VERSION = 3;
-  const CROP_CACHE_VERSION = 50; // SOFTM-위치맵: 단일 세그먼트 크롭도 선택지 하단을 포함하도록 보정 - 2026-06-01
-  const GRADE_MARKER_VERSION = 15;
+  const CROP_CACHE_VERSION = 58; // SOFTM-위치맵: 2단 컬럼 crop은 단일보기에서 추가 확대하지 않도록 보정 - 2026-06-03
+  const GRADE_MARKER_VERSION = 20;
   const PRESET_PAGE_ANCHORS = {
     "2022년 제19회 농산물품질관리사 1차": [1,6,10,14,18,22,26,33,39,47,51,57,64,70,76,81,87,94],
     "2023년 제20회 농산물품질관리사 1차": [1,5,10,15,19,23,26,34,40,48,51,57,64,70,76,83,90,97],
@@ -2259,11 +2307,11 @@
   // SOFTM-위치맵: 앱 내부 문항 번호와 PDF 인쇄 문제번호가 다를 수 있어 디버그/표시용 인쇄번호 변환을 분리 - 2026-05-30
   /* SOFTM-KNOU 끝 */
   const SINGLE_CROP_OVERRIDES = {};
-  const GRADE_MARKER_SVG = {
-    ok: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 160\"><defs><filter id=\"softShadow\" x=\"-30%\" y=\"-30%\" width=\"160%\" height=\"160%\"><feDropShadow dx=\"0\" dy=\"5\" stdDeviation=\"4\" flood-color=\"#064e3b\" flood-opacity=\"0.24\"/></filter><linearGradient id=\"okInk\" x1=\"22\" y1=\"18\" x2=\"132\" y2=\"142\" gradientUnits=\"userSpaceOnUse\"><stop stop-color=\"#10b981\"/><stop offset=\"0.55\" stop-color=\"#059669\"/><stop offset=\"1\" stop-color=\"#047857\"/></linearGradient></defs><g filter=\"url(#softShadow)\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M80 19c35 0 62 24 62 57 0 37-28 65-64 65-34 0-61-24-61-58 0-35 28-64 63-64Z\" stroke=\"url(#okInk)\" stroke-width=\"12\"/><path d=\"M80 31c28 0 50 20 50 47 0 29-22 51-51 51-27 0-50-20-50-48 0-29 23-50 51-50Z\" stroke=\"#34d399\" stroke-width=\"4\" opacity=\"0.9\"/><path d=\"M53 82c9 11 17 19 27 28 17-28 35-49 58-70\" stroke=\"#ecfdf5\" stroke-width=\"9\" opacity=\"0.95\"/><path d=\"M52 80c9 11 18 20 28 29 17-28 35-50 57-70\" stroke=\"#047857\" stroke-width=\"5\" opacity=\"0.92\"/></g></svg>",
-    bad: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 160\"><defs><filter id=\"softShadow\" x=\"-30%\" y=\"-30%\" width=\"160%\" height=\"160%\"><feDropShadow dx=\"0\" dy=\"5\" stdDeviation=\"4\" flood-color=\"#7f1d1d\" flood-opacity=\"0.25\"/></filter><linearGradient id=\"badInk\" x1=\"24\" y1=\"20\" x2=\"136\" y2=\"140\" gradientUnits=\"userSpaceOnUse\"><stop stop-color=\"#fb7185\"/><stop offset=\"0.5\" stop-color=\"#ef4444\"/><stop offset=\"1\" stop-color=\"#b91c1c\"/></linearGradient></defs><g filter=\"url(#softShadow)\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M32 33c30-18 74-16 98 8 26 26 25 69-2 94-25 23-68 23-95-1C5 108 6 61 32 33Z\" stroke=\"#fecaca\" stroke-width=\"5\" opacity=\"0.78\"/><path d=\"M43 42c28 26 52 51 77 78\" stroke=\"url(#badInk)\" stroke-width=\"17\"/><path d=\"M119 40c-24 31-51 56-82 81\" stroke=\"url(#badInk)\" stroke-width=\"17\"/><path d=\"M44 42c28 26 52 51 77 78\" stroke=\"#fee2e2\" stroke-width=\"6\" opacity=\"0.58\"/><path d=\"M119 40c-24 31-51 56-82 81\" stroke=\"#fee2e2\" stroke-width=\"6\" opacity=\"0.58\"/></g></svg>",
-    num_ok: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 160\"><defs><filter id=\"numShadow\" x=\"-30%\" y=\"-30%\" width=\"160%\" height=\"160%\"><feDropShadow dx=\"0\" dy=\"4\" stdDeviation=\"3\" flood-color=\"#134e4a\" flood-opacity=\"0.22\"/></filter></defs><g filter=\"url(#numShadow)\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M80 22c33 0 58 24 58 56 0 35-25 60-59 60-33 0-58-23-58-57 0-33 26-59 59-59Z\" stroke=\"#0f766e\" stroke-width=\"11\"/><path d=\"M80 35c25 0 45 18 45 43 0 27-20 47-46 47-25 0-45-19-45-45 0-26 20-45 46-45Z\" stroke=\"#5eead4\" stroke-width=\"4\" opacity=\"0.9\"/><path d=\"M56 82c8 9 15 17 24 25 14-23 29-42 48-60\" stroke=\"#0f766e\" stroke-width=\"8\"/></g></svg>",
-    num_bad: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 160 160\"><defs><filter id=\"numShadow\" x=\"-30%\" y=\"-30%\" width=\"160%\" height=\"160%\"><feDropShadow dx=\"0\" dy=\"4\" stdDeviation=\"3\" flood-color=\"#7c2d12\" flood-opacity=\"0.24\"/></filter></defs><g filter=\"url(#numShadow)\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M79 23c34 0 59 23 59 56 0 35-25 59-59 59-33 0-58-23-58-56 0-34 25-59 58-59Z\" stroke=\"#f97316\" stroke-width=\"8\" opacity=\"0.9\"/><path d=\"M49 48c23 21 42 42 63 64\" stroke=\"#dc2626\" stroke-width=\"16\"/><path d=\"M112 47c-20 25-41 45-65 66\" stroke=\"#dc2626\" stroke-width=\"16\"/><path d=\"M49 48c23 21 42 42 63 64\" stroke=\"#fee2e2\" stroke-width=\"5\" opacity=\"0.48\"/><path d=\"M112 47c-20 25-41 45-65 66\" stroke=\"#fee2e2\" stroke-width=\"5\" opacity=\"0.48\"/></g></svg>"
+  const GRADE_MARKER_ASSETS = {
+    ok: "assets/grade-ok-red-pencil.svg",
+    bad: "assets/grade-bad-red-pencil.svg",
+    num_ok: "assets/grade-ok-red-pencil.svg",
+    num_bad: "assets/grade-bad-red-pencil.svg"
   };
   const SINGLE_CROP_OVERRIDES_BY_PDF = [
     {
@@ -2513,6 +2561,7 @@
     dragAreaCanvasHeight: 0,
     dragAreaStartCanvasX: 0,
     dragAreaStartCanvasY: 0,
+    dragAreaPeerRects: null,
     questionLocked: false,
     pdfPointerClientX: null,
     pdfPointerColumn: 0,
@@ -4346,6 +4395,12 @@
       : anchorObjectMapValueForQ(key, q);
   }
 
+  function anchorStoredMapHasQ(key, q){
+    const values = state.pdfNav?.[key];
+    if (Array.isArray(values)) return Object.prototype.hasOwnProperty.call(values, Number(q));
+    return !!(values && typeof values === "object" && Object.prototype.hasOwnProperty.call(values, String(q)));
+  }
+
   function anchorChoiceListForReset(key, q){
     const value = anchorObjectMapValueForQ(key, q);
     return Array.isArray(value) ? value : [];
@@ -4411,6 +4466,13 @@
     });
   }
 
+  function anchorAnyResetBaseDifferenceOrUnloaded(keys){
+    return keys.some((key) => {
+      const group = anchorResetBaseGroup(key);
+      return Object.keys(group).some((q) => !anchorStoredMapHasQ(key, q) || anchorHasResetBaseDifference(key, Number(q), 0));
+    });
+  }
+
   function getAnchorEditResetAvailability(){
     const q = getAnchorEditActiveQuestion();
     const choice = Math.max(1, Math.min(CHOICE_COUNT, Number(anchorEditState.choice) || 1));
@@ -4436,7 +4498,7 @@
       || anchorContainsManualAnchorValue(state.pdfNav?.questionAnchorMap)
       || anchorContainsManualAnchorValue(state.pdfNav?.questionSegments)
       || anchorContainsManualAnchorValue(state.pdfNav?.choiceAnchorMap);
-    const choiceAreaAll = anchorAnyResetBaseDifference(["choiceClickAreaMap"])
+    const choiceAreaAll = anchorAnyResetBaseDifferenceOrUnloaded(["choiceClickAreaMap"])
       || anchorContainsManualClickAreaValue(state.pdfNav?.choiceClickAreaMap);
     const hasQuestionAnchor = q > 0 && !!getQuestionAnchorForEditFind(q);
     const hasChoiceAnchor = q > 0 && choice > 0 && !!getChoiceAnchorForEditFind(q, choice);
@@ -5223,6 +5285,24 @@
       const cropTop = Number(meta.cropStartPx || 0);
       const cropWidth = Math.max(1, Number(meta.cropWidthPx || 1));
       const cropHeight = Math.max(1, Number(meta.cropHeightPx || 1));
+      const projected = projectChoiceAnchorToCanvas(
+        anchor,
+        { width: fullWidth, height: fullHeight },
+        cropLeft,
+        cropTop,
+        cropWidth,
+        cropHeight,
+        pdfCanvas.width,
+        pdfCanvas.height,
+        meta.segmentDraws || null
+      );
+      if (projected && Number.isFinite(projected.x) && Number.isFinite(projected.y)) {
+        return getCanvasAnchorViewportPoint(
+          pdfCanvas,
+          Math.max(0, Math.min(1, projected.x / Math.max(1, pdfCanvas.width))),
+          Math.max(0, Math.min(1, projected.y / Math.max(1, pdfCanvas.height)))
+        );
+      }
       const xOnCrop = ((anchorEditClampRatio(anchor.xRatio, 0) * fullWidth) - cropLeft) / cropWidth;
       const yOnCrop = ((anchorEditClampRatio(anchor.yRatio, 0) * fullHeight) - cropTop) / cropHeight;
       return getCanvasAnchorViewportPoint(pdfCanvas, xOnCrop, yOnCrop);
@@ -5456,14 +5536,100 @@
     };
   }
 
+  function getSingleSegmentDrawsFromMeta(meta){
+    const raw = Array.isArray(meta?.segmentDraws) ? meta.segmentDraws : [];
+    return raw.map((seg) => {
+      const left = Number(seg.left);
+      const top = Number(seg.top);
+      const width = Number(seg.width);
+      const height = Number(seg.height);
+      const destLeft = Number.isFinite(Number(seg.destLeft)) ? Number(seg.destLeft) : 0;
+      const destTop = Number(seg.destTop);
+      const destWidth = Number(seg.destWidth);
+      const destHeight = Number(seg.destHeight);
+      if (![left, top, width, height, destTop, destWidth, destHeight].every(Number.isFinite)) return null;
+      if (width <= 0 || height <= 0 || destWidth <= 0 || destHeight <= 0) return null;
+      return { left, top, width, height, destLeft, destTop, destWidth, destHeight };
+    }).filter(Boolean);
+  }
+
+  function getSingleSegmentDrawForCanvasPoint(meta, canvasX, canvasY){
+    const draws = getSingleSegmentDrawsFromMeta(meta);
+    if (!draws.length) return null;
+    let best = null;
+    for (const seg of draws){
+      const dx = canvasX < seg.destLeft
+        ? seg.destLeft - canvasX
+        : (canvasX > seg.destLeft + seg.destWidth ? canvasX - (seg.destLeft + seg.destWidth) : 0);
+      const dy = canvasY < seg.destTop
+        ? seg.destTop - canvasY
+        : (canvasY > seg.destTop + seg.destHeight ? canvasY - (seg.destTop + seg.destHeight) : 0);
+      const score = dx + dy;
+      if (!best || score < best.score) best = { seg, score };
+    }
+    return best?.seg || null;
+  }
+
+  function getSingleSegmentDrawForFullPoint(segmentDraws, fullX, fullY){
+    const draws = getSingleSegmentDrawsFromMeta({ segmentDraws });
+    if (!draws.length || !Number.isFinite(fullX) || !Number.isFinite(fullY)) return null;
+    let best = null;
+    for (const seg of draws){
+      const padX = Math.max(2, seg.width * 0.015);
+      const padY = Math.max(2, seg.height * 0.020);
+      const dx = fullX < seg.left - padX
+        ? (seg.left - padX) - fullX
+        : (fullX > seg.left + seg.width + padX ? fullX - (seg.left + seg.width + padX) : 0);
+      const dy = fullY < seg.top - padY
+        ? (seg.top - padY) - fullY
+        : (fullY > seg.top + seg.height + padY ? fullY - (seg.top + seg.height + padY) : 0);
+      const score = (dx / Math.max(1, seg.width)) + (dy / Math.max(1, seg.height));
+      if (!best || score < best.score) best = { seg, score };
+    }
+    return best?.seg || null;
+  }
+
+  function mapSingleCanvasPointToFull(meta, canvasX, canvasY){
+    const fullWidth = Math.max(1, Number(meta?.fullWidthPx || meta?.fullWidth || 1));
+    const fullHeight = Math.max(1, Number(meta?.fullHeightPx || meta?.fullHeight || 1));
+    const seg = getSingleSegmentDrawForCanvasPoint(meta, canvasX, canvasY);
+    if (seg) {
+      const sx = seg.width / Math.max(1, seg.destWidth);
+      const sy = seg.height / Math.max(1, seg.destHeight);
+      return {
+        xFull: Math.max(0, Math.min(fullWidth, seg.left + ((canvasX - seg.destLeft) * sx))),
+        yFull: Math.max(0, Math.min(fullHeight, seg.top + ((canvasY - seg.destTop) * sy))),
+      };
+    }
+    return {
+      xFull: Number(meta?.cropLeftPx || meta?.srcLeft || 0) + (canvasX * (Number(meta?.cropWidthPx || meta?.srcWidth || 0) / Math.max(1, pdfCanvas.width))),
+      yFull: Number(meta?.cropStartPx || meta?.srcTop || 0) + (canvasY * (Number(meta?.cropHeightPx || meta?.srcHeight || 0) / Math.max(1, pdfCanvas.height))),
+    };
+  }
+
+  function getSingleVisibleRatioRange(meta){
+    const fullHeight = Math.max(1, Number(meta?.fullHeightPx || meta?.fullHeight || 1));
+    const draws = getSingleSegmentDrawsFromMeta(meta);
+    if (draws.length) {
+      const top = Math.min(...draws.map((seg) => seg.top));
+      const bottom = Math.max(...draws.map((seg) => seg.top + seg.height));
+      return {
+        startRatio: Math.max(0, Math.min(1, top / fullHeight)),
+        endRatio: Math.max(0.02, Math.min(1, bottom / fullHeight)),
+      };
+    }
+    const startRatio = Math.max(0, Math.min(1, Number(meta?.cropStartPx || meta?.srcTop || 0) / fullHeight));
+    const endRatio = Math.max(startRatio + 0.02, Math.min(1, (Number(meta?.cropStartPx || meta?.srcTop || 0) + Number(meta?.cropHeightPx || meta?.srcHeight || 0)) / fullHeight));
+    return { startRatio, endRatio };
+  }
+
   function getSinglePdfPointFromEvent(e){
     const point = getSingleCanvasPointFromEvent(e);
     if (!point) return null;
     const { q, meta, canvasX, canvasY } = point;
-    const xOnCanvas = canvasX;
-    const yOnCanvas = canvasY;
-    const xFull = Number(meta.cropLeftPx || 0) + (xOnCanvas * (Number(meta.cropWidthPx || 0) / Math.max(1, pdfCanvas.width)));
-    const yFull = Number(meta.cropStartPx || 0) + (yOnCanvas * (Number(meta.cropHeightPx || 0) / Math.max(1, pdfCanvas.height)));
+    const mapped = mapSingleCanvasPointToFull(meta, canvasX, canvasY);
+    const xFull = Number(mapped?.xFull);
+    const yFull = Number(mapped?.yFull);
     const fullWidth = Math.max(1, Number(meta.fullWidthPx || 1));
     const fullHeight = Math.max(1, Number(meta.fullHeightPx || 1));
     return {
@@ -5898,6 +6064,35 @@
     if (!area || !canvas || !meta) return null;
     const fullWidth = Math.max(1, Number(meta.fullWidth || meta.fullWidthPx || canvas.width || 1));
     const fullHeight = Math.max(1, Number(meta.fullHeight || meta.fullHeightPx || canvas.height || 1));
+    const areaXFull = Number(area.xRatio) * fullWidth;
+    const areaYFull = Number(area.yRatio) * fullHeight;
+    const areaWFull = Number(area.wRatio) * fullWidth;
+    const areaHFull = Number(area.hRatio) * fullHeight;
+    const segmentDraws = getSingleSegmentDrawsFromMeta(meta);
+    if (segmentDraws.length && [areaXFull, areaYFull, areaWFull, areaHFull].every(Number.isFinite)) {
+      const seg = getSingleSegmentDrawForFullPoint(segmentDraws, areaXFull + areaWFull * 0.5, areaYFull + areaHFull * 0.5);
+      if (seg) {
+        const sx = seg.width / Math.max(1, seg.destWidth);
+        const sy = seg.height / Math.max(1, seg.destHeight);
+        const x = seg.destLeft + ((areaXFull - seg.left) / sx);
+        const y = seg.destTop + ((areaYFull - seg.top) / sy);
+        const w = areaWFull / sx;
+        const h = areaHFull / sy;
+        if ([x, y, w, h].every(Number.isFinite) && w > 0 && h > 0) {
+          return {
+            q: Number(area.q),
+            choice: Number(area.choice),
+            page: Number(area.page),
+            x,
+            y,
+            w,
+            h,
+            manual: true,
+            source: area.source || "manual-click-area",
+          };
+        }
+      }
+    }
     const srcLeft = Number(meta.srcLeft ?? meta.cropLeftPx ?? 0);
     const srcTop = Number(meta.srcTop ?? meta.cropStartPx ?? 0);
     const srcWidth = Math.max(1, Number(meta.srcWidth ?? meta.cropWidthPx ?? fullWidth));
@@ -5926,6 +6121,23 @@
     if (!rect || !canvas || !meta) return null;
     const fullWidth = Math.max(1, Number(meta.fullWidth || meta.fullWidthPx || canvas.width || 1));
     const fullHeight = Math.max(1, Number(meta.fullHeight || meta.fullHeightPx || canvas.height || 1));
+    const segmentDraws = getSingleSegmentDrawsFromMeta(meta);
+    if (segmentDraws.length) {
+      const seg = getSingleSegmentDrawForCanvasPoint(meta, Number(rect.x) + Number(rect.w) * 0.5, Number(rect.y) + Number(rect.h) * 0.5);
+      if (seg) {
+        const sx = seg.width / Math.max(1, seg.destWidth);
+        const sy = seg.height / Math.max(1, seg.destHeight);
+        const xFull = seg.left + ((Number(rect.x) - seg.destLeft) * sx);
+        const yFull = seg.top + ((Number(rect.y) - seg.destTop) * sy);
+        const wFull = Number(rect.w) * sx;
+        const hFull = Number(rect.h) * sy;
+        const xRatio = Math.max(0, Math.min(1, xFull / fullWidth));
+        const yRatio = Math.max(0, Math.min(1, yFull / fullHeight));
+        const wRatio = Math.max(0.001, Math.min(1 - xRatio, wFull / fullWidth));
+        const hRatio = Math.max(0.001, Math.min(1 - yRatio, hFull / fullHeight));
+        if ([xRatio, yRatio, wRatio, hRatio].every(Number.isFinite)) return { xRatio, yRatio, wRatio, hRatio };
+      }
+    }
     const srcLeft = Number(meta.srcLeft ?? meta.cropLeftPx ?? 0);
     const srcTop = Number(meta.srcTop ?? meta.cropStartPx ?? 0);
     const srcWidth = Math.max(1, Number(meta.srcWidth ?? meta.cropWidthPx ?? fullWidth));
@@ -6069,6 +6281,7 @@
       srcTop: Number(meta.cropStartPx || 0),
       srcWidth: Math.max(1, Number(meta.cropWidthPx || fullWidth)),
       srcHeight: Math.max(1, Number(meta.cropHeightPx || fullHeight)),
+      segmentDraws: meta.segmentDraws || null,
     };
     const storedChoices = getReliableChoiceAnchorsForQuestion(q, pageNo);
     const qPoints = [];
@@ -6084,7 +6297,8 @@
         areaMeta.srcWidth,
         areaMeta.srcHeight,
         pdfCanvas.width,
-        pdfCanvas.height
+        pdfCanvas.height,
+        meta.segmentDraws || null
       );
       if (!projected) continue;
       qPoints.push({ q, choice, page: pageNo, x: projected.x, y: projected.y, r: projected.r, anchor: item });
@@ -6107,6 +6321,7 @@
         distance: score,
         score,
         area: rect,
+        allAreas: rects.map((item) => ({ ...item })),
         action,
         canvas: pdfCanvas,
         meta: areaMeta,
@@ -6202,6 +6417,7 @@
           distance: score,
           score,
           area: rect,
+          allAreas: rects.map((item) => ({ ...item })),
           action,
           canvas,
           meta,
@@ -6311,7 +6527,8 @@
           Number(meta.cropWidthPx || 0),
           Number(meta.cropHeightPx || 0),
           pdfCanvas.width,
-          pdfCanvas.height
+          pdfCanvas.height,
+          meta.segmentDraws || null
         );
         if (!projected) continue;
         const distance = Math.hypot(canvasX - projected.x, canvasY - projected.y);
@@ -6444,6 +6661,7 @@
     anchorEditState.dragAreaCanvasHeight = 0;
     anchorEditState.dragAreaStartCanvasX = 0;
     anchorEditState.dragAreaStartCanvasY = 0;
+    anchorEditState.dragAreaPeerRects = null;
     syncAnchorEditUi();
   }
 
@@ -6487,6 +6705,9 @@
       anchorEditState.dragAreaCanvasHeight = targetCanvas.height;
       anchorEditState.dragAreaStartCanvasX = Number(local?.x || 0);
       anchorEditState.dragAreaStartCanvasY = Number(local?.y || 0);
+      anchorEditState.dragAreaPeerRects = Array.isArray(hit.allAreas)
+        ? hit.allAreas.map((item) => ({ ...item }))
+        : null;
     } else if (hit.kind === "choice") {
       anchorEditState.kind = "choice";
       anchorEditState.choice = Math.max(1, Math.min(CHOICE_COUNT, Number(hit.choice) || 1));
@@ -6523,6 +6744,26 @@
     const areaMeta = anchorEditState.dragAreaMeta || state.allPageCanvasMeta[Number(anchorEditState.dragAreaPage)] || null;
     const areaPage = Number(anchorEditState.dragAreaPage || targetCanvas.dataset?.page || 0);
     const areaRatios = dragKind === "choiceArea" ? choiceAreaCanvasRectToRatios(areaRect, targetCanvas, areaMeta) : null;
+    const dragChoiceNumber = Math.max(1, Math.min(CHOICE_COUNT, Number(dragChoice) || anchorEditState.choice || 1));
+    const dragAreaPeerRects = dragKind === "choiceArea" && Array.isArray(anchorEditState.dragAreaPeerRects)
+      ? anchorEditState.dragAreaPeerRects.map((item) => ({ ...item }))
+      : [];
+    const peerAreaRatios = dragKind === "choiceArea"
+      ? dragAreaPeerRects.map((rect) => {
+        const rectChoice = Math.trunc(Number(rect?.choice) || 0);
+        if (rectChoice < 1 || rectChoice > CHOICE_COUNT || rectChoice === dragChoiceNumber) return null;
+        const ratios = choiceAreaCanvasRectToRatios(rect, targetCanvas, areaMeta);
+        if (!ratios) return null;
+        return {
+          q: dragQ,
+          choice: rectChoice,
+          page: Number(rect?.page) || areaPage,
+          ...ratios,
+          source: rect?.manual ? (rect.source || "manual-click-area") : "manual-click-area-from-auto",
+          confidence: rect?.manual ? 1 : 0.92,
+        };
+      }).filter(Boolean)
+      : [];
     const point = dragKind === "choiceArea" ? null : getAnchorEditPdfPointFromEvent(e);
     anchorEditState.suppressNextClick = true;
     try{ targetCanvas.releasePointerCapture(e.pointerId); }catch(_){}
@@ -6533,8 +6774,8 @@
     if (dragKind === "choiceArea") {
       if (!areaRatios || !Number.isFinite(dragQ) || dragQ <= 0 || !Number.isFinite(areaPage) || areaPage <= 0) return;
       anchorEditState.kind = "choice";
-      anchorEditState.choice = Math.max(1, Math.min(CHOICE_COUNT, Number(dragChoice) || anchorEditState.choice || 1));
-      stageManualChoiceClickArea(dragQ, anchorEditState.choice, areaPage, areaRatios);
+      anchorEditState.choice = dragChoiceNumber;
+      stageManualChoiceClickArea(dragQ, dragChoiceNumber, areaPage, areaRatios, { peerAreas: peerAreaRatios });
       const ok = await saveAnchorEditNow({ silent: true });
       if (ok) await refreshAnchorEditView(dragQ);
       return;
@@ -6545,7 +6786,7 @@
       stageManualQuestionAnchor(point);
     } else {
       anchorEditState.kind = "choice";
-      anchorEditState.choice = Math.max(1, Math.min(CHOICE_COUNT, Number(dragChoice) || anchorEditState.choice || 1));
+      anchorEditState.choice = dragChoiceNumber;
       stageManualChoiceAnchor(point);
     }
     const ok = await saveAnchorEditNow({ silent: true });
@@ -6690,7 +6931,31 @@
     setAnchorEditStatus(`${formatPrintedQuestionLabel(q)}-${choice} 문항 앵커를 수정했습니다.`);
   }
 
-  function stageManualChoiceClickArea(q, choice, pageNo, rectRatio){
+  function normalizeChoiceClickAreaEntry(item, fallbackQ = null, fallbackPage = null, fallbackSource = "manual-click-area"){
+    const safeQ = Math.max(1, Math.trunc(Number(item?.q ?? fallbackQ) || 0));
+    const rawChoice = Math.trunc(Number(item?.choice) || 0);
+    const page = Math.max(1, Math.trunc(Number(item?.page ?? fallbackPage) || 0));
+    if (!safeQ || rawChoice < 1 || rawChoice > CHOICE_COUNT || !page) return null;
+    const xRatio = Math.max(0, Math.min(1, Number(item?.xRatio)));
+    const yRatio = Math.max(0, Math.min(1, Number(item?.yRatio)));
+    const wRatio = Math.max(0.001, Math.min(1 - xRatio, Number(item?.wRatio)));
+    const hRatio = Math.max(0.001, Math.min(1 - yRatio, Number(item?.hRatio)));
+    if (![xRatio, yRatio, wRatio, hRatio].every(Number.isFinite)) return null;
+    const confidence = Number(item?.confidence);
+    return {
+      q: safeQ,
+      choice: rawChoice,
+      page,
+      xRatio,
+      yRatio,
+      wRatio,
+      hRatio,
+      source: item?.source || fallbackSource,
+      confidence: Number.isFinite(confidence) ? confidence : 1,
+    };
+  }
+
+  function stageManualChoiceClickArea(q, choice, pageNo, rectRatio, options = {}){
     const safeQ = Math.max(1, Math.trunc(Number(q) || 0));
     const safeChoice = Math.max(1, Math.min(CHOICE_COUNT, Math.trunc(Number(choice) || 0)));
     const page = Math.max(1, Math.trunc(Number(pageNo) || 0));
@@ -6715,8 +6980,19 @@
     const existing = state.pdfNav?.choiceClickAreaMap?.[String(safeQ)];
     const staged = getAnchorEditPatch().choiceClickAreaMap[String(safeQ)];
     const base = Array.isArray(staged) ? staged : (Array.isArray(existing) ? existing : []);
-    const next = base.filter((item) => Number(item?.choice) !== safeChoice).concat(area)
-      .sort((a, b) => Number(a.choice) - Number(b.choice));
+    const byChoice = new Map();
+    for (const item of base){
+      const normalized = normalizeChoiceClickAreaEntry(item, safeQ, page);
+      if (normalized) byChoice.set(Number(normalized.choice), normalized);
+    }
+    for (const item of (Array.isArray(options.peerAreas) ? options.peerAreas : [])){
+      const normalized = normalizeChoiceClickAreaEntry(item, safeQ, page, item?.source || "manual-click-area-from-auto");
+      if (normalized && !byChoice.has(Number(normalized.choice))) {
+        byChoice.set(Number(normalized.choice), normalized);
+      }
+    }
+    byChoice.set(safeChoice, area);
+    const next = [...byChoice.values()].sort((a, b) => Number(a.choice) - Number(b.choice));
     const patch = getAnchorEditPatch();
     patch.choiceClickAreaMap[String(safeQ)] = next;
     applyAnchorEditPatchToPdfNav(patch);
@@ -6754,6 +7030,12 @@
     const choice = Math.max(1, Math.min(CHOICE_COUNT, Number(anchorEditState.choice) || 1));
     if (!Number.isFinite(q) || q <= 0) {
       setAnchorEditStatus("초기화할 문제를 먼저 선택하세요.");
+      return;
+    }
+    if (!getAnchorEditResetAvailability().choiceArea) {
+      const msg = `${formatPrintedQuestionLabel(q)}-${choice} 문항영역에 초기화할 수정값이 없습니다.`;
+      setAnchorEditStatus(msg);
+      showToastAndSnackbar(msg);
       return;
     }
     if (!window.confirm(`${formatPrintedQuestionLabel(q)}-${choice} 문항영역을 초기화할까요? 문제/문항 앵커 좌표는 유지됩니다.`)) return;
@@ -6803,6 +7085,11 @@
   }
 
   async function resetAllChoiceClickAreasFromViewer(){
+    if (!getAnchorEditResetAvailability().choiceAreaAll) {
+      showToastAndSnackbar("초기화할 문항영역 수정값이 없습니다.");
+      setAnchorEditStatus("초기화할 문항영역 수정값이 없습니다.");
+      return;
+    }
     if (!window.confirm("수정된 문항 클릭영역을 모두 초기화할까요? 문제/문항 앵커 좌표는 유지됩니다.")) return;
     if (anchorEditState.dirty) {
       const savedDirty = await saveAnchorEditNow({ silent: true });
@@ -8738,18 +9025,26 @@
       startRaw = Number.isFinite(mappedRatioForQ) ? mappedRatioForQ : 0.12;
     }
     startRaw = Math.max(0, Math.min(1, Number(startRaw)));
+    let questionColumnContext = null;
+    try{
+      questionColumnContext = await getQuestionColumnContextForPage(page, q);
+    }catch(_){}
 
     let nextStartRaw = null;
     if (q < QUESTION_COUNT) {
       try{
-        const strictNext = await getQuestionStartRatioForPage(page, q + 1);
+        const strictNext = questionColumnContext
+          ? await getNextQuestionBoundaryRatioForColumn(page, q, startRaw, questionColumnContext, { minGap: 0.03, sources: ["exact", "anchor", "map", "ratios"] })
+          : await getQuestionStartRatioForPage(page, q + 1);
         if (Number.isFinite(strictNext) && strictNext > startRaw + 0.03) {
           nextStartRaw = strictNext;
         }
       }catch(_){}
       if (!Number.isFinite(nextStartRaw)) {
         try{
-          const guessed = await getNextQuestionBoundaryRatioForPage(page, q, startRaw, null);
+          const guessed = questionColumnContext
+            ? await getNextQuestionBoundaryRatioForColumn(page, q, startRaw, questionColumnContext, { minGap: 0.03 })
+            : await getNextQuestionBoundaryRatioForPage(page, q, startRaw, null);
           if (Number.isFinite(guessed) && guessed > startRaw + 0.03) nextStartRaw = guessed;
         }catch(_){}
       }
@@ -8993,23 +9288,43 @@
       const ratioMap = state.pdfNav.questionTopRatioMap;
       const mobileViewport = window.matchMedia("(max-width: 768px)").matches;
       const reliableAnchorBoundary = state.pdfNav.patternSource === "anchor" && Number(state.pdfNav.confidence || 0) >= 0.55; // SOFTM-위치맵: 저장 위치맵 경계는 텍스트 추정 실패 경계보다 작게 여백 적용 - 2026-05-30
-      const mappedNextSamePage = (q < QUESTION_COUNT
-        && Array.isArray(pageMap)
-        && Array.isArray(ratioMap)
-        && pageMap[q + 1] === safePage
-        && Number.isFinite(ratioMap[q + 1]))
-        ? Math.max(0, Math.min(1, Number(ratioMap[q + 1])))
+      let renderColumnContext = null;
+      try{
+        renderColumnContext = await getQuestionColumnContextForPage(safePage, q);
+      }catch(_){}
+      const storedSegmentsForSingleCrop = getStoredQuestionSegmentsForPage(safePage, q);
+      const singleSegmentHardEndRatio = (!hasEndOverride && storedSegmentsForSingleCrop.length === 1 && Number.isFinite(Number(storedSegmentsForSingleCrop[0].bottom)))
+        ? Math.max(0, Math.min(0.995, Number(storedSegmentsForSingleCrop[0].bottom)))
         : null;
+      const applySingleSegmentHardEnd = (value) => {
+        const raw = Number(value);
+        if (!Number.isFinite(raw)) return value;
+        if (!Number.isFinite(singleSegmentHardEndRatio)) return raw;
+        return Math.min(raw, singleSegmentHardEndRatio);
+      };
+      const mappedNextSamePage = renderColumnContext
+        ? await getNextQuestionBoundaryRatioForColumn(safePage, q, safeStart, renderColumnContext, { minGap: 0.03, sources: ["map"] })
+        : ((q < QUESTION_COUNT
+          && Array.isArray(pageMap)
+          && Array.isArray(ratioMap)
+          && pageMap[q + 1] === safePage
+          && Number.isFinite(ratioMap[q + 1]))
+          ? Math.max(0, Math.min(1, Number(ratioMap[q + 1])))
+          : null);
       const strictStartSamePage = await getQuestionStartRatioForPage(safePage, q);
       const strictPrevSamePage = (q > 1)
         ? await getQuestionStartRatioForPage(safePage, q - 1)
         : null;
       const strictStartLabelBoundary = await getExactQuestionLabelRatioForPage(safePage, q);
       const strictNextSamePage = (q < QUESTION_COUNT)
-        ? await getQuestionStartRatioForPage(safePage, q + 1)
+        ? (renderColumnContext
+          ? await getNextQuestionBoundaryRatioForColumn(safePage, q, safeStart, renderColumnContext, { minGap: 0.03, sources: ["exact", "anchor", "map", "ratios"] })
+          : await getQuestionStartRatioForPage(safePage, q + 1))
         : null;
       const strictNextLabelBoundary = (q < QUESTION_COUNT)
-        ? await getExactQuestionLabelRatioForPage(safePage, q + 1)
+        ? (renderColumnContext
+          ? await getNextQuestionBoundaryRatioForColumn(safePage, q, safeStart, renderColumnContext, { minGap: 0.03, sources: ["exact"] })
+          : await getExactQuestionLabelRatioForPage(safePage, q + 1))
         : null;
       let finalNextBoundaryUsed = null;
       const labelStartBoundary = Number.isFinite(strictStartLabelBoundary)
@@ -9059,7 +9374,9 @@
           : (Number.isFinite(mappedNextSamePage) ? mappedNextSamePage : null));
       if (!Number.isFinite(earlyBoundaryHint) && q < QUESTION_COUNT) {
         try{
-          provisionalBoundary = await getNextQuestionBoundaryRatioForPage(safePage, q, safeStart, null);
+          provisionalBoundary = renderColumnContext
+            ? await getNextQuestionBoundaryRatioForColumn(safePage, q, safeStart, renderColumnContext, { minGap: 0.03 })
+            : await getNextQuestionBoundaryRatioForPage(safePage, q, safeStart, null);
         }catch(_){}
       }
       try{
@@ -9108,12 +9425,14 @@
 
       if (q < QUESTION_COUNT) {
         try{
-          provisionalBoundary = await getNextQuestionBoundaryRatioForPage(
-            safePage,
-            q,
-            safeStart,
-            Number.isFinite(lastChoiceBottom) ? lastChoiceBottom : null
-          );
+          provisionalBoundary = renderColumnContext
+            ? await getNextQuestionBoundaryRatioForColumn(safePage, q, safeStart, renderColumnContext, { minGap: 0.03 })
+            : await getNextQuestionBoundaryRatioForPage(
+              safePage,
+              q,
+              safeStart,
+              Number.isFinite(lastChoiceBottom) ? lastChoiceBottom : null
+            );
         }catch(_){}
       }
 
@@ -9232,7 +9551,9 @@
       // 중간 분기에서 safeEnd가 늘어나더라도 마지막에 반드시 잘라낸다.
       if (!hasEndOverride && q < QUESTION_COUNT) {
         try{
-          const absoluteNextStart = await getNearestNextQuestionStartRatioForPage(safePage, q, safeStart);
+          const absoluteNextStart = renderColumnContext
+            ? await getNextQuestionBoundaryRatioForColumn(safePage, q, safeStart, renderColumnContext, { minGap: 0.018 })
+            : await getNearestNextQuestionStartRatioForPage(safePage, q, safeStart);
           if (Number.isFinite(absoluteNextStart)) {
             const absoluteGap = mobileViewport ? 0.010 : 0.014;
             const absoluteCap = Math.min(0.995, Number(absoluteNextStart) - absoluteGap);
@@ -9303,6 +9624,9 @@
           safeEnd = Math.max(safeStart + 0.1, Math.min(1, Number(qOverride.end)));
         }
       }
+      if (Number.isFinite(singleSegmentHardEndRatio)) {
+        safeEnd = applySingleSegmentHardEnd(safeEnd);
+      }
       srcTop = Math.max(0, Math.floor(fullCanvas.height * safeStart));
       const srcBottom = Math.max(srcTop + 1, Math.ceil(fullCanvas.height * safeEnd));
       srcHeight = Math.max(1, srcBottom - srcTop);
@@ -9360,6 +9684,10 @@
       const safeBottomPx = Math.max(safeTopPx + 1, Math.ceil(fullCanvas.height * safeEnd));
       paddedTop = Math.max(paddedTop, safeTopPx);
       paddedBottom = Math.min(paddedBottom, safeBottomPx);
+      if (Number.isFinite(singleSegmentHardEndRatio)) {
+        const segmentCapPx = Math.max(paddedTop + 1, Math.ceil(fullCanvas.height * singleSegmentHardEndRatio));
+        paddedBottom = Math.min(paddedBottom, segmentCapPx);
+      }
       srcTop = paddedTop;
       srcHeight = Math.max(1, paddedBottom - srcTop);
       const portraitSingleMode = window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches;
@@ -9411,12 +9739,26 @@
           }
         }
       }catch(_){}
-      activeQuestionSegments = getStoredQuestionSegmentsForPage(safePage, q);
+      activeQuestionSegments = storedSegmentsForSingleCrop;
       if (activeQuestionSegments.length === 1) {
         const seg = activeQuestionSegments[0];
+        const singleSegmentWidthRatio = Math.max(0, Number(seg.right) - Number(seg.left));
+        const singleColumnStoredSegment = Number.isFinite(singleSegmentWidthRatio) && singleSegmentWidthRatio > 0.22 && singleSegmentWidthRatio < 0.72;
+        const segmentTopPadRatio = singleColumnStoredSegment
+          ? (mobileViewport ? 0.010 : 0.008)
+          : 0;
+        const segmentTopRatio = (!hasEndOverride && Number.isFinite(labelStartBoundary) && Number(labelStartBoundary) > Number(seg.top))
+          ? Math.max(
+            Number(seg.top),
+            Math.min(Number(seg.bottom) - 0.03, Number(labelStartBoundary) - segmentTopPadRatio)
+          )
+          : Number(seg.top);
         srcLeft = Math.max(0, Math.floor(fullCanvas.width * seg.left));
-        srcTop = Math.max(0, Math.floor(fullCanvas.height * seg.top));
+        srcTop = Math.max(0, Math.floor(fullCanvas.height * segmentTopRatio));
         const segRight = Math.min(fullCanvas.width, Math.ceil(fullCanvas.width * seg.right));
+        const segmentHardBottomRatio = !hasEndOverride
+          ? Math.max(0, Math.min(0.995, Number(seg.bottom)))
+          : null;
         let segmentBottomRatio = Number(seg.bottom);
         if (!hasEndOverride && Number.isFinite(finalContentEndCap)) {
           segmentBottomRatio = Math.min(segmentBottomRatio, Number(finalContentEndCap));
@@ -9430,17 +9772,27 @@
           ? Number(minContentEnd)
           : (Number.isFinite(lastChoiceBottom) ? Number(lastChoiceBottom) + (mobileViewport ? 0.026 : 0.022) : null);
         if (Number.isFinite(choiceEndRatio)) {
-          segmentBottomRatio = Math.max(segmentBottomRatio, Math.min(0.995, choiceEndRatio));
+          const choiceEndCap = Number.isFinite(segmentHardBottomRatio)
+            ? Math.min(segmentHardBottomRatio, choiceEndRatio)
+            : Math.min(0.995, choiceEndRatio);
+          segmentBottomRatio = Math.max(segmentBottomRatio, choiceEndCap);
         }
         if (!hasEndOverride && Number.isFinite(finalContentEndCap)) {
           segmentBottomRatio = Math.min(segmentBottomRatio, Number(finalContentEndCap));
         }
-        const segBottomRatio = Math.max(Number(seg.top) + 0.03, Math.min(0.995, segmentBottomRatio));
+        if (Number.isFinite(segmentHardBottomRatio)) {
+          segmentBottomRatio = Math.min(segmentBottomRatio, segmentHardBottomRatio);
+        }
+        const segBottomCapRatio = Number.isFinite(segmentHardBottomRatio) ? segmentHardBottomRatio : 0.995;
+        const segBottomRatio = Math.min(
+          segBottomCapRatio,
+          Math.max(Math.min(segBottomCapRatio, Number(seg.top) + 0.03), segmentBottomRatio)
+        );
         const segBottom = Math.min(fullCanvas.height, Math.ceil(fullCanvas.height * segBottomRatio));
         srcWidth = Math.max(1, segRight - srcLeft);
         srcHeight = Math.max(1, segBottom - srcTop);
         const minSegmentHeight = Math.max(1, Math.floor(fullCanvas.height * 0.105));
-        if (fullCanvas.height > minSegmentHeight && srcHeight < minSegmentHeight) {
+        if (!Number.isFinite(segmentHardBottomRatio) && fullCanvas.height > minSegmentHeight && srcHeight < minSegmentHeight) {
           const grow = minSegmentHeight - srcHeight;
           srcTop = Math.max(0, Math.min(fullCanvas.height - minSegmentHeight, srcTop - Math.floor(grow * 0.25)));
           srcHeight = minSegmentHeight;
@@ -9453,6 +9805,10 @@
             }
           }
         }
+        if (Number.isFinite(segmentHardBottomRatio)) {
+          const segHardBottom = Math.min(fullCanvas.height, Math.ceil(fullCanvas.height * segmentHardBottomRatio));
+          srcHeight = Math.max(1, Math.min(srcHeight, segHardBottom - srcTop));
+        }
       }
     }
 
@@ -9462,23 +9818,58 @@
     const multiSegments = state.viewMode === "single" && activeQuestionSegments.length > 1 ? activeQuestionSegments : [];
     const destWidth = fullCanvas.width;
     const segmentGap = multiSegments.length ? Math.max(10, Math.floor(destWidth * 0.012)) : 0;
-    const segmentDraws = multiSegments.map((seg) => {
-      const left = Math.max(0, Math.floor(fullCanvas.width * seg.left));
-      const top = Math.max(0, Math.floor(fullCanvas.height * seg.top));
-      const right = Math.min(fullCanvas.width, Math.ceil(fullCanvas.width * seg.right));
-      const bottom = Math.min(fullCanvas.height, Math.ceil(fullCanvas.height * seg.bottom));
-      const width = Math.max(1, right - left);
-      const height = Math.max(1, bottom - top);
-      return {
-        left,
-        top,
-        width,
-        height,
-        destHeight: Math.max(1, Math.round(height * (destWidth / width))),
-      };
-    });
+    const segmentDraws = [];
+    if (multiSegments.length) {
+      let dy = 0;
+      for (const seg of multiSegments){
+        const left = Math.max(0, Math.floor(fullCanvas.width * seg.left));
+        const top = Math.max(0, Math.floor(fullCanvas.height * seg.top));
+        const right = Math.min(fullCanvas.width, Math.ceil(fullCanvas.width * seg.right));
+        const bottom = Math.min(fullCanvas.height, Math.ceil(fullCanvas.height * seg.bottom));
+        const width = Math.max(1, right - left);
+        const height = Math.max(1, bottom - top);
+        const destHeight = Math.max(1, Math.round(height * (destWidth / width)));
+        segmentDraws.push({
+          left,
+          top,
+          width,
+          height,
+          destLeft: 0,
+          destTop: dy,
+          destWidth,
+          destHeight,
+        });
+        dy += destHeight + segmentGap;
+      }
+    } else if (state.viewMode === "single") {
+      const seg = activeQuestionSegments[0];
+      const segmentWidthRatio = seg
+        ? Math.max(0, Number(seg?.right) - Number(seg?.left))
+        : (srcWidth / Math.max(1, fullCanvas.width));
+      const singleColumnSegment = Number.isFinite(segmentWidthRatio) && segmentWidthRatio > 0.22 && segmentWidthRatio < 0.72;
+      if (singleColumnSegment && srcWidth > 0 && srcHeight > 0) {
+        const renderMobileViewport = window.matchMedia("(max-width: 768px)").matches;
+        const maxColumnScale = renderMobileViewport ? 1.12 : 1;
+        const targetScale = Math.max(1, Math.min(destWidth / Math.max(1, srcWidth), maxColumnScale));
+        const drawWidth = Math.max(1, Math.round(srcWidth * targetScale));
+        const drawHeight = Math.max(1, Math.round(srcHeight * targetScale));
+        const topPad = Math.max(8, Math.round(drawHeight * 0.04));
+        const bottomPad = Math.max(22, Math.round(drawHeight * 0.12));
+        segmentDraws.push({
+          left: srcLeft,
+          top: srcTop,
+          width: srcWidth,
+          height: srcHeight,
+          destLeft: 0,
+          destTop: topPad,
+          destWidth: Math.min(destWidth, drawWidth),
+          destHeight: drawHeight,
+          destBottomPad: bottomPad,
+        });
+      }
+    }
     const destHeight = segmentDraws.length
-      ? segmentDraws.reduce((sum, item) => sum + item.destHeight, 0) + (segmentGap * Math.max(0, segmentDraws.length - 1))
+      ? Math.max(1, Math.max(...segmentDraws.map((item) => item.destTop + item.destHeight + (Number(item.destBottomPad) || 0))))
       : (state.viewMode === "single" ? Math.max(1, Math.round(srcHeight * (destWidth / srcWidth))) : srcHeight);
     pdfCanvas.width = destWidth;
     pdfCanvas.height = destHeight;
@@ -9486,15 +9877,17 @@
     const canvasCssHeight = Math.ceil(destHeight / outputScale);
     pdfCanvas.style.height = `${canvasCssHeight}px`;
     pdfCtx.clearRect(0, 0, pdfCanvas.width, pdfCanvas.height);
+    pdfCtx.save();
+    pdfCtx.fillStyle = "#fff";
+    pdfCtx.fillRect(0, 0, pdfCanvas.width, pdfCanvas.height);
+    pdfCtx.restore();
     if (segmentDraws.length) {
-      let dy = 0;
       for (const seg of segmentDraws){
         pdfCtx.drawImage(
           fullCanvas,
           seg.left, seg.top, seg.width, seg.height,
-          0, dy, pdfCanvas.width, seg.destHeight
+          seg.destLeft, seg.destTop, seg.destWidth, seg.destHeight
         );
-        dy += seg.destHeight + segmentGap;
       }
       srcLeft = segmentDraws[0].left;
       srcTop = segmentDraws[0].top;
@@ -9511,56 +9904,101 @@
       const debugQ = Number.isFinite(Number(q))
         ? Math.floor(Number(q))
         : Math.max(1, Math.min(QUESTION_COUNT, Math.floor(Number(state.focusQ) || 1)));
-      await drawAnchorDebugMarkerSingle(debugQ, safePage, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
-      drawChoiceClickAreasSingle(debugQ, safePage, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
+      await drawAnchorDebugMarkerSingle(debugQ, safePage, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws);
+      await drawChoiceClickAreasSingle(debugQ, safePage, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws);
     }
     const selectedChoice = normalizeChoiceValue(state.answers[q]);
-    if (state.viewMode === "single" && Number.isFinite(q) && Number.isFinite(selectedChoice)) {
-      const visibleStartRatio = Math.max(0, Math.min(1, srcTop / Math.max(1, fullCanvas.height)));
-      const visibleEndRatio = Math.max(visibleStartRatio + 0.02, Math.min(1, (srcTop + srcHeight) / Math.max(1, fullCanvas.height)));
-      if (token !== state.renderToken) return;
-      const sel = await resolveSelectedChoiceAnchorWithRecovery(
-        safePage,
-        q,
-        selectedChoice,
-        { startRatio: visibleStartRatio, endRatio: visibleEndRatio }
-      );
-      if (token !== state.renderToken) return;
-      if (sel) {
-        const projected = projectChoiceAnchorToCanvas(sel, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, pdfCanvas.width, pdfCanvas.height);
-        const cx = projected?.x;
-        const cy = projected?.y;
-        const r = projected?.r;
-        if (!projected) {
-          drawFallbackSelectedChoiceMarker(selectedChoice);
-        } else if (cx < -r || cx > (pdfCanvas.width + r) || cy < -r || cy > (pdfCanvas.height + r)) {
-          // 탐지점이 컷 영역 밖이면 현재 화면 내에서라도 선택 마커가 보이도록 클램프한다.
-          const ccx = Math.max(r + 6, Math.min(pdfCanvas.width - r - 6, cx));
-          const ccy = Math.max(r + 6, Math.min(pdfCanvas.height - r - 6, cy));
-          drawSelectedChoiceCircle(pdfCtx, ccx, ccy, r);
-          if (anchorEditState.enabled) {
-            await drawAnchorDebugMarkerSingle(Math.floor(Number(q) || 1), safePage, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
-            drawChoiceClickAreasSingle(Math.floor(Number(q) || 1), safePage, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
+    if (state.viewMode === "single" && Number.isFinite(q)) {
+      const visibleRange = getSingleVisibleRatioRange({
+        fullHeightPx: fullCanvas.height,
+        cropStartPx: srcTop,
+        cropHeightPx: srcHeight,
+        segmentDraws
+      });
+      const visibleStartRatio = visibleRange.startRatio;
+      const visibleEndRatio = visibleRange.endRatio;
+      const gradeState = getViewerGradeState(q);
+      let choiceRectMap = null;
+      const getChoiceRect = async (choice) => {
+        if (!choiceRectMap) {
+          const areaMeta = {
+            fullWidth: Math.max(1, Number(fullCanvas.width || 1)),
+            fullHeight: Math.max(1, Number(fullCanvas.height || 1)),
+            srcLeft,
+            srcTop,
+            srcWidth,
+            srcHeight,
+            segmentDraws
+          };
+          const points = await buildSingleModeChoiceAreaPointsAsync(q, safePage, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws);
+          const rects = getChoiceClickAreaCanvasRects(q, safePage, pdfCanvas, areaMeta, points);
+          choiceRectMap = new Map(rects.map((rect) => [Number(rect.choice), rect]));
+        }
+        return choiceRectMap.get(Number(choice)) || null;
+      };
+      const resolveChoiceFeedbackInfo = async (choice) => {
+        const normalized = normalizeChoiceValue(choice);
+        if (!Number.isFinite(normalized)) return null;
+        let projected = null;
+        const anchor = await resolveSelectedChoiceAnchorWithRecovery(
+          safePage,
+          q,
+          normalized,
+          { startRatio: visibleStartRatio, endRatio: visibleEndRatio }
+        );
+        if (token !== state.renderToken) return null;
+        if (anchor) {
+          projected = projectChoiceAnchorToCanvas(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, pdfCanvas.width, pdfCanvas.height, segmentDraws);
+        }
+        const rect = await getChoiceRect(normalized);
+        if (token !== state.renderToken) return null;
+        if ((!projected || !Number.isFinite(projected.x) || !Number.isFinite(projected.y) || !Number.isFinite(projected.r)) && rect) {
+          projected = {
+            x: rect.x + Math.max(12, Math.min(rect.w * 0.18, 34)),
+            y: rect.y + rect.h * 0.5,
+            r: Math.max(10, Math.min(34, Math.min(rect.w, rect.h) * 0.34))
+          };
+        }
+        if (!projected || !Number.isFinite(projected.x) || !Number.isFinite(projected.y) || !Number.isFinite(projected.r)) return null;
+        return { projected, rect };
+      };
+      const isOffscreen = (projected) => {
+        const r = Number(projected?.r) || 0;
+        return projected && (projected.x < -r || projected.x > (pdfCanvas.width + r) || projected.y < -r || projected.y > (pdfCanvas.height + r));
+      };
+      if (Number.isFinite(selectedChoice)) {
+        const selectedInfo = await resolveChoiceFeedbackInfo(selectedChoice);
+        if (token !== state.renderToken) return;
+        if (!gradeState && selectedInfo?.projected) {
+          const { projected } = selectedInfo;
+          if (isOffscreen(projected)) {
+            const r = projected.r;
+            const ccx = Math.max(r + 6, Math.min(pdfCanvas.width - r - 6, projected.x));
+            const ccy = Math.max(r + 6, Math.min(pdfCanvas.height - r - 6, projected.y));
+            drawSelectedChoiceCircle(pdfCtx, ccx, ccy, r);
+          } else {
+            drawSelectedChoiceCircle(pdfCtx, projected.x, projected.y, projected.r);
           }
-        } else {
-          drawSelectedChoiceCircle(pdfCtx, cx, cy, r);
-          if (anchorEditState.enabled) {
-            await drawAnchorDebugMarkerSingle(Math.floor(Number(q) || 1), safePage, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
-            drawChoiceClickAreasSingle(Math.floor(Number(q) || 1), safePage, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
+        } else if (gradeState === "bad" && selectedInfo?.projected && !isOffscreen(selectedInfo.projected)) {
+          drawChoiceWrongFeedback(pdfCtx, selectedInfo.projected, selectedInfo.rect);
+        }
+        if (gradeState) {
+          for (const correctChoice of getCorrectChoiceValues(q)) {
+            const correctInfo = correctChoice === selectedChoice
+              ? selectedInfo
+              : await resolveChoiceFeedbackInfo(correctChoice);
+            if (token !== state.renderToken) return;
+            if (correctInfo?.projected && !isOffscreen(correctInfo.projected)) {
+              drawChoiceCorrectFeedback(pdfCtx, correctInfo.projected, correctInfo.rect);
+            }
           }
         }
-      } else {
-        drawFallbackSelectedChoiceMarker(selectedChoice);
+        drawSelectedChoiceBadge(selectedChoice);
       }
-      // SOFTM-위치맵: 선택 표시도 저장 앵커의 중심좌표를 그대로 사용해 문항번호 위에 체크되도록 보정 - 2026-05-30
-      drawSelectedChoiceBadge(selectedChoice);
-    }
-    if (state.viewMode === "single" && Number.isFinite(q)) {
-      const gradeState = getViewerGradeState(q);
       if (gradeState) {
-        const numberAnchor = await resolveQuestionNumberAnchorForMark(safePage, q);
+        const markerAnchor = await resolveQuestionNumberAnchorForMark(safePage, q);
         if (token !== state.renderToken) return;
-        drawQuestionNumberMarker(gradeState, numberAnchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
+        drawQuestionNumberMarker(gradeState, markerAnchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
       }
     }
     if (token !== state.renderToken) return;
@@ -9573,7 +10011,19 @@
       cropWidthPx: srcWidth,
       cropHeightPx: srcHeight,
       fullWidthPx: fullCanvas.width,
-      fullHeightPx: fullCanvas.height
+      fullHeightPx: fullCanvas.height,
+      segmentDraws: segmentDraws.length
+        ? segmentDraws.map((seg) => ({
+          left: seg.left,
+          top: seg.top,
+          width: seg.width,
+          height: seg.height,
+          destLeft: Number(seg.destLeft || 0),
+          destTop: Number(seg.destTop || 0),
+          destWidth: Number(seg.destWidth || pdfCanvas.width),
+          destHeight: Number(seg.destHeight || 0),
+        }))
+        : null
     };
     const nearTag = activeRange && activeRange.lowConfidence ? " · 근접모드" : "";
     const displayQ = Number.isFinite(q) ? formatPrintedQuestionLabel(q) : "";
@@ -9847,6 +10297,13 @@
     return answerValueMatches(correct, chosen) ? "ok" : "bad";
   }
 
+  function getCorrectChoiceValues(q){
+    const correct = getCorrectAnswer(q);
+    if (!isKnownAnswerValue(correct)) return [];
+    const rawValues = Array.isArray(correct) ? correct : [correct];
+    return [...new Set(rawValues.map((value) => normalizeChoiceValue(value)).filter(Number.isFinite))];
+  }
+
   async function resolveQuestionAnchorForMark(pageNo, q){
     if (!Number.isFinite(pageNo) || !Number.isFinite(q)) return null;
     try{
@@ -9884,16 +10341,16 @@
       const anchorMap = await getQuestionStartAnchorsForPage(pageNo);
       const a = anchorMap && anchorMap.get(q);
       if (a && Number.isFinite(a.xRatio) && Number.isFinite(a.yRatio)) {
-        // 문제 번호 옆 중앙에 채점 마커가 오도록 시작점보다 왼쪽/중앙으로 보정한다.
+        // 채점 이미지는 문제번호 자체를 감싸야 하므로 라벨 시작점에서 살짝 오른쪽/위쪽을 중심으로 잡는다.
         return {
-          xRatio: Math.max(0.018, Math.min(0.88, a.xRatio - 0.020)),
-          yRatio: Math.max(0, Math.min(1, a.yRatio + 0.016))
+          xRatio: Math.max(0.018, Math.min(0.92, a.xRatio + 0.018)),
+          yRatio: Math.max(0, Math.min(1, a.yRatio + 0.010))
         };
       }
     }catch(_){}
     const pageRatios = await getQuestionRatiosForPage(pageNo);
     if (pageRatios && Number.isFinite(pageRatios.get(q))) {
-      return { xRatio: 0.052, yRatio: Math.max(0, Math.min(1, pageRatios.get(q) + 0.016)) };
+      return { xRatio: 0.075, yRatio: Math.max(0, Math.min(1, pageRatios.get(q) + 0.010)) };
     }
     return null;
   }
@@ -9958,11 +10415,16 @@
     );
     const key = `${markerKind}:v${GRADE_MARKER_VERSION}`;
     if (state.gradeMarkerImageCache[key]) return state.gradeMarkerImageCache[key];
-    const svg = GRADE_MARKER_SVG[markerKind];
-    const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    const src = GRADE_MARKER_ASSETS[markerKind] || GRADE_MARKER_ASSETS.ok;
     const img = new Image();
     img.decoding = "async";
-    img.src = dataUrl;
+    img.onload = () => {
+      try{
+        if (state.viewMode === "all") refreshAllModeMarkersWithoutScroll();
+        else if (state.viewMode === "single") navigatePdfToQuestion(state.focusQ || 1);
+      }catch(_){}
+    };
+    img.src = `${src}?v=${GRADE_MARKER_VERSION}`;
     state.gradeMarkerImageCache[key] = img;
     return img;
   }
@@ -9980,79 +10442,164 @@
     const isBad = kind === "bad" || kind === "num_bad";
     const isNumberMarker = kind === "num_ok" || kind === "num_bad";
     const markerR = isNumberMarker
-      ? Math.max(15 * scalePx, Math.min(30 * scalePx, radius * 1.05 * mobileBoost))
+      ? Math.max(17 * scalePx, Math.min(34 * scalePx, radius * 1.18 * mobileBoost))
       : Math.max(20 * scalePx, Math.min(40 * scalePx, radius * 1.28 * mobileBoost));
-    const lineWidth = Math.max(2.6 * scalePx, Math.min(7.2 * scalePx, markerR * 0.24));
+    const lineWidth = Math.max(2.2 * scalePx, Math.min(8.0 * scalePx, markerR * (isBad ? 0.20 : 0.22)));
     const margin = 10 * scalePx;
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-    const redPencil = [
-      "rgba(228, 0, 12, 0.76)",
-      "rgba(255, 26, 24, 0.48)",
-      "rgba(174, 0, 12, 0.40)",
-      "rgba(255, 96, 72, 0.30)"
-    ];
-    const cx = clamp(x, margin + markerR * 1.3, ctx.canvas.width - margin - markerR * 1.3);
-    const cy = clamp(y, margin + markerR * 1.15, ctx.canvas.height - margin - markerR * 1.15);
+    const redPencil = {
+      core: "rgba(226, 0, 10, 0.90)",
+      bright: "rgba(255, 28, 22, 0.58)",
+      dark: "rgba(170, 0, 10, 0.42)",
+      grain: "rgba(255, 100, 72, 0.34)"
+    };
+    const layout = (() => {
+      if (kind === "num_ok") return { aspect: 210 / 148, w: markerR * 7.15, ox: -0.18, oy: -0.06, alpha: 0.98 };
+      if (kind === "num_bad") return { aspect: 1154 / 1363, w: markerR * 2.85, ox: 0.09, oy: 0.06, alpha: 0.96 };
+      if (kind === "bad") return { aspect: 1154 / 1363, w: markerR * 2.45, ox: 0.09, oy: 0.06, alpha: 0.96 };
+      return { aspect: 210 / 148, w: markerR * 4.90, ox: -0.10, oy: -0.06, alpha: 0.98 };
+    })();
+    const assetW = layout.w;
+    const assetH = assetW / layout.aspect;
+    const maxRx = Math.max(assetW * 0.5, isBad ? markerR * 1.45 : markerR * (isNumberMarker ? 1.82 : 2.08));
+    const maxRy = Math.max(assetH * 0.5, isBad ? markerR * 1.08 : markerR * (isNumberMarker ? 1.35 : 1.52));
+    const minCx = Math.max(margin + maxRx, margin + assetW * (0.5 - layout.ox));
+    const maxCx = Math.min(ctx.canvas.width - margin - maxRx, ctx.canvas.width - margin - assetW * (0.5 + layout.ox));
+    const minCy = Math.max(margin + maxRy, margin + assetH * (0.5 - layout.oy));
+    const maxCy = Math.min(ctx.canvas.height - margin - maxRy, ctx.canvas.height - margin - assetH * (0.5 + layout.oy));
+    const cx = maxCx > minCx ? clamp(x, minCx, maxCx) : clamp(x, margin + maxRx, ctx.canvas.width - margin - maxRx);
+    const cy = maxCy > minCy ? clamp(y, minCy, maxCy) : clamp(y, margin + maxRy, ctx.canvas.height - margin - maxRy);
+    const img = getGradeMarkerImage(kind);
+    if (img && img.complete && img.naturalWidth > 0) {
+      ctx.save();
+      if (typeof ctx.setTransform === "function") ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = layout.alpha;
+      ctx.drawImage(
+        img,
+        cx - assetW * 0.5 + assetW * layout.ox,
+        cy - assetH * 0.5 + assetH * layout.oy,
+        assetW,
+        assetH
+      );
+      ctx.restore();
+      return;
+    }
+    if (img) return;
 
     ctx.save();
+    if (typeof ctx.setTransform === "function") ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.shadowColor = "rgba(190, 18, 32, 0.10)";
-    ctx.shadowBlur = lineWidth * 0.18;
+    ctx.shadowColor = "rgba(190, 18, 32, 0.08)";
+    ctx.shadowBlur = lineWidth * 0.12;
 
     if (isBad) {
-      const arm = markerR * (isNumberMarker ? 1.05 : 1.28);
+      const arm = markerR * (isNumberMarker ? 1.14 : 1.36);
       const strokes = [
-        [0, 0, 0, 0, 1.00],
-        [lineWidth * 0.34, lineWidth * 0.10, lineWidth * 0.24, -lineWidth * 0.08, 0.66],
-        [-lineWidth * 0.28, -lineWidth * 0.16, -lineWidth * 0.18, lineWidth * 0.10, 0.48],
-        [lineWidth * 0.10, lineWidth * 0.36, lineWidth * 0.42, lineWidth * 0.04, 0.30]
+        { dx1: 0, dy1: 0, dx2: 0, dy2: 0, width: 1.00, alpha: 0.95, color: redPencil.core },
+        { dx1: lineWidth * 0.16, dy1: -lineWidth * 0.08, dx2: lineWidth * 0.10, dy2: lineWidth * 0.04, width: 0.60, alpha: 0.58, color: redPencil.bright },
+        { dx1: -lineWidth * 0.20, dy1: lineWidth * 0.11, dx2: -lineWidth * 0.08, dy2: -lineWidth * 0.16, width: 0.56, alpha: 0.42, color: redPencil.dark },
+        { dx1: lineWidth * 0.34, dy1: lineWidth * 0.22, dx2: lineWidth * 0.26, dy2: lineWidth * 0.12, width: 0.35, alpha: 0.32, color: redPencil.grain }
       ];
-      strokes.forEach(([dx1, dy1, dx2, dy2, alpha], idx) => {
-        ctx.strokeStyle = redPencil[idx % redPencil.length];
-        ctx.globalAlpha = alpha;
-        ctx.lineWidth = lineWidth * (idx === 0 ? 1 : 0.70);
+      ctx.translate(cx, cy);
+      ctx.rotate(-0.08);
+      strokes.forEach((stroke) => {
+        ctx.strokeStyle = stroke.color;
+        ctx.globalAlpha = stroke.alpha;
+        ctx.lineWidth = lineWidth * stroke.width;
         ctx.beginPath();
-        ctx.moveTo(cx - arm * 0.56 + dx1, cy + arm * 0.50 + dy1);
+        ctx.moveTo(-arm * 0.58 + stroke.dx1, arm * 0.42 + stroke.dy1);
         ctx.quadraticCurveTo(
-          cx - arm * 0.06,
-          cy - arm * 0.12,
-          cx + arm * 0.68 + dx2,
-          cy - arm * 0.72 + dy2
+          -arm * 0.20,
+          -arm * 0.18,
+          arm * 0.66 + stroke.dx2,
+          -arm * 0.68 + stroke.dy2
         );
         ctx.stroke();
       });
+      ctx.globalAlpha = 0.82;
+      ctx.fillStyle = redPencil.core;
+      ctx.beginPath();
+      ctx.moveTo(arm * 0.66, -arm * 0.68);
+      ctx.lineTo(arm * 0.52, -arm * 0.50);
+      ctx.lineTo(arm * 0.82, -arm * 0.84);
+      ctx.closePath();
+      ctx.fill();
       ctx.restore();
       return;
     }
 
-    const rx = markerR * (isNumberMarker ? 1.18 : 1.45);
-    const ry = markerR * (isNumberMarker ? 0.84 : 1.02);
+    const rx = markerR * (isNumberMarker ? 1.56 : 1.82);
+    const ry = markerR * (isNumberMarker ? 1.02 : 1.18);
     ctx.translate(cx, cy);
-    ctx.rotate(-0.22);
-    const rings = [
-      [0, 0, 1.00, 1.00, 1.00],
-      [lineWidth * 0.42, -lineWidth * 0.18, 1.015, 0.965, 0.62],
-      [-lineWidth * 0.30, lineWidth * 0.22, 0.985, 1.035, 0.42],
-      [lineWidth * 0.14, lineWidth * 0.44, 1.030, 0.990, 0.28]
-    ];
-    rings.forEach(([dx, dy, sx, sy, alpha], idx) => {
+    ctx.rotate(-0.27);
+    const drawOvalStroke = (dx, dy, sx, sy, widthMul, alpha, color) => {
       ctx.save();
-      ctx.strokeStyle = redPencil[idx % redPencil.length];
+      ctx.strokeStyle = color;
       ctx.globalAlpha = alpha;
-      ctx.lineWidth = lineWidth * (idx === 0 ? 1 : 0.68);
+      ctx.lineWidth = lineWidth * widthMul;
       ctx.beginPath();
-      ctx.ellipse(dx, dy, rx * sx, ry * sy, 0, -0.05, Math.PI * 2 - 0.18);
+      ctx.moveTo(rx * (0.14 * sx) + dx, ry * (0.72 * sy) + dy);
+      ctx.bezierCurveTo(
+        rx * (-0.42 * sx) + dx, ry * (0.88 * sy) + dy,
+        rx * (-1.02 * sx) + dx, ry * (0.42 * sy) + dy,
+        rx * (-0.92 * sx) + dx, ry * (-0.16 * sy) + dy
+      );
+      ctx.bezierCurveTo(
+        rx * (-0.80 * sx) + dx, ry * (-0.80 * sy) + dy,
+        rx * (0.08 * sx) + dx, ry * (-1.05 * sy) + dy,
+        rx * (0.72 * sx) + dx, ry * (-0.78 * sy) + dy
+      );
+      ctx.bezierCurveTo(
+        rx * (1.34 * sx) + dx, ry * (-0.52 * sy) + dy,
+        rx * (1.18 * sx) + dx, ry * (0.25 * sy) + dy,
+        rx * (0.44 * sx) + dx, ry * (0.64 * sy) + dy
+      );
+      ctx.bezierCurveTo(
+        rx * (0.32 * sx) + dx, ry * (0.70 * sy) + dy,
+        rx * (0.22 * sx) + dx, ry * (0.72 * sy) + dy,
+        rx * (0.14 * sx) + dx, ry * (0.72 * sy) + dy
+      );
       ctx.stroke();
       ctx.restore();
-    });
+    };
+    const rings = [
+      [0, 0, 1.00, 1.00, 1.00, 0.94, redPencil.core],
+      [lineWidth * 0.34, -lineWidth * 0.14, 1.010, 0.970, 0.62, 0.60, redPencil.bright],
+      [-lineWidth * 0.22, lineWidth * 0.20, 0.990, 1.030, 0.54, 0.42, redPencil.dark],
+      [lineWidth * 0.10, lineWidth * 0.42, 1.020, 0.990, 0.34, 0.32, redPencil.grain]
+    ];
+    rings.forEach(([dx, dy, sx, sy, widthMul, alpha, color]) => drawOvalStroke(dx, dy, sx, sy, widthMul, alpha, color));
+
+    const tailBaseX = rx * 0.10;
+    const tailBaseY = ry * 0.72;
+    const tailTipX = rx * 0.76;
+    const tailTipY = ry * 1.22;
+    ctx.strokeStyle = redPencil.core;
     ctx.globalAlpha = 0.88;
-    ctx.strokeStyle = redPencil[0];
-    ctx.lineWidth = lineWidth * 0.82;
+    ctx.lineWidth = lineWidth * 0.72;
     ctx.beginPath();
-    ctx.moveTo(rx * 0.62, ry * 0.55);
-    ctx.quadraticCurveTo(rx * 0.25, ry * 0.76, -rx * 0.05, ry * 0.68);
+    ctx.moveTo(tailBaseX, tailBaseY);
+    ctx.quadraticCurveTo(rx * 0.44, ry * 0.78, tailTipX, tailTipY);
     ctx.stroke();
+    ctx.globalAlpha = 0.45;
+    ctx.strokeStyle = redPencil.bright;
+    ctx.lineWidth = lineWidth * 0.36;
+    ctx.beginPath();
+    ctx.moveTo(tailBaseX + lineWidth * 0.28, tailBaseY - lineWidth * 0.08);
+    ctx.quadraticCurveTo(rx * 0.45, ry * 0.76, tailTipX - lineWidth * 0.10, tailTipY - lineWidth * 0.10);
+    ctx.stroke();
+    ctx.globalAlpha = 0.78;
+    ctx.fillStyle = redPencil.core;
+    ctx.beginPath();
+    ctx.moveTo(tailTipX, tailTipY);
+    ctx.lineTo(tailTipX - lineWidth * 0.86, tailTipY - lineWidth * 0.18);
+    ctx.lineTo(tailTipX - lineWidth * 0.22, tailTipY - lineWidth * 0.86);
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
   }
 
@@ -10079,34 +10626,6 @@
     pdfCtx.textBaseline = "middle";
     pdfCtx.fillText(text, x + padX, y + (height * 0.52));
     pdfCtx.restore();
-  }
-
-  function drawFallbackSelectedChoiceMarker(choice){
-    if (!Number.isFinite(choice)) return false;
-    const positions = {
-      1: [0.18, 0.72],
-      2: [0.54, 0.72],
-      3: [0.18, 0.86],
-      4: [0.54, 0.86],
-      5: [0.18, 0.94],
-    };
-    const pos = positions[Math.max(1, Math.min(5, Math.trunc(choice)))];
-    if (!pos) return false;
-    const x = Math.max(28, Math.min(pdfCanvas.width - 28, pdfCanvas.width * pos[0]));
-    const y = Math.max(28, Math.min(pdfCanvas.height - 28, pdfCanvas.height * pos[1]));
-    const r = Math.max(17, Math.min(28, pdfCanvas.width * 0.018));
-    pdfCtx.save();
-    pdfCtx.lineWidth = 3;
-    pdfCtx.setLineDash([10, 6]);
-    pdfCtx.strokeStyle = "#0a66d6";
-    pdfCtx.fillStyle = "rgba(10,102,214,0.16)";
-    pdfCtx.beginPath();
-    pdfCtx.arc(x, y, r, 0, Math.PI * 2);
-    pdfCtx.fill();
-    pdfCtx.stroke();
-    pdfCtx.setLineDash([]);
-    pdfCtx.restore();
-    return true;
   }
 
   function getAnchorDebugStyle(source = ""){
@@ -10157,14 +10676,27 @@
     return null;
   }
 
-  async function drawAnchorDebugMarkerSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight){
+  async function drawAnchorDebugMarkerSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws = null){
     if (!ANCHOR_DEBUG || !Number.isFinite(q) || !Number.isFinite(pageNo)) return;
     const debugAnchor = getQuestionDebugAnchorRatio(pageNo, q);
     if (!debugAnchor) return;
     const style = getAnchorDebugStyle(state.pdfNav.patternSource);
     const yFull = Math.max(0, Math.min(fullCanvas.height, fullCanvas.height * Number(debugAnchor.ratio)));
-    const sy = srcHeight / pdfCanvas.height;
-    const y = (yFull - srcTop) / sy;
+    const anchorEntry = state.pdfNav?.questionAnchorMap && state.pdfNav.questionAnchorMap[String(q)];
+    const anchorXFull = Number.isFinite(Number(anchorEntry?.xRatio))
+      ? Math.max(0, Math.min(fullCanvas.width, Number(anchorEntry.xRatio) * fullCanvas.width))
+      : Number(srcLeft || 0) + (Number(srcWidth || 0) * 0.5);
+    const lineSegment = getSingleSegmentDrawForFullPoint(segmentDraws, anchorXFull, yFull);
+    const viewSrcLeft = lineSegment ? lineSegment.left : srcLeft;
+    const viewSrcTop = lineSegment ? lineSegment.top : srcTop;
+    const viewSrcWidth = lineSegment ? lineSegment.width : srcWidth;
+    const viewSrcHeight = lineSegment ? lineSegment.height : srcHeight;
+    const viewDestLeft = lineSegment ? lineSegment.destLeft : 0;
+    const viewDestTop = lineSegment ? lineSegment.destTop : 0;
+    const viewDestWidth = lineSegment ? lineSegment.destWidth : pdfCanvas.width;
+    const viewDestHeight = lineSegment ? lineSegment.destHeight : pdfCanvas.height;
+    const sy = viewSrcHeight / Math.max(1, viewDestHeight);
+    const y = viewDestTop + ((yFull - viewSrcTop) / sy);
     if (!Number.isFinite(y)) return;
     const offscreenY = y < 0 || y > pdfCanvas.height;
     const clampedY = Math.max(8, Math.min(pdfCanvas.height - 8, y));
@@ -10173,11 +10705,11 @@
     try{
       const columnBounds = await getQuestionColumnBoundsForPage(pageNo, q);
       if (columnBounds) {
-        const sx = srcWidth / Math.max(1, pdfCanvas.width);
+        const sx = viewSrcWidth / Math.max(1, viewDestWidth);
         const leftFull = Number(columnBounds.left) * fullCanvas.width;
         const rightFull = Number(columnBounds.right) * fullCanvas.width;
-        const projectedLeft = (leftFull - srcLeft) / sx;
-        const projectedRight = (rightFull - srcLeft) / sx;
+        const projectedLeft = viewDestLeft + ((leftFull - viewSrcLeft) / sx);
+        const projectedRight = viewDestLeft + ((rightFull - viewSrcLeft) / sx);
         lineLeft = Math.max(0, Math.min(pdfCanvas.width, projectedLeft));
         lineRight = Math.max(0, Math.min(pdfCanvas.width, projectedRight));
         if (lineRight - lineLeft < 12) {
@@ -10202,7 +10734,7 @@
     const debugLabel = debugAnchor.source === "crop" ? `${style.label} crop` : style.label;
     pdfCtx.fillText(`${questionLabel} ${debugLabel}${offscreenY ? " edge" : ""}`, Math.max(10, Math.min(pdfCanvas.width - 120, lineLeft + 10)), Math.max(22, clampedY - 8));
     pdfCtx.restore();
-    await drawChoiceAnchorDebugMarkersSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
+    await drawChoiceAnchorDebugMarkersSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws);
   }
 
   function drawDebugChoiceCircle(ctx, x, y, label, options = {}){
@@ -10214,6 +10746,19 @@
     const r = Math.max(6, Math.min(56, Number.isFinite(optionRadius) ? optionRadius : defaultRadius));
     const fontSize = Math.max(13, Math.min(24, (canvas.width || 1000) * 0.014));
     ctx.save();
+    if (options.selected === true) {
+      ctx.save();
+      ctx.lineWidth = Math.max(4, r * 0.24);
+      ctx.strokeStyle = "rgba(37,99,235,0.95)";
+      ctx.fillStyle = "rgba(37,99,235,0.10)";
+      ctx.shadowColor = "rgba(37,99,235,0.38)";
+      ctx.shadowBlur = Math.max(8, r * 0.42);
+      ctx.beginPath();
+      ctx.arc(x, y, r + Math.max(5, r * 0.23), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
     ctx.lineWidth = Math.max(style.lineWidth, r * (style.label === "anchor" ? 0.16 : 0.11));
     ctx.strokeStyle = style.stroke;
     ctx.fillStyle = style.softFill;
@@ -10261,7 +10806,7 @@
     return mode === "center" || source.includes("image") || source.includes("manual");
   }
 
-  function projectChoiceAnchorToCanvas(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, destWidth, destHeight){
+  function projectChoiceAnchorToCanvas(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, destWidth, destHeight, segmentDraws = null){
     if (!anchor || !fullCanvas) return null;
     const fullWidth = Number(fullCanvas.width || 0);
     const fullHeight = Number(fullCanvas.height || 0);
@@ -10275,6 +10820,18 @@
     const centerBased = isCenterBasedChoiceAnchor(anchor);
     const centerX = centerBased ? ax : ax + (aw * 0.5);
     const centerY = centerBased ? ay : ay + (ah * 0.5);
+    const seg = getSingleSegmentDrawForFullPoint(segmentDraws, centerX, centerY);
+    if (seg) {
+      const sx = seg.width / Math.max(1, seg.destWidth);
+      const sy = seg.height / Math.max(1, seg.destHeight);
+      const x = seg.destLeft + ((centerX - seg.left) / sx);
+      const y = seg.destTop + ((centerY - seg.top) / sy);
+      const dw = Math.max(1, aw / sx);
+      const dh = Math.max(1, ah / sy);
+      const rawRadius = Math.max(Math.max(dw, dh) * (centerBased ? 1.18 : 0.78), Math.max(1, seg.destWidth) * 0.0135);
+      const r = Math.max(6, Math.min(56, rawRadius * getAnchorChoiceRadiusScale()));
+      return { x, y, r, centerBased, segment: true };
+    }
     const sx = srcWidth / destWidth;
     const sy = srcHeight / destHeight;
     const x = (centerX - Number(srcLeft || 0)) / sx;
@@ -10289,6 +10846,9 @@
   function drawSelectedChoiceCircle(ctx, x, y, r){
     if (!ctx || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(r)) return;
     ctx.save();
+    if (typeof ctx.setTransform === "function") ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
     ctx.lineWidth = Math.max(3, r * 0.16);
     ctx.strokeStyle = "#0a66d6";
     ctx.fillStyle = "rgba(10,102,214,0.22)";
@@ -10298,16 +10858,102 @@
     ctx.stroke();
     ctx.restore();
   }
+
+  function getChoiceFeedbackLine(projected, rect, tone){
+    const x = Number(projected?.x);
+    const y = Number(projected?.y);
+    const r = Math.max(8, Math.min(56, Number(projected?.r) || 16));
+    const canvasWidth = Number(projected?.canvasWidth || 0);
+    if (rect && [rect.x, rect.y, rect.w, rect.h].every(Number.isFinite) && rect.w > 0 && rect.h > 0) {
+      const inset = Math.max(4, Math.min(rect.w * 0.14, r * 0.72));
+      const left = Number(rect.x) + inset;
+      const right = Number(rect.x) + Number(rect.w) - Math.max(4, Math.min(rect.w * 0.08, r * 0.45));
+      const lineY = Number(rect.y) + Number(rect.h) * (tone === "correct" ? 0.76 : 0.52);
+      return {
+        x1: Math.max(0, left),
+        x2: canvasWidth > 0 ? Math.min(canvasWidth, right) : right,
+        y: lineY,
+        r
+      };
+    }
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    const x1 = x - r * 0.55;
+    const x2 = x + r * (tone === "correct" ? 4.6 : 4.0);
+    return {
+      x1: Math.max(0, x1),
+      x2: canvasWidth > 0 ? Math.min(canvasWidth, x2) : x2,
+      y: y + (tone === "correct" ? r * 0.72 : 0),
+      r
+    };
+  }
+
+  function drawChoiceCorrectFeedback(ctx, projected, rect = null){
+    if (!ctx || !projected || !Number.isFinite(projected.x) || !Number.isFinite(projected.y)) return;
+    const r = Math.max(8, Math.min(56, Number(projected.r) || 16));
+    const line = getChoiceFeedbackLine({ ...projected, canvasWidth: ctx.canvas?.width || 0 }, rect, "correct");
+    ctx.save();
+    if (typeof ctx.setTransform === "function") ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#004eea";
+    ctx.fillStyle = "rgba(0,78,234,0.10)";
+    ctx.lineWidth = Math.max(2.4, r * 0.14);
+    ctx.beginPath();
+    ctx.arc(projected.x, projected.y, Math.max(7, r * 0.88), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    if (line && line.x2 > line.x1 + 4) {
+      ctx.lineWidth = Math.max(2.6, line.r * 0.16);
+      ctx.beginPath();
+      ctx.moveTo(line.x1, line.y);
+      ctx.lineTo(line.x2, line.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawChoiceWrongFeedback(ctx, projected, rect = null){
+    if (!ctx || !projected || !Number.isFinite(projected.x) || !Number.isFinite(projected.y)) return;
+    const line = getChoiceFeedbackLine({ ...projected, canvasWidth: ctx.canvas?.width || 0 }, rect, "wrong");
+    if (!line || line.x2 <= line.x1 + 4) return;
+    ctx.save();
+    if (typeof ctx.setTransform === "function") ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(224,0,10,0.92)";
+    ctx.lineWidth = Math.max(2.4, line.r * 0.17);
+    ctx.beginPath();
+    ctx.moveTo(line.x1, line.y);
+    ctx.lineTo(line.x2, line.y);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,60,42,0.48)";
+    ctx.lineWidth = Math.max(1.2, line.r * 0.07);
+    ctx.beginPath();
+    ctx.moveTo(line.x1, line.y - Math.max(1, line.r * 0.09));
+    ctx.lineTo(line.x2, line.y - Math.max(1, line.r * 0.09));
+    ctx.stroke();
+    ctx.restore();
+  }
   // SOFTM-위치맵: 이미지 기반 선택지 앵커는 중심좌표로 저장되므로 디버그/선택 표시 투영을 공통화 - 2026-05-30
 
-  async function drawChoiceAnchorDebugMarkersSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight){
+  async function drawChoiceAnchorDebugMarkersSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws = null){
     if (!ANCHOR_DEBUG || !fullCanvas || !Number.isFinite(q) || !Number.isFinite(pageNo)) return;
     let sourceTone = "anchor";
     let list = getReliableChoiceAnchorsForQuestion(q, pageNo);
     if (!Array.isArray(list) || !list.length) {
       sourceTone = "pdf";
-      const startRatio = Math.max(0, Math.min(1, Number(srcTop || 0) / Math.max(1, Number(fullCanvas.height || 1))));
-      const endRatio = Math.max(startRatio + 0.02, Math.min(1, (Number(srcTop || 0) + Number(srcHeight || 0)) / Math.max(1, Number(fullCanvas.height || 1))));
+      const visibleRange = getSingleVisibleRatioRange({
+        fullHeightPx: fullCanvas.height,
+        cropStartPx: srcTop,
+        cropHeightPx: srcHeight,
+        segmentDraws
+      });
+      const startRatio = visibleRange.startRatio;
+      const endRatio = visibleRange.endRatio;
       try{
         list = await getChoiceAnchorsForQuestion(pageNo, q, { startRatio, endRatio });
       }catch(_){
@@ -10320,7 +10966,7 @@
       const choice = Number(item.choice);
       const visibleChoiceCount = Math.max(1, Math.min(5, Number(state.pdfNav.choiceCount) || CHOICE_COUNT));
       if (!Number.isInteger(choice) || choice < 1 || choice > visibleChoiceCount) continue;
-      const projected = projectChoiceAnchorToCanvas(item, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, pdfCanvas.width, pdfCanvas.height);
+      const projected = projectChoiceAnchorToCanvas(item, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, pdfCanvas.width, pdfCanvas.height, segmentDraws);
       const x = projected?.x;
       const y = projected?.y;
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
@@ -10331,12 +10977,76 @@
       drawDebugChoiceCircle(pdfCtx, drawX, drawY, formatPrintedChoiceLabel(q, choice), {
         r: projected?.r,
         source: `${Number.isFinite(printed) && printed !== q ? `앱${q} ` : ""}${item.source || sourceTone}${offscreen ? " edge" : ""}`.trim(),
-        tone: sourceTone
+        tone: sourceTone,
+        selected: anchorEditState.enabled
+          && Number(anchorEditState.selectedQ || state.focusQ) === Number(q)
+          && Number(anchorEditState.choice) === Number(choice)
       });
     }
   }
 
-  function drawChoiceClickAreasSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight){
+  function buildSingleModeChoiceAreaPointsFromAnchors(anchors, q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws = null){
+    if (!fullCanvas || !Array.isArray(anchors)) return [];
+    const points = [];
+    const visibleChoiceCount = Math.max(1, Math.min(5, Number(state.pdfNav.choiceCount) || CHOICE_COUNT));
+    for (const item of anchors){
+      if (Number(item?.page || pageNo) !== Number(pageNo)) continue;
+      const choice = Number(item.choice);
+      if (!Number.isInteger(choice) || choice < 1 || choice > visibleChoiceCount) continue;
+      const projected = projectChoiceAnchorToCanvas(item, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, pdfCanvas.width, pdfCanvas.height, segmentDraws);
+      if (!projected || !Number.isFinite(projected.x) || !Number.isFinite(projected.y)) continue;
+      points.push({ q, choice, page: pageNo, x: projected.x, y: projected.y, r: projected.r, anchor: item });
+    }
+    return points.sort((a, b) => Number(a.choice) - Number(b.choice));
+  }
+
+  async function buildSingleModeChoiceAreaPointsAsync(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws = null){
+    const visibleChoiceCount = Math.max(1, Math.min(5, Number(state.pdfNav.choiceCount) || CHOICE_COUNT));
+    const stored = getReliableChoiceAnchorsForQuestion(q, pageNo);
+    let points = buildSingleModeChoiceAreaPointsFromAnchors(
+      Array.isArray(stored) ? stored : [],
+      q,
+      pageNo,
+      fullCanvas,
+      srcLeft,
+      srcTop,
+      srcWidth,
+      srcHeight,
+      segmentDraws
+    );
+    if (points.length >= visibleChoiceCount) return points;
+    const visibleRange = getSingleVisibleRatioRange({
+      fullHeightPx: fullCanvas.height,
+      cropStartPx: srcTop,
+      cropHeightPx: srcHeight,
+      segmentDraws
+    });
+    let recovered = [];
+    try{
+      recovered = await getChoiceAnchorsForQuestion(pageNo, q, {
+        startRatio: visibleRange.startRatio,
+        endRatio: visibleRange.endRatio,
+        ignoreStored: points.length > 0 && points.length < visibleChoiceCount,
+      });
+      if (Array.isArray(recovered) && recovered.length) state.questionChoiceAnchorCache[`${Number(pageNo)}:${Number(q)}`] = recovered;
+    }catch(_){
+      recovered = [];
+    }
+    const recoveredPoints = buildSingleModeChoiceAreaPointsFromAnchors(
+      Array.isArray(recovered) ? recovered : [],
+      q,
+      pageNo,
+      fullCanvas,
+      srcLeft,
+      srcTop,
+      srcWidth,
+      srcHeight,
+      segmentDraws
+    );
+    return recoveredPoints.length > points.length ? recoveredPoints : points;
+  }
+
+  async function drawChoiceClickAreasSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws = null){
     if (!ANCHOR_CLICK_AREA_DEBUG || !fullCanvas || !Number.isFinite(q) || !Number.isFinite(pageNo)) return false;
     const meta = {
       fullWidth: fullCanvas.width,
@@ -10345,17 +11055,9 @@
       srcTop,
       srcWidth,
       srcHeight,
+      segmentDraws,
     };
-    const list = getReliableChoiceAnchorsForQuestion(q, pageNo);
-    const points = [];
-    for (const item of (Array.isArray(list) ? list : [])){
-      if (Number(item?.page || pageNo) !== Number(pageNo)) continue;
-      const choice = Number(item.choice);
-      if (!Number.isInteger(choice) || choice < 1 || choice > Math.max(5, CHOICE_COUNT)) continue;
-      const projected = projectChoiceAnchorToCanvas(item, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, pdfCanvas.width, pdfCanvas.height);
-      if (!projected || !Number.isFinite(projected.x) || !Number.isFinite(projected.y)) continue;
-      points.push({ q, choice, page: pageNo, x: projected.x, y: projected.y, r: projected.r, anchor: item });
-    }
+    const points = await buildSingleModeChoiceAreaPointsAsync(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws);
     const rects = getChoiceClickAreaCanvasRects(q, pageNo, pdfCanvas, meta, points);
     if (!rects.length) return false;
     pdfCtx.save();
@@ -10406,8 +11108,13 @@
     const base = state.allPageBaseCanvases[pageNo];
     if (!canvas || !base) return false;
     const ctx = canvas.getContext("2d");
+    ctx.save();
+    if (typeof ctx.setTransform === "function") ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(base, 0, 0);
+    ctx.restore();
     return true;
   }
 
@@ -10492,38 +11199,82 @@
       }
     }catch(_){}
 
-    const sel = await resolveSelectedChoiceAnchorWithRecovery(pageNo, q, selected, hint);
-
-    const fallbackPositions = {
-      1: [0.18, 0.72],
-      2: [0.54, 0.72],
-      3: [0.18, 0.86],
-      4: [0.54, 0.86],
-      5: [0.18, 0.94],
+    const fullCanvasRef = { width: meta.fullWidth, height: meta.fullHeight };
+    const projectAllModeChoiceAnchor = (anchor) => projectChoiceAnchorToCanvas(
+      anchor,
+      fullCanvasRef,
+      meta.srcLeft || 0,
+      0,
+      meta.srcWidth,
+      meta.fullHeight,
+      meta.destWidth,
+      meta.destHeight
+    );
+    let choiceRects = null;
+    const getChoiceRect = async (choice) => {
+      if (!choiceRects) {
+        const points = await buildAllModeChoiceAreaPointsAsync(q, pageNo, {
+          canvas,
+          meta,
+          fullWidth: meta.fullWidth,
+          fullHeight: meta.fullHeight
+        });
+        choiceRects = new Map(
+          getChoiceClickAreaCanvasRects(q, pageNo, canvas, meta, points)
+            .map((rect) => [Number(rect.choice), rect])
+        );
+      }
+      return choiceRects.get(Number(choice)) || null;
     };
-    const fallbackPos = fallbackPositions[Math.max(1, Math.min(5, Math.trunc(selected)))] || fallbackPositions[1];
-    const startRatio = Number.isFinite(hint?.startRatio) ? hint.startRatio : 0.1;
-    const endRatio = Number.isFinite(hint?.endRatio) ? hint.endRatio : Math.min(1, startRatio + 0.34);
-    const projected = sel
-      ? projectChoiceAnchorToCanvas(
-        sel,
-        { width: meta.fullWidth, height: meta.fullHeight },
-        meta.srcLeft || 0,
-        0,
-        meta.srcWidth,
-        meta.fullHeight,
-        meta.destWidth,
-        meta.destHeight
-      )
-      : null;
-    const sx = meta.srcWidth / meta.destWidth;
-    const sy = meta.fullHeight / meta.destHeight;
-    const cx = projected ? projected.x : ((meta.srcWidth * fallbackPos[0]) / sx);
-    const cy = projected ? projected.y : ((meta.fullHeight * (startRatio + ((endRatio - startRatio) * fallbackPos[1]))) / sy);
-    const r = projected ? projected.r : Math.max(18, Math.min(32, canvas.width * 0.0135));
-
-    const ctx = canvas.getContext("2d");
-    drawSelectedChoiceCircle(ctx, cx, cy, r);
+    const resolveChoiceFeedbackInfo = async (choice) => {
+      const normalized = normalizeChoiceValue(choice);
+      if (!Number.isFinite(normalized)) return null;
+      const anchor = await resolveSelectedChoiceAnchorWithRecovery(pageNo, q, normalized, hint, {
+        allowLooseFallback: true,
+        looseEndPad: 0.32
+      });
+      let projected = anchor ? projectAllModeChoiceAnchor(anchor) : null;
+      const rect = await getChoiceRect(normalized);
+      if ((!projected || !Number.isFinite(projected.x) || !Number.isFinite(projected.y) || !Number.isFinite(projected.r)) && rect) {
+        projected = {
+          x: rect.x + Math.max(12, Math.min(rect.w * 0.18, 34)),
+          y: rect.y + rect.h * 0.5,
+          r: Math.max(10, Math.min(34, Math.min(rect.w, rect.h) * 0.34))
+        };
+      }
+      if (!projected || !Number.isFinite(projected.x) || !Number.isFinite(projected.y) || !Number.isFinite(projected.r)) return null;
+      return { projected, rect };
+    };
+    const gradeState = getViewerGradeState(q);
+    const selectedInfo = await resolveChoiceFeedbackInfo(selected);
+    const correctInfos = [];
+    if (gradeState) {
+      for (const correctChoice of getCorrectChoiceValues(q)) {
+        const info = correctChoice === selected
+          ? selectedInfo
+          : await resolveChoiceFeedbackInfo(correctChoice);
+        if (info) correctInfos.push(info);
+      }
+    }
+    if (!selectedInfo && !correctInfos.length) return false;
+    const drawFeedback = () => {
+      const activeCanvas = state.allPageCanvases?.[pageNo];
+      if (activeCanvas !== canvas) return;
+      const ctx = activeCanvas.getContext("2d");
+      if (!gradeState) {
+        if (selectedInfo?.projected) drawSelectedChoiceCircle(ctx, selectedInfo.projected.x, selectedInfo.projected.y, selectedInfo.projected.r);
+        return;
+      }
+      if (gradeState === "bad" && selectedInfo?.projected) {
+        drawChoiceWrongFeedback(ctx, selectedInfo.projected, selectedInfo.rect);
+      }
+      for (const info of correctInfos) {
+        drawChoiceCorrectFeedback(ctx, info.projected, info.rect);
+      }
+    };
+    drawFeedback();
+    requestAnimationFrame(drawFeedback);
+    window.setTimeout(drawFeedback, 80);
     // SOFTM-위치맵: 전체보기 선택 표시도 이미지 앵커 중심좌표를 사용하고 번호를 덮는 크기로 통일 - 2026-05-30
     return true;
   }
@@ -10643,7 +11394,10 @@
       drawDebugChoiceCircle(ctx, x, y, formatPrintedChoiceLabel(q, choice), {
         r: projected?.r,
         source: Number.isFinite(printed) && printed !== q ? `앱${q} ${item.source || sourceTone}`.trim() : (item.source || sourceTone),
-        tone: sourceTone
+        tone: sourceTone,
+        selected: anchorEditState.enabled
+          && Number(anchorEditState.selectedQ || state.focusQ) === Number(q)
+          && Number(anchorEditState.choice) === Number(choice)
       });
       drawn = true;
     }
@@ -10769,11 +11523,9 @@
       const selected = normalizeChoiceValue(state.answers[q]);
       if (!Number.isFinite(selected)) continue;
       const pageNo = getAllModePageForQuestion(q, totalPages);
-      await drawAllModeSelectedMarker(pageNo, q);
       const gradeState = getViewerGradeState(q);
-      if (gradeState) {
-          await drawAllModeQuestionNumberMarker(pageNo, q, gradeState);
-      }
+      if (gradeState) await drawAllModeQuestionNumberMarker(pageNo, q, gradeState);
+      await drawAllModeSelectedMarker(pageNo, q);
       if (q % 8 === 0) await waitForNextFrame();
     }
     if (anchorEditState.enabled && (ANCHOR_DEBUG || ANCHOR_CLICK_AREA_DEBUG)) {
@@ -11305,11 +12057,191 @@
     return { left: Math.max(0, split - pad), right: 1, split };
   }
 
+  function normalizeQuestionColumnContext(bounds, pageNo, q){
+    if (!bounds || typeof bounds !== "object") return null;
+    const left = Math.max(0, Math.min(1, Number(bounds.left)));
+    const right = Math.max(0, Math.min(1, Number(bounds.right)));
+    const split = Number(bounds.split);
+    if (!Number.isFinite(left) || !Number.isFinite(right) || right <= left + 0.12) return null;
+    const width = right - left;
+    if (width >= 0.72) return null;
+    const safeSplit = Number.isFinite(split) ? Math.max(0.30, Math.min(0.70, split)) : null;
+    const center = (left + right) * 0.5;
+    const column = Number.isFinite(safeSplit)
+      ? (center < safeSplit ? 1 : 2)
+      : (center < 0.50 ? 1 : 2);
+    let filterLeft = left;
+    let filterRight = right;
+    if (Number.isFinite(safeSplit)) {
+      if (column === 1) {
+        filterRight = Math.min(right, safeSplit - 0.012);
+      } else {
+        filterLeft = Math.max(left, safeSplit + 0.025);
+      }
+    }
+    if (filterRight <= filterLeft + 0.08) {
+      filterLeft = left;
+      filterRight = right;
+    }
+    return {
+      page: Number(pageNo),
+      q: Number(q),
+      left,
+      right,
+      split: safeSplit,
+      column,
+      width,
+      filterLeft: Math.max(0, Math.min(1, filterLeft)),
+      filterRight: Math.max(0, Math.min(1, filterRight)),
+      source: bounds.source || "column-context",
+    };
+  }
+
+  async function getQuestionColumnContextForPage(pageNo, q){
+    if (!Number.isFinite(pageNo) || !Number.isFinite(q)) return null;
+    let bounds = null;
+    try{
+      bounds = await getQuestionColumnBoundsForPage(pageNo, q);
+    }catch(_){}
+    return normalizeQuestionColumnContext(bounds, pageNo, q);
+  }
+
+  function getQuestionColumnLocalXRatio(xRatio, columnContext){
+    const x = Number(xRatio);
+    if (!Number.isFinite(x) || !columnContext) return x;
+    const left = Number.isFinite(columnContext.filterLeft) ? Number(columnContext.filterLeft) : Number(columnContext.left);
+    const right = Number.isFinite(columnContext.filterRight) ? Number(columnContext.filterRight) : Number(columnContext.right);
+    const width = Math.max(0.001, right - left);
+    return Math.max(0, Math.min(1, (x - left) / width));
+  }
+
+  function isXRatioInsideQuestionColumn(xRatio, columnContext, pad = 0.018){
+    const x = Number(xRatio);
+    if (!Number.isFinite(x) || !columnContext) return true;
+    const left = Number.isFinite(columnContext.filterLeft) ? Number(columnContext.filterLeft) : Number(columnContext.left);
+    const right = Number.isFinite(columnContext.filterRight) ? Number(columnContext.filterRight) : Number(columnContext.right);
+    return x >= Math.max(0, left - pad) && x <= Math.min(1, right + pad);
+  }
+
+  function questionColumnContextsMatch(a, b){
+    if (!a || !b) return false;
+    if (Number.isFinite(a.column) && Number.isFinite(b.column)) return Number(a.column) === Number(b.column);
+    const aLeft = Number.isFinite(a.filterLeft) ? Number(a.filterLeft) : Number(a.left);
+    const aRight = Number.isFinite(a.filterRight) ? Number(a.filterRight) : Number(a.right);
+    const bLeft = Number.isFinite(b.filterLeft) ? Number(b.filterLeft) : Number(b.left);
+    const bRight = Number.isFinite(b.filterRight) ? Number(b.filterRight) : Number(b.right);
+    if (![aLeft, aRight, bLeft, bRight].every(Number.isFinite)) return false;
+    return Math.min(aRight, bRight) - Math.max(aLeft, bLeft) > 0.05;
+  }
+
+  async function isQuestionInColumnContext(pageNo, q, columnContext, anchorMap = null){
+    if (!columnContext || !Number.isFinite(pageNo) || !Number.isFinite(q)) return false;
+    try{
+      const candidate = await getQuestionColumnContextForPage(pageNo, q);
+      if (candidate) return questionColumnContextsMatch(candidate, columnContext);
+    }catch(_){}
+    const a = anchorMap && typeof anchorMap.get === "function" ? anchorMap.get(q) : null;
+    if (a && Number.isFinite(Number(a.xRatio))) {
+      return isXRatioInsideQuestionColumn(Number(a.xRatio), columnContext, 0.035);
+    }
+    return false;
+  }
+
+  async function getNextQuestionBoundaryRatioForColumn(pageNo, q, startRatio, columnContext, options = {}){
+    if (!columnContext) return null;
+    const base = Number.isFinite(startRatio) ? Math.max(0, Math.min(1, Number(startRatio))) : 0;
+    const minGap = Number.isFinite(Number(options.minGap)) ? Math.max(0.004, Math.min(0.08, Number(options.minGap))) : 0.018;
+    const sourceList = Array.isArray(options.sources) && options.sources.length
+      ? options.sources.map((v) => String(v))
+      : ["map", "anchor", "exact", "ratios", "locate"];
+    const sources = new Set(sourceList);
+    const pageMap = state.pdfNav?.questionPageMap;
+    const ratioMap = state.pdfNav?.questionTopRatioMap;
+    let anchorMap = null;
+    try{
+      anchorMap = await getQuestionStartAnchorsForPage(pageNo);
+    }catch(_){}
+
+    const candidates = [];
+    const seen = new Set();
+    const addCandidate = async (candidateQ, ratio, source) => {
+      const k = Number(candidateQ);
+      const r = Number(ratio);
+      if (!Number.isFinite(k) || k <= q || !Number.isFinite(r)) return;
+      if (Array.isArray(pageMap) && Number.isFinite(Number(pageMap[k])) && Number(pageMap[k]) !== Number(pageNo)) return;
+      if (r <= base + minGap) return;
+      const sameColumn = await isQuestionInColumnContext(pageNo, k, columnContext, anchorMap);
+      if (!sameColumn) return;
+      const clamped = Math.max(0, Math.min(1, r));
+      const key = `${k}:${clamped.toFixed(5)}:${source}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      candidates.push({ q: k, ratio: clamped, source });
+    };
+
+    if (sources.has("map") && Array.isArray(pageMap) && Array.isArray(ratioMap)) {
+      for (let k = q + 1; k <= QUESTION_COUNT; k++){
+        if (Number(pageMap[k]) !== Number(pageNo) || !Number.isFinite(Number(ratioMap[k]))) continue;
+        await addCandidate(k, Number(ratioMap[k]), "map");
+      }
+    }
+
+    if (sources.has("anchor") && anchorMap && typeof anchorMap.entries === "function") {
+      for (const [k, value] of anchorMap.entries()){
+        if (!Number.isFinite(Number(k)) || !value || !Number.isFinite(Number(value.yRatio))) continue;
+        await addCandidate(Number(k), Number(value.yRatio), "anchor");
+      }
+    }
+
+    if (sources.has("exact")) {
+      for (let k = q + 1; k <= QUESTION_COUNT; k++){
+        if (Array.isArray(pageMap) && Number.isFinite(Number(pageMap[k])) && Number(pageMap[k]) !== Number(pageNo)) continue;
+        const sameColumn = await isQuestionInColumnContext(pageNo, k, columnContext, anchorMap);
+        if (!sameColumn) continue;
+        let exact = null;
+        try{
+          exact = await getExactQuestionLabelRatioForPage(pageNo, k);
+        }catch(_){}
+        await addCandidate(k, exact, "exact");
+      }
+    }
+
+    if (sources.has("ratios")) {
+      try{
+        const maps = [
+          await getQuestionRatiosForPage(pageNo),
+          await getRowQuestionStartRatiosForPage(pageNo),
+          await getDirectQuestionRatiosForPage(pageNo),
+          await getReliableQuestionStartsForPage(pageNo)
+        ];
+        for (const m of maps){
+          if (!m || typeof m.entries !== "function") continue;
+          for (const [k, value] of m.entries()){
+            await addCandidate(Number(k), Number(value), "ratios");
+          }
+        }
+      }catch(_){}
+    }
+
+    if (sources.has("locate") && q < QUESTION_COUNT) {
+      try{
+        const located = await locateQuestionInPdf(q + 1);
+        if (located && Number(located.page) === Number(pageNo)) {
+          await addCandidate(q + 1, Number(located.ratio), "locate");
+        }
+      }catch(_){}
+    }
+
+    if (!candidates.length) return null;
+    candidates.sort((a, b) => a.ratio - b.ratio || a.q - b.q);
+    return candidates[0].ratio;
+  }
+
   function getStoredQuestionSegmentsForPage(pageNo, q){
     const map = state.pdfNav?.questionSegments;
     const raw = map && typeof map === "object" ? map[String(q)] : null;
     if (!Array.isArray(raw)) return [];
-    return raw.map((item) => {
+    const mapped = raw.map((item, index) => {
       const page = Number(item?.page);
       const top = Number(item?.top);
       const bottom = Number(item?.bottom);
@@ -11324,9 +12256,15 @@
         bottom: Math.max(0, Math.min(1, bottom)),
         left: Math.max(0, Math.min(1, left)),
         right: Math.max(0, Math.min(1, right)),
+        column: Number.isFinite(Number(item?.column)) ? Number(item.column) : null,
         source: item.source || "segment",
+        _order: index,
       };
-    }).filter(Boolean).sort((a, b) => a.top - b.top || a.left - b.left);
+    }).filter(Boolean);
+    const hasManualSequence = mapped.some((seg) => String(seg.source || "").includes("manual"));
+    return mapped.sort((a, b) => hasManualSequence
+      ? (a._order - b._order)
+      : (a.top - b.top || a.left - b.left));
   }
   // SOFTM-위치맵: 저장된 문제 영역 segment를 한문제 보기 crop의 우선 입력으로 사용 - 2026-06-01
   // SOFTM-위치맵: 2단 문서는 같은 y범위라도 현재 문제의 컬럼만 단일문항 컷에 사용 - 2026-05-31
@@ -11504,7 +12442,31 @@
 
   function getReliableChoiceAnchorsForQuestion(q, pageNo = null, options = {}){
     const stored = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]);
-    if (stored.length) return stored;
+    if (stored.length) {
+      if (Number.isFinite(Number(pageNo))) {
+        const choiceCount = Math.max(1, Math.min(5, Number(state.pdfNav?.choiceCount) || CHOICE_COUNT));
+        const storedChoices = new Set(
+          stored
+            .filter((item) => Number(item?.page || pageNo) === Number(pageNo))
+            .map((item) => Number(item.choice))
+            .filter((choice) => Number.isInteger(choice) && choice >= 1 && choice <= choiceCount)
+        );
+        const cached = state.questionChoiceAnchorCache?.[`${Number(pageNo)}:${Number(q)}`];
+        if (storedChoices.size < choiceCount && Array.isArray(cached) && cached.length) {
+          const byChoice = new Map();
+          for (const item of cached.filter((entry) => Number(entry?.page || pageNo) === Number(pageNo))) {
+            const choice = Number(item.choice);
+            if (Number.isInteger(choice) && choice >= 1 && choice <= choiceCount) byChoice.set(choice, item);
+          }
+          for (const item of stored.filter((entry) => Number(entry?.page || pageNo) === Number(pageNo))) {
+            const choice = Number(item.choice);
+            if (Number.isInteger(choice) && choice >= 1 && choice <= choiceCount) byChoice.set(choice, item);
+          }
+          if (byChoice.size) return [...byChoice.values()].sort((a, b) => Number(a.choice) - Number(b.choice));
+        }
+      }
+      return stored;
+    }
     if (Number.isFinite(Number(pageNo))) {
       const cached = state.questionChoiceAnchorCache?.[`${Number(pageNo)}:${Number(q)}`];
       if (Array.isArray(cached) && cached.length) return cached.filter((item) => Number(item?.page || pageNo) === Number(pageNo));
@@ -11566,11 +12528,12 @@
 
   async function getChoiceAnchorsForQuestion(pageNo, q, options = null){
     const hasOptions = !!(options && typeof options === "object");
+    const ignoreStored = hasOptions && options.ignoreStored === true;
     const cacheKey = `${pageNo}:${q}`;
     if (!hasOptions && state.questionChoiceAnchorCache[cacheKey]) return state.questionChoiceAnchorCache[cacheKey];
     await ensureAnchorDetailsForQuestions([q]);
     const storedChoices = getReliableChoiceAnchorsForQuestion(q, pageNo);
-    if (Array.isArray(storedChoices) && storedChoices.length) {
+    if (!ignoreStored && Array.isArray(storedChoices) && storedChoices.length) {
       const optStart = (hasOptions && Number.isFinite(options.startRatio)) ? Math.max(0, Math.min(1, Number(options.startRatio))) : null;
       const optEnd = (hasOptions && Number.isFinite(options.endRatio)) ? Math.max(0, Math.min(1, Number(options.endRatio))) : null;
       const fromMap = storedChoices
@@ -11644,6 +12607,10 @@
       : (Number.isFinite(renderHintStart)
           ? renderHintStart
           : (Number.isFinite(startRatioBase) ? Math.max(0, Math.min(1, startRatioBase)) : 0));
+    let columnContext = null;
+    try{
+      columnContext = await getQuestionColumnContextForPage(pageNo, q);
+    }catch(_){}
     let endRatio = 1;
     if (pageRatios && pageRatios.size > 0){
       const sorted = Array.from(pageRatios.entries()).sort((a, b) => a[0] - b[0]);
@@ -11671,6 +12638,29 @@
     if (Number.isFinite(renderHintEnd)) {
       endRatio = Math.min(endRatio, Math.max(startRatio + 0.02, renderHintEnd));
     }
+    if (columnContext) {
+      let columnEnd = null;
+      try{
+        columnEnd = await getNextQuestionBoundaryRatioForColumn(pageNo, q, startRatio, columnContext, { minGap: 0.018, sources: ["map", "anchor", "ratios"] });
+      }catch(_){}
+      if (Number.isFinite(columnEnd)) {
+        endRatio = Math.max(startRatio + 0.02, Math.min(1, Number(columnEnd) - 0.004));
+      } else {
+        const footerStart = getFooterStartRatioForPage(pageNo);
+        if (Number.isFinite(footerStart) && footerStart > startRatio + 0.06) {
+          endRatio = Math.max(startRatio + 0.02, Math.min(1, Number(footerStart) - 0.018));
+        } else {
+          endRatio = Math.max(startRatio + 0.02, Math.min(1, startRatio + 0.46));
+        }
+      }
+      if (hasOptions && Number.isFinite(options.endRatio)) {
+        const optEnd = Math.max(startRatio + 0.02, Math.min(1, Number(options.endRatio)));
+        endRatio = Math.min(endRatio, optEnd);
+      }
+      if (Number.isFinite(renderHintEnd)) {
+        endRatio = Math.min(endRatio, Math.max(startRatio + 0.02, renderHintEnd));
+      }
+    }
 
     const layer = await getQuestionPageTextLayer(pageNo);
     const pageW = layer.pageW;
@@ -11690,16 +12680,20 @@
       const ih = Math.max(8, Math.abs(Number(item.height) || 0));
       const top = Math.max(0, Math.min(pageH - ih, pageH - y - ih));
       const topRatio = top / pageH;
+      const xRatio = x / pageW;
+      if (columnContext && !isXRatioInsideQuestionColumn(xRatio, columnContext, 0.018)) continue;
       const startGuard = hasOptions ? 0.002 : 0.014;
       if (topRatio < startRatio + startGuard) continue;
       const compact = rawToken.replace(/\s+/g, "");
       const numericToken = /^\(?[1-5][.)]/.test(compact);
-      if (numericToken && (x / pageW) < 0.16 && topRatio < startRatio + 0.09) continue;
+      const localXRatio = getQuestionColumnLocalXRatio(xRatio, columnContext);
+      const standaloneNumericToken = !choice && !!weakChoice;
+      if ((numericToken || standaloneNumericToken) && localXRatio < 0.16 && topRatio < startRatio + 0.12) continue;
       if (topRatio < startRatio - 0.01 || topRatio > endRatio + 0.01) continue;
 
       const row = {
         choice: choice || weakChoice,
-        xRatio: Math.max(0, Math.min(1, x / pageW)),
+        xRatio: Math.max(0, Math.min(1, xRatio)),
         yRatio: Math.max(0, Math.min(1, top / pageH)),
         wRatio: Math.max(0.004, Math.min(0.2, iw / pageW)),
         hRatio: Math.max(0.006, Math.min(0.15, ih / pageH))
@@ -11744,9 +12738,10 @@
     // 1차: 좌측 그룹 우선(문항 번호 오인식 완화)
     let refined = anchors;
     if (anchors.length){
-      const minX = Math.min(...anchors.map(a => a.xRatio));
-      const xCut = Math.min(0.38, minX + 0.22);
-      refined = anchors.filter(a => a.xRatio <= xCut);
+      const getLocalX = (a) => getQuestionColumnLocalXRatio(a.xRatio, columnContext);
+      const minX = Math.min(...anchors.map(getLocalX));
+      const xCut = Math.min(columnContext ? 0.58 : 0.38, minX + (columnContext ? 0.30 : 0.22));
+      refined = anchors.filter(a => getLocalX(a) <= xCut);
     }
     let result = hintedResult && hintedResult.length ? hintedResult : pickChoices(refined);
     // 2차: 선지 누락 시 전체 앵커로 재탐색(세로 배열/다단 배치 대응)
@@ -11756,7 +12751,8 @@
     // 2.5차: ③④ 누락 등 강한 토큰 부족 시, 약한 토큰(단독 숫자)을 위치 제약으로 보강한다.
     if (result.length < CHOICE_COUNT && weakAnchors.length) {
       const existingChoices = new Set(result.map((a) => a.choice));
-      const xSeeds = result.length ? result.map((a) => a.xRatio) : anchors.map((a) => a.xRatio);
+      const toSeedX = (a) => getQuestionColumnLocalXRatio(a.xRatio, columnContext);
+      const xSeeds = result.length ? result.map(toSeedX) : anchors.map(toSeedX);
       const yMin = (result.length ? Math.min(...result.map((a) => a.yRatio)) : Math.min(...anchors.map((a) => a.yRatio), 0));
       const yMax = (result.length ? Math.max(...result.map((a) => a.yRatio)) : Math.max(...anchors.map((a) => a.yRatio), 1));
       const combined = result.slice();
@@ -11765,7 +12761,7 @@
         if (existingChoices.has(c)) continue;
         let rows = weakAnchors.filter((a) => a.choice === c);
         if (xSeeds.length) {
-          rows = rows.filter((a) => xSeeds.some((x0) => Math.abs(a.xRatio - x0) <= 0.09));
+          rows = rows.filter((a) => xSeeds.some((x0) => Math.abs(toSeedX(a) - x0) <= 0.09));
         }
         rows = rows.filter((a) => a.yRatio >= (yMin - 0.02) && a.yRatio <= (yMax + 0.22));
         rows.sort((a, b) => a.yRatio - b.yRatio || a.xRatio - b.xRatio);
@@ -11844,8 +12840,14 @@
       if (!Number.isFinite(qStart)) return null;
       qStart = Math.max(0, Math.min(1, qStart));
       qEnd = 1;
+      let columnContext = null;
+      try{
+        columnContext = await getQuestionColumnContextForPage(pageNo, q);
+      }catch(_){}
       if (q < QUESTION_COUNT) {
-        const nextStart = await getQuestionStartRatioForPage(pageNo, q + 1);
+        const nextStart = columnContext
+          ? await getNextQuestionBoundaryRatioForColumn(pageNo, q, qStart, columnContext, { minGap: 0.03, sources: ["map", "anchor", "ratios"] })
+          : await getQuestionStartRatioForPage(pageNo, q + 1);
         if (Number.isFinite(nextStart) && nextStart > qStart + 0.03) {
           qEnd = Math.max(qStart + 0.06, Math.min(1, nextStart - 0.004));
         }
@@ -11858,6 +12860,10 @@
     const layer = await getQuestionPageTextLayer(pageNo);
     const pageW = layer.pageW;
     const pageH = layer.pageH;
+    let columnContext = null;
+    try{
+      columnContext = await getQuestionColumnContextForPage(pageNo, q);
+    }catch(_){}
     const candidates = [];
     for (const item of (layer.items || [])) {
       const raw = String(item.str || "").trim();
@@ -11875,7 +12881,13 @@
       if (topRatio < qStart + 0.002 || topRatio > qEnd + 0.01) continue;
       // 단독 숫자(약한 토큰)는 문항번호 근처 혼입 방지를 위해 x열 제약을 추가한다.
       const xRatio = x / pageW;
+      if (columnContext && !isXRatioInsideQuestionColumn(xRatio, columnContext, 0.018)) continue;
       if (!strong && xRatio > 0.82) continue;
+      const compact = raw.replace(/\s+/g, "");
+      const numericToken = /^\(?[1-5][.)]/.test(compact);
+      const standaloneNumericToken = !strong && !!weak;
+      const localXRatio = getQuestionColumnLocalXRatio(xRatio, columnContext);
+      if ((numericToken || standaloneNumericToken) && localXRatio < 0.16 && topRatio < qStart + 0.12) continue;
       candidates.push({
         choice,
         xRatio: Math.max(0, Math.min(1, xRatio)),
@@ -11897,8 +12909,10 @@
     return candidates[0];
   }
 
-  async function resolveSelectedChoiceAnchorWithRecovery(pageNo, q, selected, hint = null){
+  async function resolveSelectedChoiceAnchorWithRecovery(pageNo, q, selected, hint = null, options = {}){
     if (!Number.isFinite(pageNo) || !Number.isFinite(q) || !Number.isFinite(selected)) return null;
+    const allowLooseFallback = !!(options && options.allowLooseFallback);
+    const looseEndPad = Math.max(0.06, Math.min(0.38, Number(options?.looseEndPad) || 0.30));
     const hintStart = (hint && Number.isFinite(hint.startRatio)) ? Math.max(0, Math.min(1, Number(hint.startRatio))) : null;
     const hintEnd = (hint && Number.isFinite(hint.endRatio)) ? Math.max(0, Math.min(1, Number(hint.endRatio))) : null;
     const inHintRange = (anchor) => {
@@ -11906,6 +12920,17 @@
       if (!Number.isFinite(hintStart) || !Number.isFinite(hintEnd)) return true;
       const y = Number(anchor.yRatio);
       return y >= (hintStart - 0.004) && y <= (hintEnd + 0.02);
+    };
+    const inLooseHintRange = (anchor) => {
+      if (!anchor || !Number.isFinite(anchor.yRatio)) return false;
+      if (!Number.isFinite(hintStart) || !Number.isFinite(hintEnd)) return true;
+      const y = Number(anchor.yRatio);
+      return y >= (hintStart - 0.004) && y <= Math.min(1, hintEnd + looseEndPad);
+    };
+    let looseRecovered = null;
+    const rememberLooseRecovered = (anchor) => {
+      if (!allowLooseFallback || looseRecovered || !anchor) return;
+      if (inLooseHintRange(anchor)) looseRecovered = anchor;
     };
     const attempts = [];
     if (Number.isFinite(hintStart) && Number.isFinite(hintEnd)) {
@@ -11931,16 +12956,18 @@
       const sel = resolveSelectedChoiceAnchor(anchors, selected);
       if (direct && sel && inHintRange(sel)) return sel;
       if (!recovered && sel && inHintRange(sel)) recovered = sel;
+      else rememberLooseRecovered(sel);
     }
 
     if (!recovered) {
       try{
         const bandSel = await resolveChoiceAnchorByQuestionBand(pageNo, q, selected, hintStart, hintEnd);
         if (bandSel && inHintRange(bandSel)) return bandSel;
+        rememberLooseRecovered(bandSel);
       }catch(_){}
     }
     if (!recovered && Number.isFinite(hintStart) && Number.isFinite(hintEnd)) {
-      return null;
+      return allowLooseFallback ? looseRecovered : null;
     }
     if (recovered && (selected === 3 || selected === 4)) {
       let qStart = await getQuestionStartRatioForPage(pageNo, q);
@@ -11958,7 +12985,7 @@
         return recovered;
       }
     }
-    return recovered;
+    return recovered || (allowLooseFallback ? looseRecovered : null);
   }
 
   function extractQuestionStartsFromItems(items){
@@ -12901,16 +13928,13 @@
     if (!rect.width || !rect.height) return;
     const xOnCanvas = ((e.clientX - rect.left) / rect.width) * pdfCanvas.width;
     const yOnCanvas = ((e.clientY - rect.top) / rect.height) * pdfCanvas.height;
-    const sx = meta.cropWidthPx / pdfCanvas.width;
-    const sy = meta.cropHeightPx / pdfCanvas.height;
-    const xFull = meta.cropLeftPx + (xOnCanvas * sx);
-    const yFull = meta.cropStartPx + (yOnCanvas * sy);
+    const mappedPoint = mapSingleCanvasPointToFull(meta, xOnCanvas, yOnCanvas);
+    const xFull = Number(mappedPoint?.xFull);
+    const yFull = Number(mappedPoint?.yFull);
 
-    const visibleStartRatio = Math.max(0, Math.min(1, Number(meta.cropStartPx || 0) / Math.max(1, Number(meta.fullHeightPx || 1))));
-    const visibleEndRatio = Math.max(
-      visibleStartRatio + 0.02,
-      Math.min(1, (Number(meta.cropStartPx || 0) + Number(meta.cropHeightPx || 0)) / Math.max(1, Number(meta.fullHeightPx || 1)))
-    );
+    const visibleRange = getSingleVisibleRatioRange(meta);
+    const visibleStartRatio = visibleRange.startRatio;
+    const visibleEndRatio = visibleRange.endRatio;
     let anchors = await getChoiceAnchorsForQuestion(meta.page, q, {
       startRatio: visibleStartRatio,
       endRatio: visibleEndRatio
@@ -12938,6 +13962,7 @@
       srcTop: Number(meta.cropStartPx || 0),
       srcWidth: Math.max(1, Number(meta.cropWidthPx || 1)),
       srcHeight: Math.max(1, Number(meta.cropHeightPx || 1)),
+      segmentDraws: meta.segmentDraws || null,
     };
     const areaPoints = anchors.map((a) => {
       const projected = projectChoiceAnchorToCanvas(
@@ -12948,7 +13973,8 @@
         areaMeta.srcWidth,
         areaMeta.srcHeight,
         pdfCanvas.width,
-        pdfCanvas.height
+        pdfCanvas.height,
+        meta.segmentDraws || null
       );
       return projected ? { q, choice: a.choice, page: meta.page, x: projected.x, y: projected.y, r: projected.r, anchor: a } : null;
     }).filter(Boolean);
@@ -12967,11 +13993,12 @@
         const ay = a.yRatio * meta.fullHeightPx;
         const aw = Math.max(10, a.wRatio * meta.fullWidthPx);
         const ah = Math.max(12, a.hRatio * meta.fullHeightPx);
+        const centerBased = isCenterBasedChoiceAnchor(a);
         return {
           choice: a.choice,
           ax, ay, aw, ah,
-          cx: ax + (aw * 0.5),
-          cy: ay + (ah * 0.5)
+          cx: centerBased ? ax : ax + (aw * 0.5),
+          cy: centerBased ? ay : ay + (ah * 0.5)
         };
       });
       const ys = points.map((p) => p.cy);
@@ -13102,8 +14129,9 @@
     ]);
     const directChoiceHit = findAllModeChoiceAnchorHit(clickPoint, { requireSameColumn: true });
     if (directChoiceHit && Number.isFinite(directChoiceHit.q) && Number.isFinite(directChoiceHit.choice)) {
+      const directChoice = Math.max(1, Math.min(CHOICE_COUNT, Math.trunc(directChoiceHit.choice)));
       setFocusQuestionSilently(directChoiceHit.q);
-      chooseByKeyboard(Math.max(1, Math.min(CHOICE_COUNT, Math.trunc(directChoiceHit.choice))), { advance: false });
+      chooseByKeyboard(directChoice, { advance: false });
       return;
     }
     if (hasAllModeChoiceClickAreasForPoint(clickPoint, { requireSameColumn: true })) return;
@@ -13222,12 +14250,10 @@
     }
 
     for (const el of card.querySelectorAll(".choice")){
-      el.classList.remove("wrong");
+      el.classList.remove("correct","wrong");
       const c = Number(el.dataset.c);
-      if (showCorrectEl.checked && answerValueMatches(correct, c)){
+      if (answerValueMatches(correct, c)){
         el.classList.add("correct");
-      } else {
-        el.classList.remove("correct");
       }
       if (chosen === c){
         if (!answerValueMatches(correct, chosen)) el.classList.add("wrong");
@@ -13295,13 +14321,10 @@
     card.querySelectorAll(".choice").forEach(el => {
       const c = Number(el.dataset.c);
       el.classList.toggle("selected", chosen === c);
-
-      if (showCorrectEl.checked && answerValueMatches(correct, c)) el.classList.add("correct");
-      else {
-        if (!autoGradeEl.checked) el.classList.remove("correct","wrong");
-        else {
-          if (!showCorrectEl.checked && answerValueMatches(correct, c)) el.classList.remove("correct");
-        }
+      if (!autoGradeEl.checked) {
+        el.classList.remove("wrong");
+        if (showCorrectEl.checked && answerValueMatches(correct, c)) el.classList.add("correct");
+        else el.classList.remove("correct");
       }
     });
 

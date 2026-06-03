@@ -27,7 +27,12 @@
     "questionStartNo": 1,
     "questionEndNo": 100,
     "ocrStatus": "정상",
-    "ocrPublished": true
+    "ocrPublished": true,
+    "anchorMap": "quiz/pdf/농산물품질관리사/2022년 제19회 농산물품질관리사 1차_anchor.json",
+    "anchorStatus": "위치맵 생성",
+    "anchorConfidence": 1,
+    "anchorWarnings": [],
+    "anchorGeneratedAt": "2026-06-03T00:55:35.716Z"
   },
   {
     "gNo": "01",
@@ -67,7 +72,7 @@
     "anchorWarnings": [
       "선택지 위치 감지가 부족합니다(284/400). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
     ],
-    "anchorGeneratedAt": "2026-06-02T17:12:55.628Z",
+    "anchorGeneratedAt": "2026-06-03T07:24:52.944Z",
     "choiceCount": 4,
     "anchorQuestionDetected": 99,
     "anchorQuestionExpected": 100,
@@ -599,7 +604,7 @@
     "anchorWarnings": [
       "일부 선택지 위치가 누락되었습니다(96/100). 틀린 좌표 대신 누락으로 표시합니다."
     ],
-    "anchorGeneratedAt": "2026-06-02T16:59:48.566Z"
+    "anchorGeneratedAt": "2026-06-03T04:09:07.459Z"
   },
   {
     "gNo": "03",

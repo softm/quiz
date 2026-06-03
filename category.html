@@ -177,6 +177,16 @@
       box-shadow: 0 8px 18px rgba(24,39,56,.06);
     }
 
+    .examRow.clickable {
+      cursor: pointer;
+    }
+
+    .examRow.clickable:focus-visible {
+      outline: 3px solid rgba(23,107,117,.18);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(23,107,117,.18);
+    }
+
     .rowMain {
       min-width: 0;
       display: grid;
@@ -495,8 +505,12 @@
 
     function renderCategoryRow(item) {
       const href = makeCategoryUrl(item.category);
+      const ready = Boolean(item.childReady);
+      const rowAttrs = ready
+        ? `tabindex="0" role="link" data-primary-url="${escapeHtml(href)}" aria-label="${escapeHtml(`${item.name} 열기`)}"`
+        : "";
       return `
-        <article class="examRow">
+        <article class="examRow ${ready ? "clickable" : ""}" ${rowAttrs}>
           <div class="rowMain">
             <div class="nameLine">
               <h2 class="name">${escapeHtml(item.name)}</h2>
@@ -507,7 +521,7 @@
             <div class="detailLine">${escapeHtml(item.category.catPath || item.name)}</div>
           </div>
           <div class="actions">
-            <a class="btn primary ${item.childReady ? "" : "disabled"}" href="${escapeHtml(href)}">열기</a>
+            <a class="btn primary ${ready ? "" : "disabled"}" href="${escapeHtml(href)}">열기</a>
           </div>
         </article>
       `;
@@ -528,9 +542,12 @@
         fileNameFromPath(exam.questionPdf),
         answerPath ? fileNameFromPath(exam.answerPdf) : (exam.answerSourceId ? `정답 원본 ${exam.answerSourceId}` : ""),
       ].filter(Boolean).join(" / ");
+      const rowAttrs = ready
+        ? `tabindex="0" role="link" data-primary-url="${escapeHtml(quizUrl)}" aria-label="${escapeHtml(`${item.name} 풀이 시작`)}"`
+        : "";
 
       return `
-        <article class="examRow">
+        <article class="examRow ${ready ? "clickable" : ""}" ${rowAttrs}>
           <div class="rowMain">
             <div class="nameLine">
               <h2 class="name">${escapeHtml(item.name)}</h2>
@@ -591,6 +608,22 @@
       sortSelect.addEventListener("change", () => {
         state.sort = sortSelect.value;
         renderList();
+      });
+
+      const list = document.getElementById("list");
+      list.addEventListener("click", (event) => {
+        if (event.target.closest("a, button, input, select, textarea")) return;
+        const row = event.target.closest("[data-primary-url]");
+        if (!row) return;
+        window.location.href = row.dataset.primaryUrl;
+      });
+
+      list.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const row = event.target.closest("[data-primary-url]");
+        if (!row) return;
+        event.preventDefault();
+        window.location.href = row.dataset.primaryUrl;
       });
     }
 
