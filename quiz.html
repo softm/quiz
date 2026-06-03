@@ -743,7 +743,7 @@
       bottom:16px;
       z-index:90;
       display:none;
-      width:min(520px, calc(100% - 24px));
+      width:min(680px, calc(100% - 24px));
       padding:8px;
       border:1px solid rgba(42,93,172,.24);
       border-radius:14px;
@@ -899,6 +899,7 @@
     .anchorEditKindRow{
       justify-content:flex-start;
       align-items:stretch;
+      flex-wrap:nowrap;
       padding:6px;
       border:1px solid rgba(148,163,184,.24);
       border-radius:12px;
@@ -909,7 +910,7 @@
       align-items:center;
       flex-wrap:wrap;
       gap:6px;
-      flex:1 1 260px;
+      flex:1 1 auto;
       min-width:0;
     }
     .anchorEditActions.bottom{
@@ -934,6 +935,9 @@
     .anchorEditModeRow button,
     .anchorEditChoiceControls button{
       min-height:30px;
+      padding-left:10px;
+      padding-right:10px;
+      white-space:nowrap;
     }
     .anchorEditPanel button:disabled{
       opacity:.45;
@@ -983,6 +987,8 @@
       background:#f8fafc;
       border:1px solid rgba(148,163,184,.35);
       color:#475569;
+      flex:0 0 auto;
+      white-space:nowrap;
     }
     .anchorEditModeRow,
     .anchorEditChoiceRow{
@@ -1019,14 +1025,28 @@
       background:transparent;
       align-items:center;
       justify-content:flex-start;
-      flex:0 1 auto;
+      flex:0 0 auto;
       gap:8px;
+      margin-left:auto;
+      flex-wrap:nowrap;
+      white-space:nowrap;
     }
     .anchorEditModeRow.active{display:flex}
     .anchorEditModeLabel{
       font-size:12px;
       font-weight:900;
       color:#475569;
+      white-space:nowrap;
+    }
+    #anchorEditModeToggle{
+      min-width:104px;
+      justify-content:center;
+      white-space:nowrap;
+    }
+    #anchorEditQuestionFind{
+      min-width:118px;
+      justify-content:center;
+      white-space:nowrap;
     }
     .anchorEditChoiceRow label{
       font-size:12px;
@@ -2180,8 +2200,8 @@
   const PDF_ANCHOR_MANUAL_SAVE_URL = "/api/admin/anchor-manual";
   const PDF_ANCHOR_MANUAL_DELETE_URL = "/api/admin/anchor-manual-delete";
   const PDF_PATTERN_VERSION = 3;
-  const CROP_CACHE_VERSION = 58; // SOFTM-위치맵: 2단 컬럼 crop은 단일보기에서 추가 확대하지 않도록 보정 - 2026-06-03
-  const GRADE_MARKER_VERSION = 20;
+  const CROP_CACHE_VERSION = 59; // SOFTM-위치맵: 단일보기 원본 배율/상하 여백/2단 구분선 crop 보정 - 2026-06-03
+  const GRADE_MARKER_VERSION = 21;
   const PRESET_PAGE_ANCHORS = {
     "2022년 제19회 농산물품질관리사 1차": [1,6,10,14,18,22,26,33,39,47,51,57,64,70,76,81,87,94],
     "2023년 제20회 농산물품질관리사 1차": [1,5,10,15,19,23,26,34,40,48,51,57,64,70,76,83,90,97],
@@ -5971,7 +5991,12 @@
       return { choice, x: left, y: top, w: right - left, h: bottom - top };
     };
 
-    const yClusterGap = Math.max(24, avgR * 2.4, Math.min(54, Math.max(1, xSpread) * 0.08));
+    const gridChoiceLayoutHint = safe.length >= 4
+      && xSpread > Math.max(avgR * 7, 140)
+      && ySpread > Math.max(avgR * 1.25, 28);
+    const yClusterGap = gridChoiceLayoutHint
+      ? Math.max(18, Math.min(avgR * 1.35, ySpread * 0.55))
+      : Math.max(24, avgR * 2.4, Math.min(54, Math.max(1, xSpread) * 0.08));
     const rows = [];
     for (const point of [...safe].sort((a, b) => a.y - b.y || a.x - b.x)){
       const row = rows[rows.length - 1];
@@ -9244,6 +9269,38 @@
     }
   }
 
+  function trimSingleColumnDividerSource(fullCanvas, source){
+    if (!fullCanvas || !source) return source;
+    let left = Math.max(0, Math.floor(Number(source.left) || 0));
+    const top = Math.max(0, Math.floor(Number(source.top) || 0));
+    let width = Math.max(1, Math.floor(Number(source.width) || 1));
+    const height = Math.max(1, Math.floor(Number(source.height) || 1));
+    const fullWidth = Math.max(1, Number(fullCanvas.width || 1));
+    const widthRatio = width / fullWidth;
+    if (widthRatio <= 0.22 || widthRatio >= 0.72) return { ...source, left, top, width, height };
+    const trimPx = Math.max(0, Math.min(
+      Math.ceil(fullWidth * 0.028),
+      Math.floor(width * 0.080)
+    ));
+    if (trimPx < 2 || width - trimPx < 1) return { ...source, left, top, width, height };
+    const centerRatio = (left + width * 0.5) / fullWidth;
+    if (centerRatio < 0.5) {
+      width = Math.max(1, width - trimPx);
+    } else {
+      left = Math.min(fullWidth - 1, left + trimPx);
+      width = Math.max(1, Math.min(fullWidth - left, width - trimPx));
+    }
+    return { ...source, left, top, width, height };
+  }
+
+  function getSingleQuestionCanvasPads(sourceHeight, fullCanvas){
+    const h = Math.max(1, Number(sourceHeight) || 1);
+    const pageH = Math.max(h, Number(fullCanvas?.height || 0) || h);
+    const top = Math.max(6, Math.min(30, Math.round(Math.max(h * 0.018, pageH * 0.0035))));
+    const bottom = Math.max(10, Math.min(42, Math.round(Math.max(h * 0.034, pageH * 0.006))));
+    return { top, bottom };
+  }
+
   async function renderPdfPage(page, q){
     if (state.viewMode !== "single") {
       return renderAllPdfPages(q);
@@ -9581,7 +9638,7 @@
           );
         if (Number.isFinite(finalNextBoundary)) {
           finalNextBoundaryUsed = finalNextBoundary;
-          const finalGap = reliableAnchorBoundary ? (mobileViewport ? 0.008 : 0.008) : (mobileViewport ? 0.012 : 0.022);
+          const finalGap = reliableAnchorBoundary ? (mobileViewport ? 0.012 : 0.014) : (mobileViewport ? 0.016 : 0.026);
           const finalCap = Math.min(0.995, finalNextBoundary - finalGap);
           if (finalCap >= minContentEnd) {
             safeEnd = Math.min(safeEnd, finalCap);
@@ -9595,7 +9652,7 @@
       // 경계값이 이 최소 하단보다 이르면 오탐으로 보고 경계를 무시한다.
       let finalContentEndCap = null;
       if (!hasEndOverride && Number.isFinite(finalNextBoundaryUsed)) {
-        const capGap = reliableAnchorBoundary ? (mobileViewport ? 0.008 : 0.008) : (mobileViewport ? 0.012 : 0.016);
+        const capGap = reliableAnchorBoundary ? (mobileViewport ? 0.012 : 0.014) : (mobileViewport ? 0.016 : 0.020);
         const cap = Math.min(0.995, Number(finalNextBoundaryUsed) - capGap);
         const choiceGuard = Number.isFinite(lastChoiceBottom)
           ? Number(lastChoiceBottom) + (mobileViewport ? 0.006 : 0.004)
@@ -9635,7 +9692,8 @@
       const singlePadPx = Math.max(6, Math.floor(fullCanvas.height * singlePadRatio));
       let paddedTop = Math.max(0, srcTop - singlePadPx);
       if (Number.isFinite(labelStartBoundary)) {
-        const startTopPx = Math.max(0, Math.floor(fullCanvas.height * Math.max(0, Number(labelStartBoundary) - 0.006)));
+        const labelTopPad = mobileViewport ? 0.012 : 0.014;
+        const startTopPx = Math.max(0, Math.floor(fullCanvas.height * Math.max(0, Number(labelStartBoundary) - labelTopPad)));
         paddedTop = Math.max(paddedTop, startTopPx);
       }
       const bottomPadPx = Number.isFinite(labelNextBoundary)
@@ -9745,14 +9803,20 @@
         const singleSegmentWidthRatio = Math.max(0, Number(seg.right) - Number(seg.left));
         const singleColumnStoredSegment = Number.isFinite(singleSegmentWidthRatio) && singleSegmentWidthRatio > 0.22 && singleSegmentWidthRatio < 0.72;
         const segmentTopPadRatio = singleColumnStoredSegment
-          ? (mobileViewport ? 0.010 : 0.008)
-          : 0;
-        const segmentTopRatio = (!hasEndOverride && Number.isFinite(labelStartBoundary) && Number(labelStartBoundary) > Number(seg.top))
-          ? Math.max(
-            Number(seg.top),
-            Math.min(Number(seg.bottom) - 0.03, Number(labelStartBoundary) - segmentTopPadRatio)
-          )
-          : Number(seg.top);
+          ? (mobileViewport ? 0.014 : 0.014)
+          : (mobileViewport ? 0.012 : 0.014);
+        let segmentTopRatio = Number(seg.top);
+        if (!hasEndOverride && Number.isFinite(labelStartBoundary)) {
+          const labelTopRatio = Math.max(0, Number(labelStartBoundary) - segmentTopPadRatio);
+          if (Number(labelStartBoundary) > Number(seg.top)) {
+            segmentTopRatio = Math.max(
+              Number(seg.top),
+              Math.min(Number(seg.bottom) - 0.03, labelTopRatio)
+            );
+          } else if (Number(seg.top) - Number(labelStartBoundary) < 0.045) {
+            segmentTopRatio = Math.max(0, Math.min(Number(seg.bottom) - 0.03, labelTopRatio));
+          }
+        }
         srcLeft = Math.max(0, Math.floor(fullCanvas.width * seg.left));
         srcTop = Math.max(0, Math.floor(fullCanvas.height * segmentTopRatio));
         const segRight = Math.min(fullCanvas.width, Math.ceil(fullCanvas.width * seg.right));
@@ -9816,11 +9880,10 @@
     if (token !== state.renderToken) return;
 
     const multiSegments = state.viewMode === "single" && activeQuestionSegments.length > 1 ? activeQuestionSegments : [];
-    const destWidth = fullCanvas.width;
-    const segmentGap = multiSegments.length ? Math.max(10, Math.floor(destWidth * 0.012)) : 0;
+    let destWidth = fullCanvas.width;
     const segmentDraws = [];
     if (multiSegments.length) {
-      let dy = 0;
+      const sources = [];
       for (const seg of multiSegments){
         const left = Math.max(0, Math.floor(fullCanvas.width * seg.left));
         const top = Math.max(0, Math.floor(fullCanvas.height * seg.top));
@@ -9828,43 +9891,52 @@
         const bottom = Math.min(fullCanvas.height, Math.ceil(fullCanvas.height * seg.bottom));
         const width = Math.max(1, right - left);
         const height = Math.max(1, bottom - top);
-        const destHeight = Math.max(1, Math.round(height * (destWidth / width)));
+        sources.push(trimSingleColumnDividerSource(fullCanvas, { left, top, width, height }));
+      }
+      destWidth = Math.max(1, ...sources.map((item) => item.width));
+      const pads = getSingleQuestionCanvasPads(Math.max(1, ...sources.map((item) => item.height)), fullCanvas);
+      const segmentGap = Math.max(10, Math.floor(destWidth * 0.012));
+      let dy = 0;
+      for (let i = 0; i < sources.length; i++){
+        const source = sources[i];
+        if (i === 0) dy += pads.top;
         segmentDraws.push({
-          left,
-          top,
-          width,
-          height,
+          left: source.left,
+          top: source.top,
+          width: source.width,
+          height: source.height,
           destLeft: 0,
           destTop: dy,
-          destWidth,
-          destHeight,
+          destWidth: source.width,
+          destHeight: source.height,
+          destBottomPad: i === sources.length - 1 ? pads.bottom : 0,
         });
-        dy += destHeight + segmentGap;
+        dy += source.height + segmentGap;
       }
     } else if (state.viewMode === "single") {
       const seg = activeQuestionSegments[0];
       const segmentWidthRatio = seg
         ? Math.max(0, Number(seg?.right) - Number(seg?.left))
         : (srcWidth / Math.max(1, fullCanvas.width));
-      const singleColumnSegment = Number.isFinite(segmentWidthRatio) && segmentWidthRatio > 0.22 && segmentWidthRatio < 0.72;
-      if (singleColumnSegment && srcWidth > 0 && srcHeight > 0) {
-        const renderMobileViewport = window.matchMedia("(max-width: 768px)").matches;
-        const maxColumnScale = renderMobileViewport ? 1.12 : 1;
-        const targetScale = Math.max(1, Math.min(destWidth / Math.max(1, srcWidth), maxColumnScale));
-        const drawWidth = Math.max(1, Math.round(srcWidth * targetScale));
-        const drawHeight = Math.max(1, Math.round(srcHeight * targetScale));
-        const topPad = Math.max(8, Math.round(drawHeight * 0.04));
-        const bottomPad = Math.max(22, Math.round(drawHeight * 0.12));
-        segmentDraws.push({
+      if (Number.isFinite(segmentWidthRatio) && srcWidth > 0 && srcHeight > 0) {
+        const source = trimSingleColumnDividerSource(fullCanvas, {
           left: srcLeft,
           top: srcTop,
           width: srcWidth,
-          height: srcHeight,
+          height: srcHeight
+        });
+        const pads = getSingleQuestionCanvasPads(source.height, fullCanvas);
+        destWidth = Math.max(1, source.width);
+        segmentDraws.push({
+          left: source.left,
+          top: source.top,
+          width: source.width,
+          height: source.height,
           destLeft: 0,
-          destTop: topPad,
-          destWidth: Math.min(destWidth, drawWidth),
-          destHeight: drawHeight,
-          destBottomPad: bottomPad,
+          destTop: pads.top,
+          destWidth: source.width,
+          destHeight: source.height,
+          destBottomPad: pads.bottom,
         });
       }
     }
@@ -9873,7 +9945,10 @@
       : (state.viewMode === "single" ? Math.max(1, Math.round(srcHeight * (destWidth / srcWidth))) : srcHeight);
     pdfCanvas.width = destWidth;
     pdfCanvas.height = destHeight;
-    pdfCanvas.style.width = `${Math.ceil(cssViewport.width)}px`;
+    const canvasCssWidth = state.viewMode === "single"
+      ? Math.max(1, Math.ceil(destWidth / outputScale))
+      : Math.ceil(cssViewport.width);
+    pdfCanvas.style.width = `${canvasCssWidth}px`;
     const canvasCssHeight = Math.ceil(destHeight / outputScale);
     pdfCanvas.style.height = `${canvasCssHeight}px`;
     pdfCtx.clearRect(0, 0, pdfCanvas.width, pdfCanvas.height);
@@ -9952,7 +10027,14 @@
         }
         const rect = await getChoiceRect(normalized);
         if (token !== state.renderToken) return null;
-        if ((!projected || !Number.isFinite(projected.x) || !Number.isFinite(projected.y) || !Number.isFinite(projected.r)) && rect) {
+        const projectedR = Number(projected?.r) || 0;
+        const projectedOutsideCanvas = projected && (
+          projected.x < -projectedR ||
+          projected.x > pdfCanvas.width + projectedR ||
+          projected.y < -projectedR ||
+          projected.y > pdfCanvas.height + projectedR
+        );
+        if ((!projected || projectedOutsideCanvas || !Number.isFinite(projected.x) || !Number.isFinite(projected.y) || !Number.isFinite(projected.r)) && rect) {
           projected = {
             x: rect.x + Math.max(12, Math.min(rect.w * 0.18, 34)),
             y: rect.y + rect.h * 0.5,
@@ -9998,7 +10080,7 @@
       if (gradeState) {
         const markerAnchor = await resolveQuestionNumberAnchorForMark(safePage, q);
         if (token !== state.renderToken) return;
-        drawQuestionNumberMarker(gradeState, markerAnchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
+        drawQuestionNumberMarker(gradeState, markerAnchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws);
       }
     }
     if (token !== state.renderToken) return;
@@ -10355,13 +10437,24 @@
     return null;
   }
 
-  function projectGradeMarkerPointSingle(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight){
+  function projectGradeMarkerPointSingle(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws = null){
     if (!anchor || !fullCanvas || !Number.isFinite(anchor.yRatio)) return null;
+    const xFullRaw = Math.round(fullCanvas.width * (Number.isFinite(anchor.xRatio) ? anchor.xRatio : 0.075));
+    const yFullRaw = Math.round(fullCanvas.height * anchor.yRatio);
+    const seg = getSingleSegmentDrawForFullPoint(segmentDraws, xFullRaw, yFullRaw);
+    if (seg) {
+      const sx = seg.width / Math.max(1, seg.destWidth);
+      const sy = seg.height / Math.max(1, seg.destHeight);
+      const xFull = Math.max(seg.left + 8, Math.min(seg.left + seg.width - 8, xFullRaw));
+      const yFull = Math.max(seg.top + 10, Math.min(seg.top + seg.height - 10, yFullRaw));
+      const x = seg.destLeft + ((xFull - seg.left) / sx);
+      const y = seg.destTop + ((yFull - seg.top) / sy);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      return { x, y };
+    }
     const sx = srcWidth / pdfCanvas.width;
     const sy = srcHeight / pdfCanvas.height;
-    const xFullRaw = Math.round(fullCanvas.width * (Number.isFinite(anchor.xRatio) ? anchor.xRatio : 0.075));
     const xFull = Math.max(srcLeft + 8, Math.min(srcLeft + srcWidth - 8, xFullRaw));
-    const yFullRaw = Math.round(fullCanvas.height * anchor.yRatio);
     const yFull = Math.max(srcTop + 10, Math.min(srcTop + srcHeight - 10, yFullRaw));
     const x = (xFull - srcLeft) / sx;
     const y = (yFull - srcTop) / sy;
@@ -10383,9 +10476,9 @@
     return { x, y };
   }
 
-  function drawQuestionGradeMarker(gradeState, anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight){
+  function drawQuestionGradeMarker(gradeState, anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws = null){
     if (!gradeState) return;
-    const point = projectGradeMarkerPointSingle(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
+    const point = projectGradeMarkerPointSingle(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws);
     if (!point) return;
     const radius = Math.max(18, Math.min(34, pdfCanvas.width * 0.018));
     pdfCtx.save();
@@ -10395,9 +10488,9 @@
     pdfCtx.restore();
   }
 
-  function drawQuestionNumberMarker(gradeState, anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight){
+  function drawQuestionNumberMarker(gradeState, anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws = null){
     if (!gradeState) return;
-    const point = projectGradeMarkerPointSingle(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight);
+    const point = projectGradeMarkerPointSingle(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws);
     if (!point) return;
     const radius = Math.max(18, Math.min(34, pdfCanvas.width * 0.018));
     pdfCtx.save();
@@ -10865,10 +10958,18 @@
     const r = Math.max(8, Math.min(56, Number(projected?.r) || 16));
     const canvasWidth = Number(projected?.canvasWidth || 0);
     if (rect && [rect.x, rect.y, rect.w, rect.h].every(Number.isFinite) && rect.w > 0 && rect.h > 0) {
-      const inset = Math.max(4, Math.min(rect.w * 0.14, r * 0.72));
-      const left = Number(rect.x) + inset;
-      const right = Number(rect.x) + Number(rect.w) - Math.max(4, Math.min(rect.w * 0.08, r * 0.45));
-      const lineY = Number(rect.y) + Number(rect.h) * (tone === "correct" ? 0.76 : 0.52);
+      const rectLeft = Number(rect.x) + Math.max(2, Math.min(rect.w * 0.025, r * 0.35));
+      const right = Number(rect.x) + Number(rect.w) - Math.max(3, Math.min(rect.w * 0.040, r * 0.34));
+      const anchorEnd = Number.isFinite(x) ? x + r * 1.04 : null;
+      const left = Number.isFinite(anchorEnd)
+        ? Math.max(rectLeft, Math.min(right - 4, anchorEnd))
+        : rectLeft;
+      const underlineY = Number.isFinite(y)
+        ? y + Math.max(4, r * 0.72)
+        : Number(rect.y) + Number(rect.h) * 0.76;
+      const lineY = tone === "correct"
+        ? Math.max(Number(rect.y) + Number(rect.h) * 0.58, Math.min(Number(rect.y) + Number(rect.h) * 0.90, underlineY))
+        : (Number.isFinite(y) ? y : Number(rect.y) + Number(rect.h) * 0.50);
       return {
         x1: Math.max(0, left),
         x2: canvasWidth > 0 ? Math.min(canvasWidth, right) : right,
@@ -10877,8 +10978,8 @@
       };
     }
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    const x1 = x - r * 0.55;
-    const x2 = x + r * (tone === "correct" ? 4.6 : 4.0);
+    const x1 = x + r * 1.04;
+    const x2 = x + r * 4.7;
     return {
       x1: Math.max(0, x1),
       x2: canvasWidth > 0 ? Math.min(canvasWidth, x2) : x2,
@@ -13920,6 +14021,9 @@
     const meta = state.lastRenderMeta;
     if (!meta || meta.viewMode !== "single" || meta.q !== q) return;
     if (anchorEditState.enabled) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
       await handleAnchorEditCanvasClick(e);
       return;
     }
@@ -14106,8 +14210,10 @@
     }
     if (state.viewMode !== "all") return;
     if (anchorEditState.enabled) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
       if (anchorEditState.interactionMode === "drag") {
-        e.preventDefault();
         return;
       }
       await handleAnchorEditAllCanvasClick(e);
