@@ -2949,8 +2949,26 @@
     if (anchorEditState.enabled && anchorEditState.editOverlay === "area") setAnchorEditEnabled(false);
     else setAnchorEditOverlayMode("area");
   });
-  if (btnChoiceAreaResetTop) btnChoiceAreaResetTop.addEventListener("click", () => resetAllChoiceClickAreasFromViewer());
-  if (btnAnchorResetTop) btnAnchorResetTop.addEventListener("click", () => resetAllManualAnchorsFromViewer());
+  if (btnChoiceAreaResetTop) btnChoiceAreaResetTop.addEventListener("click", () => {
+    const availability = getAnchorEditResetAvailability();
+    if (!availability.choiceAreaAll) {
+      const msg = "초기화할 문항영역이 없습니다.";
+      setAnchorEditStatus(msg);
+      showToastAndSnackbar(msg);
+      return;
+    }
+    resetAllChoiceClickAreasFromViewer();
+  });
+  if (btnAnchorResetTop) btnAnchorResetTop.addEventListener("click", () => {
+    const availability = getAnchorEditResetAvailability();
+    if (!availability.allManualAnchors) {
+      const msg = "초기화할 앵커가 없습니다.";
+      setAnchorEditStatus(msg);
+      showToastAndSnackbar(msg);
+      return;
+    }
+    resetAllManualAnchorsFromViewer();
+  });
   if (anchorColumnOne) anchorColumnOne.addEventListener("click", () => setAnchorEditActiveColumn(1));
   if (anchorColumnTwo) anchorColumnTwo.addEventListener("click", () => setAnchorEditActiveColumn(2));
   if (anchorEditDockLeft) anchorEditDockLeft.addEventListener("click", () => setAnchorEditPanelDock("left"));
@@ -3006,8 +3024,26 @@
   if (btnAnchorEditUndo) btnAnchorEditUndo.addEventListener("click", () => undoAnchorEdit().catch((err) => setAnchorEditStatus(`실행취소 실패: ${err?.message || err}`)));
   if (btnAnchorEditRedo) btnAnchorEditRedo.addEventListener("click", () => redoAnchorEdit().catch((err) => setAnchorEditStatus(`다시실행 실패: ${err?.message || err}`)));
   if (btnAnchorEditDelete) btnAnchorEditDelete.addEventListener("click", () => deleteCurrentAnchorEdit());
-  if (btnAnchorEditResetSelected) btnAnchorEditResetSelected.addEventListener("click", () => resetSelectedAnchorEdit());
+  if (btnAnchorEditResetSelected) btnAnchorEditResetSelected.addEventListener("click", () => {
+    const availability = getAnchorEditResetAvailability();
+    const selectedReset = anchorEditState.kind === "question" ? availability.question : availability.choice;
+    if (!selectedReset) {
+      const msg = "초기화할 수정값이 없습니다.";
+      setAnchorEditStatus(msg);
+      showToastAndSnackbar(msg);
+      return;
+    }
+    resetSelectedAnchorEdit();
+  });
   if (btnAnchorEditReset) btnAnchorEditReset.addEventListener("click", () => {
+    const availability = getAnchorEditResetAvailability();
+    const resetAvailable = anchorEditState.choiceAreaEditMode ? availability.choiceAreaAll : availability.allManualAnchors;
+    if (!resetAvailable) {
+      const msg = anchorEditState.choiceAreaEditMode ? "문항영역 초기화할 수정값이 없습니다." : "앵커 초기화할 수정값이 없습니다.";
+      setAnchorEditStatus(msg);
+      showToastAndSnackbar(msg);
+      return;
+    }
     if (anchorEditState.choiceAreaEditMode) resetAllChoiceClickAreasFromViewer();
     else resetCurrentQuestionAnchorEdits("all");
   });
@@ -4550,19 +4586,25 @@
     }
     if (btnAnchorEditResetSelected) {
       const selectedReset = anchorEditState.kind === "question" ? availability.question : availability.choice;
-      const enabled = !!(anchorEditState.enabled && selectedReset && !saving);
+      const enabled = !!(anchorEditState.enabled && !saving);
+      btnAnchorEditResetSelected.textContent = selectedReset ? "초기화" : "초기화(없음)";
       btnAnchorEditResetSelected.disabled = !enabled;
       const targetLabel = anchorEditState.kind === "question" ? "문제 앵커" : `${anchorEditState.choice}번 문항 앵커`;
-      btnAnchorEditResetSelected.title = enabled ? `${targetLabel} 수정값을 초기화합니다.` : disabledTitle;
+      btnAnchorEditResetSelected.title = selectedReset ? `${targetLabel} 수정값을 초기화합니다.` : `${targetLabel} 수정값이 없습니다.`;
     }
     if (btnAnchorEditReset) {
-      const enabled = !!(anchorEditState.enabled && (anchorEditState.choiceAreaEditMode ? availability.choiceAreaAll : availability.allManualAnchors) && !saving);
+      const enabled = !!(anchorEditState.enabled && !saving);
+      const resetAvailable = anchorEditState.choiceAreaEditMode ? availability.choiceAreaAll : availability.allManualAnchors;
       btnAnchorEditReset.disabled = !enabled;
-      btnAnchorEditReset.title = enabled ? (anchorEditState.choiceAreaEditMode ? "수정된 문항영역을 전체 초기화합니다." : "수정된 앵커를 전체 초기화합니다.") : disabledTitle;
+      btnAnchorEditReset.textContent = resetAvailable ? "전체 초기화" : "전체 초기화(없음)";
+      btnAnchorEditReset.title = resetAvailable
+        ? (anchorEditState.choiceAreaEditMode ? "수정된 문항영역을 전체 초기화합니다." : "수정된 앵커를 전체 초기화합니다.")
+        : "초기화할 수정값이 없습니다.";
     }
     if (btnAnchorResetTop) {
-      btnAnchorResetTop.disabled = !availability.allManualAnchors || saving;
-      btnAnchorResetTop.title = availability.allManualAnchors ? "수정된 앵커를 전체 초기화합니다." : disabledTitle;
+      btnAnchorResetTop.disabled = saving;
+      btnAnchorResetTop.textContent = availability.allManualAnchors ? "앵커 초기화" : "앵커 초기화(없음)";
+      btnAnchorResetTop.title = availability.allManualAnchors ? "수정된 앵커를 전체 초기화합니다." : "초기화할 수정값이 없습니다.";
     }
     if (btnChoiceAreaResetTop) {
       btnChoiceAreaResetTop.disabled = !availability.choiceAreaAll || saving;
