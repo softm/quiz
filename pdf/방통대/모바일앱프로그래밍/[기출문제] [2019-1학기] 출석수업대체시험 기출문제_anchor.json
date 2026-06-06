@@ -185,10 +185,10 @@
     },
     "9": {
       "page": 1,
-      "left": 0,
-      "right": 0.5148114901256733,
+      "left": 0.48473967684021546,
+      "right": 0.9596050269299821,
       "split": 0.4997755834829444,
-      "column": 0,
+      "column": 1,
       "source": "anchor-column"
     },
     "10": {
@@ -245,7 +245,7 @@
       {
         "page": 1,
         "top": 0.04709258084971465,
-        "bottom": 0.1729422954977806,
+        "bottom": 0.1629422954977806,
         "left": 0,
         "right": 0.5148114901256733,
         "column": 0,
@@ -256,7 +256,7 @@
       {
         "page": 1,
         "top": 0.1629422954977806,
-        "bottom": 0.3224990488268865,
+        "bottom": 0.2774001268230818,
         "left": 0,
         "right": 0.5148114901256733,
         "column": 0,
@@ -267,7 +267,7 @@
       {
         "page": 1,
         "top": 0.2774001268230818,
-        "bottom": 0.4042999365884591,
+        "bottom": 0.3595180722891566,
         "left": 0,
         "right": 0.5148114901256733,
         "column": 0,
@@ -278,7 +278,7 @@
       {
         "page": 1,
         "top": 0.3595180722891566,
-        "bottom": 0.46780596068484465,
+        "bottom": 0.45780596068484464,
         "left": 0,
         "right": 0.5148114901256733,
         "column": 0,
@@ -289,7 +289,7 @@
       {
         "page": 1,
         "top": 0.45780596068484464,
-        "bottom": 0.6172041851616995,
+        "bottom": 0.5722637920101459,
         "left": 0,
         "right": 0.5148114901256733,
         "column": 0,
@@ -300,7 +300,7 @@
       {
         "page": 1,
         "top": 0.5722637920101459,
-        "bottom": 0.7001147748890298,
+        "bottom": 0.6540646797717184,
         "left": 0,
         "right": 0.5148114901256733,
         "column": 0,
@@ -311,7 +311,7 @@
       {
         "page": 1,
         "top": 0.6540646797717184,
-        "bottom": 0.8799809765377299,
+        "bottom": 0.8699809765377299,
         "left": 0,
         "right": 0.5148114901256733,
         "column": 0,
@@ -322,7 +322,7 @@
       {
         "page": 1,
         "top": 0.8699809765377299,
-        "bottom": 0.95,
+        "bottom": 0.97,
         "left": 0,
         "right": 0.5148114901256733,
         "column": 0,
@@ -332,19 +332,19 @@
     "9": [
       {
         "page": 1,
-        "top": 0.08209258084971464,
-        "bottom": 0.95,
-        "left": 0,
-        "right": 0.5148114901256733,
-        "column": 0,
+        "top": 0.04709258084971465,
+        "bottom": 0.19147748890298036,
+        "left": 0.48473967684021546,
+        "right": 0.9596050269299821,
+        "column": 1,
         "source": "column-segment"
       }
     ],
     "10": [
       {
         "page": 1,
-        "top": 0.15647748890298036,
-        "bottom": 0.3624483195941661,
+        "top": 0.19147748890298036,
+        "bottom": 0.3477869372225745,
         "left": 0.48473967684021546,
         "right": 0.9596050269299821,
         "column": 1,
@@ -355,7 +355,7 @@
       {
         "page": 1,
         "top": 0.3477869372225745,
-        "bottom": 0.488003170577045,
+        "bottom": 0.4416360177552314,
         "left": 0.48473967684021546,
         "right": 0.9596050269299821,
         "column": 1,
@@ -366,7 +366,7 @@
       {
         "page": 1,
         "top": 0.4416360177552314,
-        "bottom": 0.5816937222574509,
+        "bottom": 0.5354850982878884,
         "left": 0.48473967684021546,
         "right": 0.9596050269299821,
         "column": 1,
@@ -377,7 +377,7 @@
       {
         "page": 1,
         "top": 0.5354850982878884,
-        "bottom": 0.6913956880152188,
+        "bottom": 0.6448700063411541,
         "left": 0.48473967684021546,
         "right": 0.9596050269299821,
         "column": 1,
@@ -388,7 +388,7 @@
       {
         "page": 1,
         "top": 0.6448700063411541,
-        "bottom": 0.8080729232720355,
+        "bottom": 0.7932530120481928,
         "left": 0.48473967684021546,
         "right": 0.9596050269299821,
         "column": 1,
@@ -399,7 +399,7 @@
       {
         "page": 1,
         "top": 0.7932530120481928,
-        "bottom": 0.95,
+        "bottom": 0.97,
         "left": 0.48473967684021546,
         "right": 0.9596050269299821,
         "column": 1,
@@ -437,16 +437,78 @@
     0.8349809765377298,
     0.04709258084971465,
     0.15647748890298036,
-    0.33144831959416615,
+    0.3127869372225745,
     0.40663601775523145,
     0.5004850982878883,
     0.6098700063411541,
-    0.7770729232720355
+    0.7784996829422955
   ],
   "choiceAnchorMap": {
+    "1": [
+      {
+        "choice": 1,
+        "page": 1,
+        "xRatio": 0.07338420107719928,
+        "yRatio": 0.13982244768547875,
+        "wRatio": 0.011220825852782765,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 2,
+        "page": 1,
+        "xRatio": 0.27131956912028726,
+        "yRatio": 0.1391883322764743,
+        "wRatio": 0.013016157989228007,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 3,
+        "page": 1,
+        "xRatio": 0.07338420107719928,
+        "yRatio": 0.1553582752060875,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 4,
+        "page": 1,
+        "xRatio": 0.2706463195691203,
+        "yRatio": 0.1553582752060875,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      }
+    ],
     "2": [
       {
         "choice": 1,
+        "page": 1,
+        "xRatio": 0.07675044883303411,
+        "yRatio": 0.2024413443246671,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
         "page": 1,
         "xRatio": 0.07338420107719928,
         "yRatio": 0.22035510462904248,
@@ -458,7 +520,7 @@
         "confidence": 0.8999999999999999
       },
       {
-        "choice": 2,
+        "choice": 3,
         "page": 1,
         "xRatio": 0.07405745062836624,
         "yRatio": 0.23573240329740014,
@@ -470,23 +532,11 @@
         "confidence": 0.8999999999999999
       },
       {
-        "choice": 3,
+        "choice": 4,
         "page": 1,
         "xRatio": 0.0742818671454219,
         "yRatio": 0.2531705770450222,
         "wRatio": 0.011220825852782765,
-        "hRatio": 0.012,
-        "source": "anchor-image",
-        "anchorMode": "center",
-        "layout": "vertical",
-        "confidence": 0.8999999999999999
-      },
-      {
-        "choice": 4,
-        "page": 1,
-        "xRatio": 0.07271095152603231,
-        "yRatio": 0.26949904882688647,
-        "wRatio": 0.01,
         "hRatio": 0.012,
         "source": "anchor-image",
         "anchorMode": "center",
@@ -544,6 +594,56 @@
         "confidence": 0.94
       }
     ],
+    "4": [
+      {
+        "choice": 1,
+        "page": 1,
+        "xRatio": 0.07764811490125673,
+        "yRatio": 0.40076093849080535,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 2,
+        "page": 1,
+        "xRatio": 0.07338420107719928,
+        "yRatio": 0.4332593532022828,
+        "wRatio": 0.013016157989228007,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 3,
+        "page": 1,
+        "xRatio": 0.07338420107719928,
+        "yRatio": 0.4495878249841471,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 1,
+        "xRatio": 0.07338420107719928,
+        "yRatio": 0.46721769109104305,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image-inferred-trailing",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.62
+      }
+    ],
     "5": [
       {
         "choice": 1,
@@ -594,62 +694,12 @@
         "confidence": 0.8999999999999999
       }
     ],
-    "6": [
-      {
-        "choice": 1,
-        "page": 1,
-        "xRatio": 0.07405745062836624,
-        "yRatio": 0.6287254280279011,
-        "wRatio": 0.011669658886894075,
-        "hRatio": 0.012,
-        "source": "anchor-image",
-        "anchorMode": "center",
-        "layout": "grid",
-        "confidence": 0.94
-      },
-      {
-        "choice": 2,
-        "page": 1,
-        "xRatio": 0.2715439856373429,
-        "yRatio": 0.6293595434369055,
-        "wRatio": 0.01,
-        "hRatio": 0.012,
-        "source": "anchor-image",
-        "anchorMode": "center",
-        "layout": "grid",
-        "confidence": 0.94
-      },
-      {
-        "choice": 3,
-        "page": 1,
-        "xRatio": 0.07383303411131059,
-        "yRatio": 0.6471147748890298,
-        "wRatio": 0.012118491921005385,
-        "hRatio": 0.012,
-        "source": "anchor-image",
-        "anchorMode": "center",
-        "layout": "grid",
-        "confidence": 0.94
-      },
-      {
-        "choice": 4,
-        "page": 1,
-        "xRatio": 0.2706463195691203,
-        "yRatio": 0.646005072923272,
-        "wRatio": 0.01,
-        "hRatio": 0.012,
-        "source": "anchor-image",
-        "anchorMode": "center",
-        "layout": "grid",
-        "confidence": 0.94
-      }
-    ],
     "7": [
       {
         "choice": 1,
         "page": 1,
-        "xRatio": 0.08213644524236983,
-        "yRatio": 0.7175015852885225,
+        "xRatio": 0.07585278276481149,
+        "yRatio": 0.6938807863031071,
         "wRatio": 0.01,
         "hRatio": 0.012,
         "source": "anchor-image",
@@ -659,18 +709,6 @@
       },
       {
         "choice": 2,
-        "page": 1,
-        "xRatio": 0.08213644524236983,
-        "yRatio": 0.7322447685478757,
-        "wRatio": 0.01,
-        "hRatio": 0.012,
-        "source": "anchor-image",
-        "anchorMode": "center",
-        "layout": "vertical",
-        "confidence": 0.8999999999999999
-      },
-      {
-        "choice": 3,
         "page": 1,
         "xRatio": 0.07293536804308798,
         "yRatio": 0.7520608750792644,
@@ -682,7 +720,7 @@
         "confidence": 0.8999999999999999
       },
       {
-        "choice": 4,
+        "choice": 3,
         "page": 1,
         "xRatio": 0.07405745062836624,
         "yRatio": 0.8162650602409639,
@@ -692,17 +730,79 @@
         "anchorMode": "center",
         "layout": "vertical",
         "confidence": 0.8999999999999999
+      },
+      {
+        "choice": 4,
+        "page": 1,
+        "xRatio": 0.07405745062836624,
+        "yRatio": 0.883938762569073,
+        "wRatio": 0.011669658886894075,
+        "hRatio": 0.012,
+        "source": "anchor-image-inferred-trailing",
+        "anchorMode": "center",
+        "layout": "vertical",
+        "confidence": 0.62
+      }
+    ],
+    "8": [
+      {
+        "choice": 1,
+        "page": 1,
+        "xRatio": 0.07338420107719928,
+        "yRatio": 0.9280279010779962,
+        "wRatio": 0.011220825852782765,
+        "hRatio": 0.012,
+        "source": "anchor-image-outline",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 2,
+        "page": 1,
+        "xRatio": 0.27131956912028726,
+        "yRatio": 0.9273937856689918,
+        "wRatio": 0.013016157989228007,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 3,
+        "page": 1,
+        "xRatio": 0.0742818671454219,
+        "yRatio": 0.9446734305643627,
+        "wRatio": 0.011220825852782765,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 4,
+        "page": 1,
+        "xRatio": 0.2706463195691203,
+        "yRatio": 0.9435637285986049,
+        "wRatio": 0.01,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
       }
     ],
     "9": [
       {
         "choice": 1,
         "page": 1,
-        "xRatio": 0.07338420107719928,
-        "yRatio": 0.13982244768547875,
-        "wRatio": 0.011220825852782765,
+        "xRatio": 0.5388240574506283,
+        "yRatio": 0.13696892834495877,
+        "wRatio": 0.013016157989228007,
         "hRatio": 0.012,
-        "source": "anchor-image-outline",
+        "source": "anchor-image",
         "anchorMode": "center",
         "layout": "vertical",
         "confidence": 0.8999999999999999
@@ -710,9 +810,9 @@
       {
         "choice": 2,
         "page": 1,
-        "xRatio": 0.07338420107719928,
-        "yRatio": 0.1553582752060875,
-        "wRatio": 0.01,
+        "xRatio": 0.5388240574506283,
+        "yRatio": 0.15234622701331643,
+        "wRatio": 0.013016157989228007,
         "hRatio": 0.012,
         "source": "anchor-image",
         "anchorMode": "center",
@@ -722,8 +822,8 @@
       {
         "choice": 3,
         "page": 1,
-        "xRatio": 0.07607719928186714,
-        "yRatio": 0.18706404565630944,
+        "xRatio": 0.5383752244165171,
+        "yRatio": 0.16930881420418517,
         "wRatio": 0.01,
         "hRatio": 0.012,
         "source": "anchor-image",
@@ -734,8 +834,8 @@
       {
         "choice": 4,
         "page": 1,
-        "xRatio": 0.07675044883303411,
-        "yRatio": 0.2024413443246671,
+        "xRatio": 0.5379263913824057,
+        "yRatio": 0.18484464172479392,
         "wRatio": 0.01,
         "hRatio": 0.012,
         "source": "anchor-image",
@@ -748,11 +848,11 @@
       {
         "choice": 1,
         "page": 1,
-        "xRatio": 0.5747307001795332,
-        "yRatio": 0.24762206721623337,
+        "xRatio": 0.5388240574506283,
+        "yRatio": 0.23081800887761572,
         "wRatio": 0.013016157989228007,
         "hRatio": 0.012,
-        "source": "anchor-image-outline",
+        "source": "anchor-image",
         "anchorMode": "center",
         "layout": "vertical",
         "confidence": 0.8999999999999999
@@ -760,11 +860,11 @@
       {
         "choice": 2,
         "page": 1,
-        "xRatio": 0.5379263913824057,
-        "yRatio": 0.26220672162333547,
-        "wRatio": 0.011220825852782765,
+        "xRatio": 0.5581238779174147,
+        "yRatio": 0.2468294229549778,
+        "wRatio": 0.01,
         "hRatio": 0.012,
-        "source": "anchor-image-outline",
+        "source": "anchor-image",
         "anchorMode": "center",
         "layout": "vertical",
         "confidence": 0.8999999999999999
@@ -772,11 +872,11 @@
       {
         "choice": 3,
         "page": 1,
-        "xRatio": 0.5390484739676841,
-        "yRatio": 0.2777425491439442,
-        "wRatio": 0.012567324955116697,
+        "xRatio": 0.5399461400359067,
+        "yRatio": 0.2645846544071021,
+        "wRatio": 0.010771992818671455,
         "hRatio": 0.012,
-        "source": "anchor-image-outline",
+        "source": "anchor-image",
         "anchorMode": "center",
         "layout": "vertical",
         "confidence": 0.8999999999999999
@@ -784,11 +884,11 @@
       {
         "choice": 4,
         "page": 1,
-        "xRatio": 0.5388240574506283,
-        "yRatio": 0.30944831959416613,
-        "wRatio": 0.013016157989228007,
+        "xRatio": 0.5594703770197487,
+        "yRatio": 0.27631578947368424,
+        "wRatio": 0.01,
         "hRatio": 0.012,
-        "source": "anchor-image-outline",
+        "source": "anchor-image",
         "anchorMode": "center",
         "layout": "vertical",
         "confidence": 0.8999999999999999
@@ -804,20 +904,20 @@
         "hRatio": 0.012,
         "source": "anchor-image",
         "anchorMode": "center",
-        "layout": "vertical",
-        "confidence": 0.8999999999999999
+        "layout": "grid",
+        "confidence": 0.94
       },
       {
         "choice": 2,
         "page": 1,
-        "xRatio": 0.5572262118491921,
-        "yRatio": 0.4040900443880786,
-        "wRatio": 0.01,
+        "xRatio": 0.7149910233393177,
+        "yRatio": 0.38823715916296764,
+        "wRatio": 0.010771992818671455,
         "hRatio": 0.012,
         "source": "anchor-image",
         "anchorMode": "center",
-        "layout": "vertical",
-        "confidence": 0.8999999999999999
+        "layout": "grid",
+        "confidence": 0.94
       },
       {
         "choice": 3,
@@ -828,31 +928,31 @@
         "hRatio": 0.012,
         "source": "anchor-image",
         "anchorMode": "center",
-        "layout": "vertical",
-        "confidence": 0.8999999999999999
+        "layout": "grid",
+        "confidence": 0.94
       },
       {
         "choice": 4,
         "page": 1,
-        "xRatio": 0.5379263913824057,
-        "yRatio": 0.435003170577045,
-        "wRatio": 0.01,
+        "xRatio": 0.7544883303411131,
+        "yRatio": 0.4194673430564363,
+        "wRatio": 0.012567324955116697,
         "hRatio": 0.012,
-        "source": "anchor-image",
+        "source": "anchor-image-outline",
         "anchorMode": "center",
-        "layout": "vertical",
-        "confidence": 0.8999999999999999
+        "layout": "grid",
+        "confidence": 0.94
       }
     ],
     "12": [
       {
         "choice": 1,
         "page": 1,
-        "xRatio": 0.5567773788150808,
-        "yRatio": 0.4820862396956246,
-        "wRatio": 0.01,
+        "xRatio": 0.5388240574506283,
+        "yRatio": 0.4968294229549778,
+        "wRatio": 0.013016157989228007,
         "hRatio": 0.012,
-        "source": "anchor-image",
+        "source": "anchor-image-outline",
         "anchorMode": "center",
         "layout": "vertical",
         "confidence": 0.8999999999999999
@@ -860,11 +960,11 @@
       {
         "choice": 2,
         "page": 1,
-        "xRatio": 0.5572262118491921,
-        "yRatio": 0.49778059606848446,
-        "wRatio": 0.01,
+        "xRatio": 0.5383752244165171,
+        "yRatio": 0.5142675967025999,
+        "wRatio": 0.012118491921005385,
         "hRatio": 0.012,
-        "source": "anchor-image",
+        "source": "anchor-image-outline",
         "anchorMode": "center",
         "layout": "vertical",
         "confidence": 0.8999999999999999
@@ -872,11 +972,11 @@
       {
         "choice": 3,
         "page": 1,
-        "xRatio": 0.5563285457809695,
-        "yRatio": 0.5133164235890932,
-        "wRatio": 0.01,
+        "xRatio": 0.5388240574506283,
+        "yRatio": 0.5290107799619531,
+        "wRatio": 0.013016157989228007,
         "hRatio": 0.012,
-        "source": "anchor-image",
+        "source": "anchor-image-outline",
         "anchorMode": "center",
         "layout": "vertical",
         "confidence": 0.8999999999999999
@@ -884,22 +984,22 @@
       {
         "choice": 4,
         "page": 1,
-        "xRatio": 0.5572262118491921,
-        "yRatio": 0.5286937222574508,
-        "wRatio": 0.01,
+        "xRatio": 0.5388240574506283,
+        "yRatio": 0.5438294127820033,
+        "wRatio": 0.013016157989228007,
         "hRatio": 0.012,
-        "source": "anchor-image",
+        "source": "anchor-image-outline-inferred-trailing",
         "anchorMode": "center",
         "layout": "vertical",
-        "confidence": 0.8999999999999999
+        "confidence": 0.62
       }
     ],
     "13": [
       {
         "choice": 1,
         "page": 1,
-        "xRatio": 0.5556552962298025,
-        "yRatio": 0.5919467343056436,
+        "xRatio": 0.5410682226211849,
+        "yRatio": 0.5741915028535194,
         "wRatio": 0.01,
         "hRatio": 0.012,
         "source": "anchor-image",
@@ -910,11 +1010,11 @@
       {
         "choice": 2,
         "page": 1,
-        "xRatio": 0.5628366247755835,
-        "yRatio": 0.608275206087508,
-        "wRatio": 0.01,
+        "xRatio": 0.5702423698384201,
+        "yRatio": 0.5914711477488903,
+        "wRatio": 0.018,
         "hRatio": 0.012,
-        "source": "anchor-image",
+        "source": "anchor-ocr-token",
         "anchorMode": "center",
         "layout": "vertical",
         "confidence": 0.8999999999999999
@@ -922,11 +1022,11 @@
       {
         "choice": 3,
         "page": 1,
-        "xRatio": 0.5637342908438061,
-        "yRatio": 0.6239695624603678,
-        "wRatio": 0.01,
+        "xRatio": 0.5691202872531418,
+        "yRatio": 0.6071655041217502,
+        "wRatio": 0.018,
         "hRatio": 0.012,
-        "source": "anchor-image",
+        "source": "anchor-ocr-token",
         "anchorMode": "center",
         "layout": "vertical",
         "confidence": 0.8999999999999999
@@ -934,9 +1034,9 @@
       {
         "choice": 4,
         "page": 1,
-        "xRatio": 0.5641831238779175,
-        "yRatio": 0.6383956880152187,
-        "wRatio": 0.01,
+        "xRatio": 0.5388240574506283,
+        "yRatio": 0.6227013316423589,
+        "wRatio": 0.013016157989228007,
         "hRatio": 0.012,
         "source": "anchor-image",
         "anchorMode": "center",
@@ -972,9 +1072,9 @@
       {
         "choice": 3,
         "page": 1,
-        "xRatio": 0.5630610412926391,
-        "yRatio": 0.739854153455929,
-        "wRatio": 0.01,
+        "xRatio": 0.5388240574506283,
+        "yRatio": 0.7387444514901712,
+        "wRatio": 0.013016157989228007,
         "hRatio": 0.012,
         "source": "anchor-image",
         "anchorMode": "center",
@@ -984,9 +1084,9 @@
       {
         "choice": 4,
         "page": 1,
-        "xRatio": 0.5632854578096947,
-        "yRatio": 0.7550729232720355,
-        "wRatio": 0.01,
+        "xRatio": 0.5388240574506283,
+        "yRatio": 0.7564996829422955,
+        "wRatio": 0.013016157989228007,
         "hRatio": 0.012,
         "source": "anchor-image",
         "anchorMode": "center",
@@ -998,50 +1098,50 @@
       {
         "choice": 1,
         "page": 1,
-        "xRatio": 0.5834829443447038,
-        "yRatio": 0.8409955611921369,
-        "wRatio": 0.01,
-        "hRatio": 0.012,
-        "source": "anchor-image",
-        "anchorMode": "center",
-        "layout": "vertical",
-        "confidence": 0.8999999999999999
-      },
-      {
-        "choice": 2,
-        "page": 1,
-        "xRatio": 0.5628366247755835,
-        "yRatio": 0.864140773620799,
-        "wRatio": 0.010771992818671455,
-        "hRatio": 0.012,
-        "source": "anchor-image",
-        "anchorMode": "center",
-        "layout": "vertical",
-        "confidence": 0.8999999999999999
-      },
-      {
-        "choice": 3,
-        "page": 1,
         "xRatio": 0.5635098743267505,
         "yRatio": 0.8798351299936589,
         "wRatio": 0.01,
         "hRatio": 0.012,
         "source": "anchor-image",
         "anchorMode": "center",
-        "layout": "vertical",
-        "confidence": 0.8999999999999999
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 2,
+        "page": 1,
+        "xRatio": 0.7430430879712747,
+        "yRatio": 0.8798351299936589,
+        "wRatio": 0.018,
+        "hRatio": 0.012,
+        "source": "anchor-ocr-token",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
+      },
+      {
+        "choice": 3,
+        "page": 1,
+        "xRatio": 0.5662028725314183,
+        "yRatio": 0.9426125554850983,
+        "wRatio": 0.011220825852782765,
+        "hRatio": 0.012,
+        "source": "anchor-image",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.94
       },
       {
         "choice": 4,
         "page": 1,
-        "xRatio": 0.5581238779174147,
-        "yRatio": 0.8947368421052632,
+        "xRatio": 0.7320466786355476,
+        "yRatio": 0.9449904882688649,
         "wRatio": 0.01,
         "hRatio": 0.012,
         "source": "anchor-image",
         "anchorMode": "center",
-        "layout": "vertical",
-        "confidence": 0.8999999999999999
+        "layout": "grid",
+        "confidence": 0.94
       }
     ]
   },
@@ -1052,11 +1152,13 @@
       "xRatio": 0.04578096947935368,
       "yRatio": 0.10209258084971465,
       "text": "16.",
-      "anchorScore": 0.96,
+      "markerText": "16.",
+      "anchorScore": 1.06,
       "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
       "labelWeight": 1,
       "repairedLabel": false,
-      "repairId": 1,
+      "repairId": 2,
       "anchorColumn": 0,
       "q": 1
     },
@@ -1066,11 +1168,13 @@
       "xRatio": 0.04578096947935368,
       "yRatio": 0.1829422954977806,
       "text": "17.2)450425",
-      "anchorScore": 1,
+      "markerText": "17.2)450425",
+      "anchorScore": 1.1,
       "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
       "labelWeight": 1,
       "repairedLabel": false,
-      "repairId": 2,
+      "repairId": 4,
       "anchorColumn": 0,
       "q": 2
     },
@@ -1080,11 +1184,13 @@
       "xRatio": 0.04578096947935368,
       "yRatio": 0.2974001268230818,
       "text": "18.202(.2002",
-      "anchorScore": 1.0799999999999998,
+      "markerText": "18.202(.2002",
+      "anchorScore": 1.18,
       "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
       "labelWeight": 1,
       "repairedLabel": false,
-      "repairId": 3,
+      "repairId": 7,
       "anchorColumn": 0,
       "q": 3
     },
@@ -1094,11 +1200,13 @@
       "xRatio": 0.04578096947935368,
       "yRatio": 0.3795180722891566,
       "text": "19.472).",
-      "anchorScore": 1,
+      "markerText": "19.472).",
+      "anchorScore": 1.1,
       "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
       "labelWeight": 1,
       "repairedLabel": false,
-      "repairId": 4,
+      "repairId": 12,
       "anchorColumn": 0,
       "q": 4
     },
@@ -1108,11 +1216,13 @@
       "xRatio": 0.04533213644524237,
       "yRatio": 0.47780596068484465,
       "text": "20.40042",
-      "anchorScore": 1.0799999999999998,
+      "markerText": "20.40042",
+      "anchorScore": 1.18,
       "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
       "labelWeight": 1,
       "repairedLabel": false,
-      "repairId": 5,
+      "repairId": 17,
       "anchorColumn": 0,
       "q": 5
     },
@@ -1122,11 +1232,13 @@
       "xRatio": 0.04533213644524237,
       "yRatio": 0.5922637920101459,
       "text": "21.22",
-      "anchorScore": 1,
+      "markerText": "21.22",
+      "anchorScore": 1.1,
       "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
       "labelWeight": 1,
       "repairedLabel": false,
-      "repairId": 6,
+      "repairId": 22,
       "anchorColumn": 0,
       "q": 6
     },
@@ -1136,11 +1248,13 @@
       "xRatio": 0.04533213644524237,
       "yRatio": 0.6740646797717185,
       "text": "22.224407",
-      "anchorScore": 1.0799999999999998,
+      "markerText": "22.224407",
+      "anchorScore": 1.18,
       "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
       "labelWeight": 1,
       "repairedLabel": false,
-      "repairId": 7,
+      "repairId": 24,
       "anchorColumn": 0,
       "q": 7
     },
@@ -1150,11 +1264,13 @@
       "xRatio": 0.04533213644524237,
       "yRatio": 0.8899809765377299,
       "text": "23.2022",
-      "anchorScore": 1,
+      "markerText": "23.2022",
+      "anchorScore": 1.1,
       "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
       "labelWeight": 1,
       "repairedLabel": false,
-      "repairId": 8,
+      "repairId": 26,
       "anchorColumn": 0,
       "q": 8
     },
@@ -1164,11 +1280,13 @@
       "xRatio": 0.4860861759425494,
       "yRatio": 0.10209258084971465,
       "text": "24.0742)7504",
-      "anchorScore": 1,
+      "markerText": "24.0742)7504",
+      "anchorScore": 1.1,
       "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
       "labelWeight": 1,
       "repairedLabel": false,
-      "repairId": 9,
+      "repairId": 28,
       "anchorColumn": 1,
       "q": 9
     },
@@ -1178,11 +1296,13 @@
       "xRatio": 0.5103231597845601,
       "yRatio": 0.21147748890298035,
       "text": "25.2",
-      "anchorScore": 1,
+      "markerText": "25.2",
+      "anchorScore": 1.1,
       "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
       "labelWeight": 1,
       "repairedLabel": false,
-      "repairId": 10,
+      "repairId": 31,
       "anchorColumn": 1,
       "q": 10
     },
@@ -1192,11 +1312,13 @@
       "xRatio": 0.5103231597845601,
       "yRatio": 0.3677869372225745,
       "text": "26..27",
-      "anchorScore": 1,
+      "markerText": "26..27",
+      "anchorScore": 1.1,
       "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
       "labelWeight": 1,
       "repairedLabel": false,
-      "repairId": 12,
+      "repairId": 36,
       "anchorColumn": 1,
       "q": 11
     },
@@ -1206,11 +1328,13 @@
       "xRatio": 0.5103231597845601,
       "yRatio": 0.46163601775523144,
       "text": "27.7",
-      "anchorScore": 1.0799999999999998,
+      "markerText": "27.7",
+      "anchorScore": 1.18,
       "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
       "labelWeight": 1,
       "repairedLabel": false,
-      "repairId": 16,
+      "repairId": 42,
       "anchorColumn": 1,
       "q": 12
     },
@@ -1220,11 +1344,13 @@
       "xRatio": 0.5103231597845601,
       "yRatio": 0.5554850982878884,
       "text": "28.40",
-      "anchorScore": 1.0799999999999998,
+      "markerText": "28.40",
+      "anchorScore": 1.18,
       "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
       "labelWeight": 1,
       "repairedLabel": false,
-      "repairId": 20,
+      "repairId": 50,
       "anchorColumn": 1,
       "q": 13
     },
@@ -1234,11 +1360,13 @@
       "xRatio": 0.5103231597845601,
       "yRatio": 0.6648700063411541,
       "text": "29.7(7)2()7",
-      "anchorScore": 1.0799999999999998,
+      "markerText": "29.7(7)2()7",
+      "anchorScore": 1.18,
       "lineHeightRatio": 0.010145846544071021,
+      "source": "ocr-number-layer",
       "labelWeight": 1,
       "repairedLabel": false,
-      "repairId": 21,
+      "repairId": 54,
       "anchorColumn": 1,
       "q": 14
     },
@@ -1248,27 +1376,27 @@
       "xRatio": 0.5103231597845601,
       "yRatio": 0.8132530120481928,
       "text": "30.",
-      "anchorScore": 0.96,
+      "markerText": "30.",
+      "anchorScore": 1.06,
       "lineHeightRatio": 0.009511731135066582,
+      "source": "ocr-number-layer",
       "labelWeight": 1,
       "repairedLabel": false,
-      "repairId": 23,
+      "repairId": 59,
       "anchorColumn": 1,
       "q": 15
     }
   ],
-  "rawAnchorCount": 22,
+  "rawAnchorCount": 59,
   "sourceStats": {
     "questionDetected": 15,
     "questionExpected": 15,
     "ocrChoiceCandidateCount": 15,
-    "choiceDetected": 48,
+    "choiceDetected": 56,
     "choiceExpected": 60,
-    "choiceCoverage": 0.8,
+    "choiceCoverage": 0.9333333333333333,
     "choiceMissingQuestions": [
-      1,
-      4,
-      8
+      6
     ],
     "parserDiagnostics": {
       "missingSegments": [],
@@ -1281,9 +1409,9 @@
       "suspiciousChoiceOrderCount": 0
     }
   },
-  "confidence": 0.964,
+  "confidence": 0.98,
   "warnings": [
-    "일부 선택지 위치가 누락되었습니다(48/60). 틀린 좌표 대신 누락으로 표시합니다."
+    "일부 선택지 위치가 누락되었습니다(56/60). 틀린 좌표 대신 누락으로 표시합니다."
   ],
-  "generatedAt": "2026-06-01T04:50:32.340Z"
+  "generatedAt": "2026-06-06T08:35:03.015Z"
 }
