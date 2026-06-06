@@ -2419,6 +2419,7 @@
       anchorMapPath: null,
       printedQuestionNoMap: null,
       questionAnchorMap: null,
+      questionLabelMap: null,
       questionColumnBoundsMap: null,
       questionSegments: null,
       choiceAnchorMap: null,
@@ -3315,6 +3316,7 @@
           state.pdfNav.anchorMapPath = typeof ui.pdfNav.anchorMapPath === "string" ? ui.pdfNav.anchorMapPath : null;
           state.pdfNav.printedQuestionNoMap = Array.isArray(ui.pdfNav.printedQuestionNoMap) ? ui.pdfNav.printedQuestionNoMap.slice(0, QUESTION_COUNT + 1) : null;
           state.pdfNav.questionAnchorMap = ui.pdfNav.questionAnchorMap && typeof ui.pdfNav.questionAnchorMap === "object" ? ui.pdfNav.questionAnchorMap : null;
+          state.pdfNav.questionLabelMap = ui.pdfNav.questionLabelMap && typeof ui.pdfNav.questionLabelMap === "object" ? ui.pdfNav.questionLabelMap : null;
           state.pdfNav.questionColumnBoundsMap = ui.pdfNav.questionColumnBoundsMap && typeof ui.pdfNav.questionColumnBoundsMap === "object" ? ui.pdfNav.questionColumnBoundsMap : null;
           state.pdfNav.questionSegments = null;
           state.pdfNav.choiceAnchorMap = null;
@@ -3343,6 +3345,7 @@
             state.pdfNav.anchorMapPath = null;
             state.pdfNav.printedQuestionNoMap = null;
             state.pdfNav.questionAnchorMap = null;
+            state.pdfNav.questionLabelMap = null;
             state.pdfNav.questionColumnBoundsMap = null;
             state.pdfNav.questionSegments = null;
             state.pdfNav.choiceAnchorMap = null;
@@ -4107,6 +4110,7 @@
       questionEndNo: Number(anchorMap.questionEndNo) || QUESTION_END_NO || ((Number(anchorMap.questionStartNo) || QUESTION_START_NO || 1) + QUESTION_COUNT - 1),
       printedQuestionNoMap: Array.isArray(anchorMap.printedQuestionNoMap) ? anchorMap.printedQuestionNoMap.slice(0, QUESTION_COUNT + 1) : null,
       questionAnchorMap,
+      questionLabelMap: questionAnchorMap,
       questionColumnBoundsMap: anchorMap.questionColumnBoundsMap && typeof anchorMap.questionColumnBoundsMap === "object" ? anchorMap.questionColumnBoundsMap : null,
       questionSegments: anchorMap.questionSegments && typeof anchorMap.questionSegments === "object" ? anchorMap.questionSegments : null,
       questionPageMap: pageMap,
@@ -5194,7 +5198,7 @@
     const safeQ = Math.trunc(anchorEditFiniteNumber(q, 0));
     if (safeQ <= 0) return null;
     const nav = state.pdfNav || {};
-    const label = anchorEditMapValue(nav.questionLabelMap, safeQ);
+    const label = anchorEditMapValue(nav.questionLabelMap, safeQ) || anchorEditMapValue(nav.questionAnchorMap, safeQ);
     if (label && typeof label === "object") {
       const page = Math.trunc(anchorEditFiniteNumber(label.page, 0));
       const yRatio = anchorEditFiniteNumber(label.yRatio ?? label.ratio, null);
@@ -6896,7 +6900,9 @@
 
   function applyAnchorEditPatchToPdfNav(patch){
     if (!patch || !state.pdfNav) return;
+    let questionTouched = false;
     if (patch.questionPageMap && Object.keys(patch.questionPageMap).length) {
+      questionTouched = true;
       if (!Array.isArray(state.pdfNav.questionPageMap)) state.pdfNav.questionPageMap = [];
       for (const [q, page] of Object.entries(patch.questionPageMap)) {
         if (page == null) delete state.pdfNav.questionPageMap[Number(q)];
@@ -6904,6 +6910,7 @@
       }
     }
     if (patch.questionTopRatioMap && Object.keys(patch.questionTopRatioMap).length) {
+      questionTouched = true;
       if (!Array.isArray(state.pdfNav.questionTopRatioMap)) state.pdfNav.questionTopRatioMap = [];
       for (const [q, ratio] of Object.entries(patch.questionTopRatioMap)) {
         if (ratio == null) delete state.pdfNav.questionTopRatioMap[Number(q)];
@@ -6912,12 +6919,20 @@
     }
     if (patch.questionLabelMap && Object.keys(patch.questionLabelMap).length) {
       if (!state.pdfNav.questionAnchorMap || typeof state.pdfNav.questionAnchorMap !== "object") state.pdfNav.questionAnchorMap = {};
+      if (!state.pdfNav.questionLabelMap || typeof state.pdfNav.questionLabelMap !== "object") state.pdfNav.questionLabelMap = {};
       for (const [q, value] of Object.entries(patch.questionLabelMap)) {
-        if (value == null) delete state.pdfNav.questionAnchorMap[String(q)];
-        else state.pdfNav.questionAnchorMap[String(q)] = value;
+        questionTouched = true;
+        if (value == null) {
+          delete state.pdfNav.questionAnchorMap[String(q)];
+          delete state.pdfNav.questionLabelMap[String(q)];
+        } else {
+          state.pdfNav.questionAnchorMap[String(q)] = value;
+          state.pdfNav.questionLabelMap[String(q)] = value;
+        }
       }
     }
     if (patch.questionSegments && Object.keys(patch.questionSegments).length) {
+      questionTouched = true;
       if (!state.pdfNav.questionSegments || typeof state.pdfNav.questionSegments !== "object") state.pdfNav.questionSegments = {};
       for (const [q, value] of Object.entries(patch.questionSegments)) {
         if (value == null) delete state.pdfNav.questionSegments[String(q)];
@@ -6938,6 +6953,7 @@
         else state.pdfNav.choiceClickAreaMap[String(q)] = value;
       }
     }
+    if (questionTouched) clearPdfAnalysisCaches();
   }
 
   function stageManualQuestionAnchor(point){
@@ -7452,6 +7468,7 @@
           state.pdfNav.manualEditedAt = "";
           state.pdfNav.anchorMapPath = null;
           state.pdfNav.questionAnchorMap = null;
+          state.pdfNav.questionLabelMap = null;
           state.pdfNav.questionSegments = null;
           state.pdfNav.choiceAnchorMap = null;
           state.pdfNav.choiceClickAreaMap = null;
@@ -7827,6 +7844,7 @@
     state.pdfNav.anchorMapPath = pattern.anchorMapPath || currentAnchorMapPath || state.pdfNav.anchorMapPath || null;
     state.pdfNav.printedQuestionNoMap = Array.isArray(pattern.printedQuestionNoMap) ? pattern.printedQuestionNoMap.slice(0, QUESTION_COUNT + 1) : null;
     state.pdfNav.questionAnchorMap = pattern.questionAnchorMap && typeof pattern.questionAnchorMap === "object" ? pattern.questionAnchorMap : null;
+    state.pdfNav.questionLabelMap = pattern.questionLabelMap && typeof pattern.questionLabelMap === "object" ? pattern.questionLabelMap : state.pdfNav.questionAnchorMap;
     state.pdfNav.questionColumnBoundsMap = pattern.questionColumnBoundsMap && typeof pattern.questionColumnBoundsMap === "object" ? pattern.questionColumnBoundsMap : null;
     state.pdfNav.questionSegments = pattern.questionSegments && typeof pattern.questionSegments === "object" ? pattern.questionSegments : null;
     state.pdfNav.choiceAnchorMap = pattern.choiceAnchorMap && typeof pattern.choiceAnchorMap === "object" ? pattern.choiceAnchorMap : null;
@@ -8167,6 +8185,7 @@
     state.pdfNav.questionEndNo = QUESTION_END_NO || (state.pdfNav.questionStartNo + QUESTION_COUNT - 1);
     state.pdfNav.printedQuestionNoMap = null;
     state.pdfNav.questionAnchorMap = null;
+    state.pdfNav.questionLabelMap = null;
     state.pdfNav.questionColumnBoundsMap = null;
     state.pdfNav.questionSegments = null;
     state.pdfNav.choiceAnchorMap = null;
@@ -13351,6 +13370,7 @@
       state.pdfNav.questionEndNo = QUESTION_END_NO || (state.pdfNav.questionStartNo + QUESTION_COUNT - 1);
       state.pdfNav.printedQuestionNoMap = null;
       state.pdfNav.questionAnchorMap = null;
+      state.pdfNav.questionLabelMap = null;
       state.pdfNav.questionColumnBoundsMap = null;
       state.pdfNav.questionSegments = null;
       state.pdfNav.choiceAnchorMap = null;

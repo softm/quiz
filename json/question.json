@@ -32,7 +32,7 @@
     "anchorStatus": "위치맵 생성",
     "anchorConfidence": 1,
     "anchorWarnings": [],
-    "anchorGeneratedAt": "2026-06-03T00:55:35.716Z"
+    "anchorGeneratedAt": "2026-06-06T05:26:25.921Z"
   },
   {
     "gNo": "01",
@@ -72,7 +72,7 @@
     "anchorWarnings": [
       "선택지 위치 감지가 부족합니다(284/400). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
     ],
-    "anchorGeneratedAt": "2026-06-03T08:12:21.456Z",
+    "anchorGeneratedAt": "2026-06-06T00:22:09.185Z",
     "choiceCount": 4,
     "anchorQuestionDetected": 99,
     "anchorQuestionExpected": 100,
