@@ -1501,8 +1501,8 @@ for item in ocr_choice_candidates:
         ocr_by_page.setdefault(page, []).append({
             "xRatio": float(item.get("xRatio")),
             "yRatio": float(item.get("yRatio")),
-            "wRatio": min(0.018, max(0.006, float(item.get("wRatio") or 0.010))),
-            "hRatio": min(0.018, max(0.008, float(item.get("hRatio") or 0.012))),
+            "wRatio": max(0.006, float(item.get("wRatio") or 0.010)),
+            "hRatio": max(0.008, float(item.get("hRatio") or 0.012)),
             "fill": 0.11,
             "leftDensity": 0.0,
             "source": "anchor-ocr-token",

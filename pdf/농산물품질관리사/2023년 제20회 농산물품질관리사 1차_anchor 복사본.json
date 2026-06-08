@@ -1,8 +1,8 @@
 {
   "version": 1,
   "kind": "question-anchor-map",
-  "questionNo": "0002",
-  "questionPdf": "pdf/농산물품질관리사/2023년 제20회 농산물품질관리사 1차 시험문제지.pdf",
+  "questionNo": "0003",
+  "questionPdf": "pdf/농산물품질관리사/2023년 제20회 농산물품질관리사 1차.pdf",
   "pageCount": 18,
   "questionCount": 100,
   "choiceCount": 4,
@@ -113,10 +113,17 @@
   ],
   "questionLabelMap": {
     "1": {
+      "q": 1,
+      "label": "1",
       "page": 1,
-      "xRatio": 0.09015942825728422,
-      "yRatio": 0.20481927710843373,
-      "anchorColumn": 0
+      "ratio": 0.26460009282178215,
+      "yRatio": 0.26460009282178215,
+      "xRatio": 0.14501953125,
+      "wRatio": 0.025,
+      "hRatio": 0.018,
+      "source": "manual-anchor",
+      "anchorMode": "center",
+      "confidence": 1
     },
     "2": {
       "page": 1,
@@ -137,40 +144,83 @@
       "anchorColumn": 0
     },
     "5": {
+      "q": 5,
+      "label": "5",
       "page": 2,
-      "xRatio": 0.08905992303463442,
-      "yRatio": 0.055188495919160516,
-      "anchorColumn": 0
+      "ratio": 0.07448588144618834,
+      "yRatio": 0.07448588144618834,
+      "xRatio": 0.49836309523809524,
+      "wRatio": 0.025,
+      "hRatio": 0.018,
+      "source": "manual-anchor",
+      "anchorMode": "center",
+      "confidence": 1
     },
     "6": {
+      "q": 6,
+      "label": "6",
       "page": 2,
-      "xRatio": 0.08905992303463442,
-      "yRatio": 0.24096385542168675,
-      "anchorColumn": 0
+      "ratio": 0.390033807455157,
+      "yRatio": 0.390033807455157,
+      "xRatio": 0.4088541666666667,
+      "wRatio": 0.025,
+      "hRatio": 0.018,
+      "source": "manual-anchor",
+      "anchorMode": "center",
+      "confidence": 1
     },
     "7": {
+      "q": 7,
+      "label": "7",
       "page": 2,
-      "xRatio": 0.08905992303463442,
-      "yRatio": 0.4041974349008939,
-      "anchorColumn": 0
+      "ratio": 0.42564111547085204,
+      "yRatio": 0.42564111547085204,
+      "xRatio": 0.31395709325396826,
+      "wRatio": 0.025,
+      "hRatio": 0.018,
+      "source": "manual-anchor",
+      "anchorMode": "center",
+      "confidence": 1
     },
     "8": {
+      "q": 8,
+      "label": "8",
       "page": 2,
-      "xRatio": 0.08905992303463442,
-      "yRatio": 0.5343956471045472,
-      "anchorColumn": 0
+      "ratio": 0.7493091486359361,
+      "yRatio": 0.7493091486359361,
+      "xRatio": 0.1684368758322237,
+      "wRatio": 0.025,
+      "hRatio": 0.018,
+      "source": "manual-anchor",
+      "anchorMode": "center",
+      "confidence": 1
     },
     "9": {
+      "q": 9,
+      "label": "9",
       "page": 2,
-      "xRatio": 0.08905992303463442,
-      "yRatio": 0.6917994558880683,
-      "anchorColumn": 0
+      "ratio": 0.8157852187206021,
+      "yRatio": 0.8157852187206021,
+      "xRatio": 0.377527879494008,
+      "wRatio": 0.025,
+      "hRatio": 0.018,
+      "source": "manual-anchor",
+      "anchorMode": "center",
+      "confidence": 1
     },
     "10": {
       "page": 3,
       "xRatio": 0.08466190214403518,
       "yRatio": 0.055188495919160516,
       "anchorColumn": 0
+    },
+    "11": {
+      "page": 3,
+      "xRatio": 0.08466190214403518,
+      "yRatio": 0.19704624951418576,
+      "anchorColumn": 0,
+      "inferred": true,
+      "source": "inferred-column-flow"
     },
     "12": {
       "page": 3,
@@ -556,6 +606,22 @@
       "yRatio": 0.6642052079284881,
       "anchorColumn": 0
     },
+    "76": {
+      "page": 15,
+      "xRatio": 0.08356239692138538,
+      "yRatio": 0.14514108045083562,
+      "anchorColumn": 0,
+      "inferred": true,
+      "source": "inferred-column-flow"
+    },
+    "77": {
+      "page": 15,
+      "xRatio": 0.08356239692138538,
+      "yRatio": 0.22628216090167122,
+      "anchorColumn": 0,
+      "inferred": true,
+      "source": "inferred-column-flow"
+    },
     "78": {
       "page": 15,
       "xRatio": 0.08356239692138538,
@@ -634,6 +700,14 @@
       "yRatio": 0.055188495919160516,
       "anchorColumn": 0
     },
+    "91": {
+      "page": 17,
+      "xRatio": 0.08356239692138538,
+      "yRatio": 0.17450446949086668,
+      "anchorColumn": 0,
+      "inferred": true,
+      "source": "inferred-column-flow"
+    },
     "92": {
       "page": 17,
       "xRatio": 0.08356239692138538,
@@ -694,12 +768,11 @@
     "1": [
       {
         "page": 1,
-        "top": 0.14981927710843373,
+        "top": 0.26460009282178215,
         "bottom": 0.4386086280606296,
         "left": 0,
         "right": 1,
-        "column": null,
-        "source": "page-segment"
+        "source": "manual-anchor"
       }
     ],
     "2": [
@@ -738,63 +811,58 @@
     "5": [
       {
         "page": 2,
-        "top": 0.035,
-        "bottom": 0.22096385542168676,
+        "top": 0.07448588144618834,
+        "bottom": 0.5587022283631232,
         "left": 0,
         "right": 1,
-        "column": null,
-        "source": "page-segment"
+        "source": "manual-anchor"
       }
     ],
     "6": [
       {
         "page": 2,
-        "top": 0.22096385542168676,
-        "bottom": 0.38419743490089386,
+        "top": 0.390033807455157,
+        "bottom": 0.710502557455157,
         "left": 0,
         "right": 1,
-        "column": null,
-        "source": "page-segment"
+        "source": "manual-anchor"
       }
     ],
     "7": [
       {
         "page": 2,
-        "top": 0.38419743490089386,
+        "top": 0.42564111547085204,
         "bottom": 0.5143956471045472,
         "left": 0,
         "right": 1,
-        "column": null,
-        "source": "page-segment"
+        "source": "manual-anchor"
       }
     ],
     "8": [
       {
         "page": 2,
-        "top": 0.5143956471045472,
-        "bottom": 0.6717994558880683,
+        "top": 0.7493091486359361,
+        "bottom": 0.9830576787394167,
         "left": 0,
         "right": 1,
-        "column": null,
-        "source": "page-segment"
+        "source": "manual-anchor"
       }
     ],
     "9": [
       {
         "page": 2,
-        "top": 0.6717994558880683,
+        "top": 0.854968985183443,
         "bottom": 0.95,
         "left": 0,
         "right": 1,
-        "column": null,
-        "source": "page-segment"
+        "source": "manual-anchor"
       }
     ],
     "10": [
       {
         "page": 3,
         "top": 0.035,
-        "bottom": 0.1806440832118745,
+        "bottom": 0.17704624951418577,
         "left": 0,
         "right": 1,
         "column": null,
@@ -804,7 +872,7 @@
     "11": [
       {
         "page": 3,
-        "top": 0.1906440832118745,
+        "top": 0.17704624951418577,
         "bottom": 0.318904003109211,
         "left": 0,
         "right": 1,
@@ -1520,7 +1588,7 @@
       {
         "page": 15,
         "top": 0.09014108045083563,
-        "bottom": 0.17309599689078894,
+        "bottom": 0.20628216090167123,
         "left": 0,
         "right": 1,
         "column": null,
@@ -1530,7 +1598,7 @@
     "77": [
       {
         "page": 15,
-        "top": 0.18309599689078895,
+        "top": 0.20628216090167123,
         "bottom": 0.2874232413525068,
         "left": 0,
         "right": 1,
@@ -1674,7 +1742,7 @@
       {
         "page": 17,
         "top": 0.035,
-        "bottom": 0.12976136805285657,
+        "bottom": 0.15450446949086669,
         "left": 0,
         "right": 1,
         "column": null,
@@ -1684,7 +1752,7 @@
     "91": [
       {
         "page": 17,
-        "top": 0.13976136805285658,
+        "top": 0.15450446949086669,
         "bottom": 0.27382044306257286,
         "left": 0,
         "right": 1,
@@ -1897,17 +1965,17 @@
   ],
   "questionTopRatioMap": [
     null,
-    0.14981927710843373,
-    0.40360862806062964,
-    0.5897726389428682,
+    0.26460009282178215,
+    0.5533021225305739,
+    0.6858794390874883,
     0.6915993004275165,
+    0.07448588144618834,
+    0.390033807455157,
+    0.42564111547085204,
+    0.7493091486359361,
+    0.854968985183443,
     0.035,
-    0.18596385542168675,
-    0.3491974349008939,
-    0.47939564710454724,
-    0.6367994558880683,
-    0.035,
-    0.1906440832118745,
+    0.14204624951418576,
     0.28390400310921104,
     0.4611290322580645,
     0.6173668869024485,
@@ -1973,7 +2041,7 @@
     0.5073785464438398,
     0.6092052079284881,
     0.09014108045083563,
-    0.18309599689078895,
+    0.17128216090167123,
     0.2524232413525068,
     0.3923377380489701,
     0.5555713175281771,
@@ -4699,106 +4767,6 @@
         "confidence": 0.8200000000000001
       }
     ],
-    "76": [
-      {
-        "choice": 1,
-        "page": 15,
-        "xRatio": 0.0948323254535459,
-        "yRatio": 0.15915273999222698,
-        "wRatio": 0.014843320505772403,
-        "hRatio": 0.012,
-        "source": "anchor-image-short-rescue",
-        "anchorMode": "center",
-        "layout": "horizontal",
-        "confidence": 0.8200000000000001
-      },
-      {
-        "choice": 2,
-        "page": 15,
-        "xRatio": 0.30951072017592085,
-        "yRatio": 0.16012436844150796,
-        "wRatio": 0.01,
-        "hRatio": 0.012,
-        "source": "anchor-image-short-rescue",
-        "anchorMode": "center",
-        "layout": "horizontal",
-        "confidence": 0.8200000000000001
-      },
-      {
-        "choice": 3,
-        "page": 15,
-        "xRatio": 0.5219901044529962,
-        "yRatio": 0.16109599689078896,
-        "wRatio": 0.01,
-        "hRatio": 0.012,
-        "source": "anchor-image-short-rescue",
-        "anchorMode": "center",
-        "layout": "horizontal",
-        "confidence": 0.8200000000000001
-      },
-      {
-        "choice": 4,
-        "page": 15,
-        "xRatio": 0.734194612424409,
-        "yRatio": 0.16109599689078896,
-        "wRatio": 0.01,
-        "hRatio": 0.012,
-        "source": "anchor-image-short-rescue",
-        "anchorMode": "center",
-        "layout": "horizontal",
-        "confidence": 0.8200000000000001
-      }
-    ],
-    "77": [
-      {
-        "choice": 1,
-        "page": 15,
-        "xRatio": 0.09620670698185817,
-        "yRatio": 0.26331130975514966,
-        "wRatio": 0.01,
-        "hRatio": 0.012,
-        "source": "anchor-image",
-        "anchorMode": "center",
-        "layout": "horizontal",
-        "confidence": 0.8200000000000001
-      },
-      {
-        "choice": 2,
-        "page": 15,
-        "xRatio": 0.31006047278724574,
-        "yRatio": 0.26214535561601243,
-        "wRatio": 0.01,
-        "hRatio": 0.012,
-        "source": "anchor-image",
-        "anchorMode": "center",
-        "layout": "horizontal",
-        "confidence": 0.8200000000000001
-      },
-      {
-        "choice": 3,
-        "page": 15,
-        "xRatio": 0.5244639912039583,
-        "yRatio": 0.2652545666537116,
-        "wRatio": 0.014293567894447499,
-        "hRatio": 0.012,
-        "source": "anchor-image",
-        "anchorMode": "center",
-        "layout": "horizontal",
-        "confidence": 0.8200000000000001
-      },
-      {
-        "choice": 4,
-        "page": 15,
-        "xRatio": 0.734194612424409,
-        "yRatio": 0.26311698406529344,
-        "wRatio": 0.01,
-        "hRatio": 0.012,
-        "source": "anchor-image",
-        "anchorMode": "center",
-        "layout": "horizontal",
-        "confidence": 0.8200000000000001
-      }
-    ],
     "79": [
       {
         "choice": 1,
@@ -5207,7 +5175,7 @@
         "yRatio": 0.2516517683637777,
         "wRatio": 0.015393073117097306,
         "hRatio": 0.012,
-        "source": "anchor-image",
+        "source": "anchor-image-short-rescue",
         "anchorMode": "center",
         "layout": "horizontal",
         "confidence": 0.8200000000000001
@@ -5219,7 +5187,7 @@
         "yRatio": 0.24873688301593472,
         "wRatio": 0.01,
         "hRatio": 0.012,
-        "source": "anchor-image",
+        "source": "anchor-image-short-rescue",
         "anchorMode": "center",
         "layout": "horizontal",
         "confidence": 0.8200000000000001
@@ -5231,7 +5199,7 @@
         "yRatio": 0.2493198600855033,
         "wRatio": 0.01,
         "hRatio": 0.012,
-        "source": "anchor-image",
+        "source": "anchor-image-short-rescue",
         "anchorMode": "center",
         "layout": "horizontal",
         "confidence": 0.8200000000000001
@@ -5243,7 +5211,7 @@
         "yRatio": 0.2493198600855033,
         "wRatio": 0.01,
         "hRatio": 0.012,
-        "source": "anchor-image",
+        "source": "anchor-image-short-rescue",
         "anchorMode": "center",
         "layout": "horizontal",
         "confidence": 0.8200000000000001
@@ -7093,9 +7061,9 @@
     "questionDetected": 96,
     "questionExpected": 100,
     "ocrChoiceCandidateCount": 74,
-    "choiceDetected": 284,
+    "choiceDetected": 276,
     "choiceExpected": 400,
-    "choiceCoverage": 0.71,
+    "choiceCoverage": 0.69,
     "choiceMissingQuestions": [
       7,
       23,
@@ -7118,6 +7086,8 @@
       69,
       71,
       75,
+      76,
+      77,
       78,
       80,
       83,
@@ -7138,10 +7108,129 @@
       "suspiciousChoiceOrderCount": 0
     }
   },
-  "confidence": 0.9198,
+  "confidence": 0.9161999999999999,
   "warnings": [
-    "선택지 위치 감지가 부족합니다(284/400). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
+    "선택지 위치 감지가 부족합니다(276/400). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
   ],
-  "generatedAt": "2026-06-05T13:52:31.514Z",
-  "choiceClickAreaMap": {}
+  "generatedAt": "2026-06-03T14:31:24.130Z",
+  "choiceClickAreaMap": {},
+  "_manualBase": {
+    "questionLabelMap": {
+      "1": {
+        "page": 1,
+        "xRatio": 0.09015942825728422,
+        "yRatio": 0.20481927710843373,
+        "anchorColumn": 0
+      },
+      "5": {
+        "page": 2,
+        "xRatio": 0.08905992303463442,
+        "yRatio": 0.055188495919160516,
+        "anchorColumn": 0
+      },
+      "6": {
+        "page": 2,
+        "xRatio": 0.08905992303463442,
+        "yRatio": 0.24096385542168675,
+        "anchorColumn": 0
+      },
+      "7": {
+        "page": 2,
+        "xRatio": 0.08905992303463442,
+        "yRatio": 0.4041974349008939,
+        "anchorColumn": 0
+      },
+      "8": {
+        "page": 2,
+        "xRatio": 0.08905992303463442,
+        "yRatio": 0.5343956471045472,
+        "anchorColumn": 0
+      },
+      "9": {
+        "page": 2,
+        "xRatio": 0.08905992303463442,
+        "yRatio": 0.6917994558880683,
+        "anchorColumn": 0
+      }
+    },
+    "questionTopRatioMap": {
+      "1": 0.14981927710843373,
+      "2": 0.40360862806062964,
+      "3": 0.5897726389428682,
+      "5": 0.035,
+      "6": 0.18596385542168675,
+      "7": 0.3491974349008939,
+      "8": 0.47939564710454724,
+      "9": 0.6367994558880683
+    },
+    "questionSegments": {
+      "1": [
+        {
+          "page": 1,
+          "top": 0.14981927710843373,
+          "bottom": 0.4386086280606296,
+          "left": 0,
+          "right": 1,
+          "column": null,
+          "source": "page-segment"
+        }
+      ],
+      "5": [
+        {
+          "page": 2,
+          "top": 0.035,
+          "bottom": 0.22096385542168676,
+          "left": 0,
+          "right": 1,
+          "column": null,
+          "source": "page-segment"
+        }
+      ],
+      "6": [
+        {
+          "page": 2,
+          "top": 0.22096385542168676,
+          "bottom": 0.38419743490089386,
+          "left": 0,
+          "right": 1,
+          "column": null,
+          "source": "page-segment"
+        }
+      ],
+      "7": [
+        {
+          "page": 2,
+          "top": 0.38419743490089386,
+          "bottom": 0.5143956471045472,
+          "left": 0,
+          "right": 1,
+          "column": null,
+          "source": "page-segment"
+        }
+      ],
+      "8": [
+        {
+          "page": 2,
+          "top": 0.5143956471045472,
+          "bottom": 0.6717994558880683,
+          "left": 0,
+          "right": 1,
+          "column": null,
+          "source": "page-segment"
+        }
+      ],
+      "9": [
+        {
+          "page": 2,
+          "top": 0.6717994558880683,
+          "bottom": 0.95,
+          "left": 0,
+          "right": 1,
+          "column": null,
+          "source": "page-segment"
+        }
+      ]
+    }
+  },
+  "manualEditedAt": "2026-06-03T14:31:24.130Z"
 }

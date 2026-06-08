@@ -78,6 +78,33 @@ function resolveWorkspacePath(value){
   return abs;
 }
 
+function buildUnicodeRelVariants(value){
+  const rel = normalizeRelPath(value);
+  const parts = rel.split("/").filter(Boolean);
+  const variants = [
+    rel,
+    rel.normalize("NFC"),
+    rel.normalize("NFD"),
+    parts.map((part) => part.normalize("NFC")).join("/"),
+    parts.map((part) => part.normalize("NFD")).join("/"),
+  ];
+  return [...new Set(variants.filter(Boolean))];
+}
+
+async function resolveExistingWorkspacePath(value){
+  const rel = normalizeRelPath(value);
+  for (const variant of buildUnicodeRelVariants(rel)) {
+    const abs = resolveWorkspacePath(variant);
+    try{
+      await fsp.access(abs);
+      return abs;
+    }catch(_){
+      // Try the next unicode-normalized candidate.
+    }
+  }
+  return resolveWorkspacePath(rel);
+}
+
 function assertManagedPath(value){
   const rel = normalizeRelPath(value);
   const allowed = rel === "pdf" || rel === "json" || rel.startsWith("pdf/") || rel.startsWith("json/");
@@ -85,6 +112,15 @@ function assertManagedPath(value){
     throw new Error("관리 가능 경로는 pdf 또는 json 아래로 제한됩니다.");
   }
   return resolveWorkspacePath(rel);
+}
+
+async function assertExistingManagedPath(value){
+  const rel = normalizeRelPath(value);
+  const allowed = rel === "pdf" || rel === "json" || rel.startsWith("pdf/") || rel.startsWith("json/");
+  if (!rel || !allowed) {
+    throw new Error("관리 가능 경로는 pdf 또는 json 아래로 제한됩니다.");
+  }
+  return await resolveExistingWorkspacePath(rel);
 }
 
 function toRel(abs){
@@ -193,7 +229,7 @@ function buildAnchorDataResponse(anchorData, questions = []){
 async function handleAnchorData(req, res, url){
   try{
     const rel = normalizeAnchorMapRelPath(url.searchParams.get("path") || url.searchParams.get("anchorMap") || "");
-    const abs = assertManagedPath(rel);
+    const abs = await assertExistingManagedPath(rel);
     const anchorData = JSON.parse(await fsp.readFile(abs, "utf8"));
     if (anchorData.kind !== "question-anchor-map") throw new Error("question-anchor-map 형식이 아닙니다.");
     const questions = parseAnchorQuestionList(url.searchParams.get("questions") || url.searchParams.get("q") || "");
@@ -425,13 +461,29 @@ function ensureManualAnchorBase(anchorData, patch = {}){
 }
 
 function restoreManualAnchorBase(anchorData, reset = {}){
-  const scope = reset.scope === "question" || reset.scope === "choice" || reset.scope === "choiceArea" || reset.scope === "choiceAreaAll" ? reset.scope : "all";
+  const scope = reset.scope === "question" || reset.scope === "choice" || reset.scope === "choiceArea" || reset.scope === "choiceAreaAll" || reset.scope === "anchorAll" ? reset.scope : "all";
   const q = Math.trunc(finiteNumber(reset.q, 0));
-  if (scope !== "choiceAreaAll" && q <= 0) throw new Error("초기화할 문제 번호가 없습니다.");
+  if (scope !== "choiceAreaAll" && scope !== "anchorAll" && q <= 0) throw new Error("초기화할 문제 번호가 없습니다.");
   const choice = Math.trunc(finiteNumber(reset.choice, 0));
   const storeKey = String(q);
   const base = anchorData._manualBase && typeof anchorData._manualBase === "object" ? anchorData._manualBase : {};
   const questionKeys = ["questionLabelMap", "questionPageMap", "questionTopRatioMap", "questionSegments"];
+
+  const restoreAllEntriesForKey = (key) => {
+    const keyBase = base[key] && typeof base[key] === "object" ? base[key] : {};
+    for (const entryKey of Object.keys(keyBase)) {
+      const value = cloneJsonValue(keyBase[entryKey]);
+      const currentValue = anchorMapStoredValue(anchorData, key, entryKey);
+      const emptyBase = value == null || ((key === "questionSegments" || key === "choiceAnchorMap" || key === "choiceClickAreaMap") && Array.isArray(value) && !value.length);
+      const currentHasAnchors = Array.isArray(currentValue) && currentValue.length > 0;
+      if (emptyBase && currentHasAnchors && (key === "choiceAnchorMap" || key === "questionSegments")) {
+        delete keyBase[entryKey];
+        continue;
+      }
+      setAnchorMapStoredValue(anchorData, key, entryKey, value);
+      delete keyBase[entryKey];
+    }
+  };
 
   const restoreWholeKey = (key) => {
     const keyBase = base[key] && typeof base[key] === "object" ? base[key] : {};
@@ -448,7 +500,25 @@ function restoreManualAnchorBase(anchorData, reset = {}){
     delete keyBase[storeKey];
   };
 
-  if (scope === "all" || scope === "question") {
+  if (scope === "anchorAll") {
+    for (const key of [...questionKeys, "choiceAnchorMap"]) restoreAllEntriesForKey(key);
+    if (anchorData._manualBase && typeof anchorData._manualBase === "object") {
+      for (const key of Object.keys(anchorData._manualBase)) {
+        if (anchorData._manualBase[key] && typeof anchorData._manualBase[key] === "object" && !Object.keys(anchorData._manualBase[key]).length) {
+          delete anchorData._manualBase[key];
+        }
+      }
+      if (!Object.keys(anchorData._manualBase).length) delete anchorData._manualBase;
+    }
+    const now = new Date().toISOString();
+    const manualMeta = normalizeManualAnchorState(anchorData);
+    if (manualMeta.hasManualEdits) anchorData.manualEditedAt = now;
+    else delete anchorData.manualEditedAt;
+    anchorData.generatedAt = now;
+    return anchorData;
+  };
+
+  if (scope === "all" || scope === "anchorAll" || scope === "question") {
     for (const key of questionKeys) restoreWholeKey(key);
   }
 
@@ -470,7 +540,9 @@ function restoreManualAnchorBase(anchorData, reset = {}){
     }
   }
 
-  if (scope === "all") {
+  if (scope === "anchorAll") {
+    restoreWholeKey("choiceAnchorMap");
+  } else if (scope === "all") {
     restoreWholeKey("choiceAnchorMap");
     restoreWholeKey("choiceClickAreaMap");
   } else if (scope === "choice" || scope === "choiceArea") {
@@ -528,6 +600,13 @@ function restoreAllManualAnchorBase(anchorData){
         const q = Math.trunc(finiteNumber(storeKey, 0));
         if (q <= 0) continue;
         const value = cloneJsonValue(rawValue);
+        const currentValue = anchorMapStoredValue(anchorData, key, storeKey);
+        const emptyBase = value == null || ((key === "questionSegments" || key === "choiceAnchorMap" || key === "choiceClickAreaMap") && Array.isArray(value) && !value.length);
+        const currentHasAnchors = Array.isArray(currentValue) && currentValue.length > 0;
+        if (emptyBase && currentHasAnchors && (key === "choiceAnchorMap" || key === "questionSegments")) {
+          restored += 1;
+          continue;
+        }
         if (Array.isArray(anchorData[key])) {
           if (value == null) delete anchorData[key][q];
           else anchorData[key][q] = value;
@@ -811,7 +890,13 @@ async function clearAnchorManifestForManualBootstrap(body, rel){
 async function handleAnchorManualSave(req, res){
   try{
     const body = await readSmallJsonRequest(req);
-    const rel = normalizeAnchorMapRelPath(body.anchorMapPath || body.anchorMap || body.path);
+    const requestedRel = normalizeAnchorMapRelPath(body.anchorMapPath || body.anchorMap || body.path);
+    let rel = requestedRel;
+    try{
+      const found = findQuestionManifestRow(body);
+      const manifestRel = inferAnchorMapPath(found.row);
+      if (manifestRel && !sameManagedRelPath(manifestRel, requestedRel)) rel = manifestRel;
+    }catch(_){}
     const abs = assertManagedPath(rel);
     let anchorData = null;
     try{
@@ -856,7 +941,13 @@ async function handleAnchorManualSave(req, res){
 async function handleAnchorManualDelete(req, res){
   try{
     const body = await readSmallJsonRequest(req);
-    const rel = normalizeAnchorMapRelPath(body.anchorMapPath || body.anchorMap || body.path);
+    const requestedRel = normalizeAnchorMapRelPath(body.anchorMapPath || body.anchorMap || body.path);
+    let rel = requestedRel;
+    try{
+      const found = findQuestionManifestRow(body);
+      const manifestRel = inferAnchorMapPath(found.row);
+      if (manifestRel && !sameManagedRelPath(manifestRel, requestedRel)) rel = manifestRel;
+    }catch(_){}
     const abs = assertManagedPath(rel);
     const anchorData = JSON.parse(await fsp.readFile(abs, "utf8"));
     if (anchorData.kind !== "question-anchor-map") throw new Error("question-anchor-map 형식이 아닙니다.");
@@ -2586,10 +2677,13 @@ function findQuestionManifestRow(body = {}){
   const rows = readJsonFile(manifestName, []);
   const questionNo = String(body.questionNo || "");
   const targetPath = stripManifestPrefix(body.path || body.questionPdf || body.question || "");
-  const index = (Array.isArray(rows) ? rows : []).findIndex((row) => (
-    (questionNo && String(row?.questionNo || "") === questionNo)
-    || (targetPath && sameManagedRelPath(row?.questionPdf || "", targetPath))
-  ));
+  const list = Array.isArray(rows) ? rows : [];
+  let index = targetPath
+    ? list.findIndex((row) => sameManagedRelPath(row?.questionPdf || "", targetPath))
+    : -1;
+  if (index < 0 && questionNo) {
+    index = list.findIndex((row) => String(row?.questionNo || "") === questionNo);
+  }
   if (index < 0) throw new Error("문제·문항 위치맵을 생성할 회차를 question manifest에서 찾을 수 없습니다.");
   return { dataset, manifestName, rows, index, row: rows[index] };
 }
@@ -3095,7 +3189,7 @@ async function serveFile(res, filePath){
 
 async function serveStatic(req, res, url){
   const rel = normalizeRelPath(decodeURIComponent(url.pathname === "/" ? "index.html" : url.pathname));
-  const filePath = resolveWorkspacePath(rel);
+  const filePath = await resolveExistingWorkspacePath(rel);
   let stat;
   try{
     stat = await fsp.stat(filePath);
@@ -3119,7 +3213,7 @@ async function serveStatic(req, res, url){
 async function handleAdminDownload(req, res, url){
   const rel = stripManifestPrefix(url.searchParams.get("path") || "");
   if (!rel) throw new Error("다운로드할 파일 경로가 없습니다.");
-  const filePath = assertManagedPath(rel);
+  const filePath = await assertExistingManagedPath(rel);
   const stat = await fsp.stat(filePath);
   if (!stat.isFile()) throw new Error("파일만 다운로드할 수 있습니다.");
   const ext = path.extname(filePath).toLowerCase();
@@ -3420,7 +3514,7 @@ async function hwp5htmlCached(filePath, stat){
 async function handleHwpHtml(req, res, url){
   const rel = stripManifestPrefix(url.searchParams.get("path") || "");
   if (!rel) throw new Error("HWP 파일 경로가 없습니다.");
-  const filePath = assertManagedPath(rel);
+  const filePath = await assertExistingManagedPath(rel);
   const stat = await fsp.stat(filePath);
   if (!stat.isFile()) throw new Error("파일만 미리보기할 수 있습니다.");
   const ext = path.extname(filePath).toLowerCase();
@@ -3438,7 +3532,7 @@ async function handleHwpPreview(req, res, url){
   }
   let filePath;
   try{
-    filePath = assertManagedPath(rel);
+    filePath = await assertExistingManagedPath(rel);
     const stat = await fsp.stat(filePath);
     if (!stat.isFile()) throw new Error("파일만 미리보기할 수 있습니다.");
     const ext = path.extname(filePath).toLowerCase();
