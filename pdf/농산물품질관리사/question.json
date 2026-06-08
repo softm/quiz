@@ -108,10 +108,12 @@
     "ocrStatus": "OCR 확인 필요",
     "ocrPublished": false,
     "anchorMap": "quiz/pdf/농산물품질관리사/2023년 제20회 농산물품질관리사 1차_anchor.json",
-    "anchorStatus": "위치맵 확인 필요",
-    "anchorConfidence": 0.3,
-    "anchorWarnings": [],
-    "anchorGeneratedAt": "2026-06-05T23:37:28.063Z",
+    "anchorStatus": "위치맵 생성",
+    "anchorConfidence": 0.9161999999999999,
+    "anchorWarnings": [
+      "선택지 위치 감지가 부족합니다(276/400). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
+    ],
+    "anchorGeneratedAt": "2026-06-08T22:18:51.438Z",
     "choiceCount": 4
   },
   {

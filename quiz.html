@@ -2605,6 +2605,7 @@
     historyApplying: false,
     historyLimit: 80,
     dragCanvas: null,
+    dragCanvasRect: null,
     dragPointerId: null,
     dragStartX: 0,
     dragStartY: 0,
@@ -3030,7 +3031,7 @@
     const lockQ = setAnchorEditTargetQuestion(getAnchorEditTargetQuestion(state.focusQ || 1) || state.focusQ || 1, { syncFocus: false, resetChoice: false }) || 1;
     syncAnchorEditUi();
     setAnchorEditStatus(anchorEditState.questionLocked
-      ? `${formatPrintedQuestionLabel(lockQ)}번 기준으로 스크롤 문제 변경을 잠갔습니다. 답안지 클릭 이동은 가능합니다.`
+      ? `${formatPrintedQuestionLabel(lockQ)}번 기준으로 스크롤 문제 변경을 잠갔습니다. 현재 선택 문제의 페이지/단 안에서만 앵커를 수정합니다.`
       : "스크롤 문제 잠금을 해제했습니다.");
   });
   if (anchorEditPrevChoice) anchorEditPrevChoice.addEventListener("click", () => shiftAnchorEditChoice(-1));
@@ -4175,14 +4176,14 @@
         source: item?.source || source || "anchor-map"
       };
     };
+    for (const item of (Array.isArray(anchorMap.anchors) ? anchorMap.anchors : [])){
+      const q = Number(item?.q);
+      putQuestionAnchor(q, item, "anchor-map");
+    }
     if (anchorMap.questionLabelMap && typeof anchorMap.questionLabelMap === "object") {
       for (const [key, item] of Object.entries(anchorMap.questionLabelMap)) {
         putQuestionAnchor(Number(key), item, "anchor-label-map");
       }
-    }
-    for (const item of (Array.isArray(anchorMap.anchors) ? anchorMap.anchors : [])){
-      const q = Number(item?.q);
-      putQuestionAnchor(q, item, "anchor-map");
     }
     return {
       version: PDF_PATTERN_VERSION,
@@ -5670,7 +5671,7 @@
     if (state.viewMode === "all" && anchorEditState.interactionMode === "drag") {
       setAnchorEditStatus("전체보기 드래그 편집: 기존 앵커만 잡아서 이동합니다. 빈 위치 클릭 이동은 비활성화됩니다.");
     } else if (state.viewMode === "all") {
-      setAnchorEditStatus("전체보기 선택편집: 현재 선택 문제 기준으로 빈 위치 클릭 앵커 이동/생성이 가능합니다.");
+      setAnchorEditStatus("전체보기 선택편집: 현재 선택 문제의 페이지/단 안에서만 빈 위치 클릭 앵커 이동/생성이 가능합니다.");
     } else if (anchorEditState.interactionMode === "drag") {
       setAnchorEditStatus("드래그 편집: 기존 앵커를 잡아서 이동합니다. 빈 위치 클릭 이동은 비활성화됩니다.");
     } else {
@@ -5902,14 +5903,14 @@
     };
   }
 
-  function getAllCanvasPointFromEvent(e, qOverride = null){
+  function getAllCanvasPointFromEvent(e, qOverride = null, rectOverride = null){
     if (state.viewMode !== "all") return null;
     const canvas = e.currentTarget || e.target || anchorEditState.dragCanvas;
     if (!canvas) return null;
     const pageNo = Number(canvas.dataset?.page);
     const meta = state.allPageCanvasMeta && state.allPageCanvasMeta[pageNo];
     if (!Number.isFinite(pageNo) || !meta) return null;
-    const rect = canvas.getBoundingClientRect();
+    const rect = rectOverride || canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return null;
     const canvasX = ((e.clientX - rect.left) / rect.width) * canvas.width;
     const canvasY = ((e.clientY - rect.top) / rect.height) * canvas.height;
@@ -5980,7 +5981,11 @@
 
   function getAnchorEditPdfPointFromEvent(e){
     if (state.viewMode === "single") return getSinglePdfPointFromEvent(e);
-    if (state.viewMode === "all") return getAllCanvasPointFromEvent(e, anchorEditState.dragQ || getAnchorEditTargetQuestion(state.focusQ || 1));
+    if (state.viewMode === "all") return getAllCanvasPointFromEvent(
+      e,
+      anchorEditState.dragQ || getAnchorEditTargetQuestion(state.focusQ || 1),
+      anchorEditState.dragCanvasRect
+    );
     return null;
   }
 
@@ -6044,14 +6049,113 @@
     state.allModeForcedMarkerPages = forcedPages;
   }
 
-  function isAnchorEditPointOnQuestionPage(point, selectedQ){
+  function validateAnchorEditPointOnQuestionPage(point, selectedQ){
     const safeQ = Math.trunc(Number(selectedQ) || 0);
-    if (safeQ < 1 || safeQ > QUESTION_COUNT || !point) return true;
+    if (safeQ < 1 || safeQ > QUESTION_COUNT || !point) return { ok: true };
     const clickedPage = Math.trunc(Number(point.page) || 0);
-    if (clickedPage <= 0) return true;
+    if (clickedPage <= 0) return { ok: true };
     const mappedPage = Number(anchorEditMapValue(state.pdfNav?.questionPageMap, safeQ));
-    if (Number.isFinite(mappedPage) && mappedPage > 0 && Math.floor(mappedPage) !== clickedPage) return false;
-    return true;
+    if (Number.isFinite(mappedPage) && mappedPage > 0 && Math.floor(mappedPage) !== clickedPage) {
+      return { ok: false, reason: "mapped-page", expectedPage: Math.floor(mappedPage), clickedPage };
+    }
+    const questionAnchor = getQuestionAnchorForEditFind(safeQ);
+    const anchorPage = Number(questionAnchor?.page);
+    if (Number.isFinite(anchorPage) && anchorPage > 0 && Math.floor(anchorPage) !== clickedPage) {
+      return { ok: false, reason: "anchor-page", expectedPage: Math.floor(anchorPage), clickedPage };
+    }
+
+    const clickedX = Number(point.xRatio);
+    if (!Number.isFinite(clickedX)) return { ok: true };
+    const bounds = getStoredQuestionColumnBoundsForPage(clickedPage, safeQ);
+    if (bounds) {
+      const left = Number(bounds.left);
+      const right = Number(bounds.right);
+      if (Number.isFinite(left) && Number.isFinite(right) && right > left + 0.10) {
+        const expectedColumn = getColumnFromXRatio((left + right) * 0.5);
+        const xPad = 0.025;
+        if (clickedX < left - xPad || clickedX > right + xPad) {
+          return {
+            ok: false,
+            reason: "column",
+            expectedColumn,
+            clickedColumn: getColumnFromXRatio(clickedX),
+          };
+        }
+        return { ok: true };
+      }
+    }
+
+    if (!isTwoColumnQuestionPage(clickedPage)) return { ok: true };
+    const anchorX = Number(questionAnchor?.xRatio);
+    if (!Number.isFinite(anchorX)) return { ok: true };
+    const expectedColumn = getColumnFromXRatio(anchorX);
+    const clickedColumn = getColumnFromXRatio(clickedX);
+    if (expectedColumn && clickedColumn && expectedColumn !== clickedColumn) {
+      return { ok: false, reason: "column", expectedColumn, clickedColumn };
+    }
+    return { ok: true };
+  }
+
+  function isAnchorEditPointOnQuestionPage(point, selectedQ){
+    return validateAnchorEditPointOnQuestionPage(point, selectedQ).ok === true;
+  }
+
+  function getAnchorEditRejectedTargetMessage(point, selectedQ){
+    const safeQ = Math.trunc(Number(selectedQ) || 0);
+    const label = safeQ >= 1 && safeQ <= QUESTION_COUNT
+      ? `${formatPrintedQuestionLabel(safeQ)}번`
+      : "현재 선택 문제";
+    const result = validateAnchorEditPointOnQuestionPage(point, selectedQ);
+    if (result.reason === "mapped-page" && Number.isFinite(result.expectedPage)) {
+      return `${label} 문제는 ${result.expectedPage}페이지에 매핑되어 있습니다. 해당 페이지에서만 앵커를 수정하세요.`;
+    }
+    if (result.reason === "anchor-page" && Number.isFinite(result.expectedPage)) {
+      return `${label} 문제 앵커는 ${result.expectedPage}페이지에 있습니다. 해당 페이지에서만 수정하세요.`;
+    }
+    if (result.reason === "column" && Number.isFinite(result.expectedColumn)) {
+      return `${label} 문제는 기존 ${result.expectedColumn}단에 있습니다. 같은 단에서만 앵커를 수정하세요.`;
+    }
+    return `${label} 문제의 페이지/단 안에서만 앵커를 수정하세요.`;
+  }
+
+  function isValidAnchorEditQuestionNo(q){
+    const safeQ = Math.trunc(Number(q) || 0);
+    return safeQ >= 1 && safeQ <= QUESTION_COUNT;
+  }
+
+  function resolveAllModeQuestionAnchorEditTarget(point, hit = null){
+    const selectedQ = getAnchorEditTargetQuestion(state.focusQ || 0);
+    const hitQ = hit && hit.kind === "question" ? Math.trunc(Number(hit.q) || 0) : 0;
+    const guessedQ = Math.trunc(Number(guessAllModeQuestionFromPoint(point)) || 0);
+    const selectedAllowed = isValidAnchorEditQuestionNo(selectedQ)
+      && isAnchorEditPointOnQuestionPage(point, selectedQ);
+
+    if (isAnchorEditQuestionLocked()) {
+      return selectedAllowed
+        ? { q: selectedQ, rejectedQ: 0 }
+        : { q: 0, rejectedQ: selectedQ };
+    }
+
+    for (const value of [hitQ, guessedQ, selectedQ]){
+      const q = Math.trunc(Number(value) || 0);
+      if (!isValidAnchorEditQuestionNo(q)) continue;
+      if (isAnchorEditPointOnQuestionPage(point, q)) return { q, rejectedQ: 0 };
+    }
+    return { q: 0, rejectedQ: selectedQ || hitQ || guessedQ };
+  }
+
+  function resolveQuestionAnchorEditPointerTarget(e, hit = null){
+    if (state.viewMode === "all") {
+      const point = getAllCanvasPointFromEvent(e);
+      if (!point) return { q: 0, point: null, rejectedQ: 0 };
+      const resolved = resolveAllModeQuestionAnchorEditTarget(point, hit);
+      return { ...resolved, point };
+    }
+    const point = getSinglePdfPointFromEvent(e);
+    if (!point) return { q: 0, point: null, rejectedQ: 0 };
+    const q = getAnchorEditTargetQuestion(state.focusQ || point.q || 1) || point.q || 1;
+    if (!isAnchorEditPointOnQuestionPage(point, q)) return { q: 0, point, rejectedQ: q };
+    return { q, point, rejectedQ: 0 };
   }
 
   function isAnchorEditPointAllowedForQuestion(point, selectedQ){
@@ -7057,6 +7161,7 @@
     anchorEditState.dragKind = "";
     anchorEditState.dragQ = 0;
     anchorEditState.dragCanvas = null;
+    anchorEditState.dragCanvasRect = null;
     anchorEditState.dragPointerId = null;
     anchorEditState.dragMoved = false;
     anchorEditState.dragAreaAction = "";
@@ -7084,17 +7189,40 @@
         .finally(() => setTimeout(() => { anchorEditState.suppressNextClick = false; }, 220));
       return;
     }
+    let pendingAnchorHit = null;
     if (!anchorEditState.choiceAreaEditMode && anchorEditState.interactionMode !== "drag") {
+      pendingAnchorHit = anchorEditState.kind === "question" ? getAnchorEditHitFromEvent(e) : null;
       if (anchorEditState.kind === "question") {
+        const target = resolveQuestionAnchorEditPointerTarget(e, pendingAnchorHit);
         anchorEditState.suppressNextClick = true;
-        const action = state.viewMode === "all" ? handleAnchorEditAllCanvasClick(e) : handleAnchorEditCanvasClick(e);
-        Promise.resolve(action)
-          .catch((err) => setAnchorEditStatus(`문제 앵커 편집 실패: ${err?.message || err}`))
-          .finally(() => setTimeout(() => { anchorEditState.suppressNextClick = false; }, 220));
+        if (!isValidAnchorEditQuestionNo(target.q)) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+          if (target.point && target.rejectedQ) {
+            setAnchorEditStatus(getAnchorEditRejectedTargetMessage(target.point, target.rejectedQ));
+            showToastAndSnackbar("현재 선택 문제의 페이지/단 밖이라 저장하지 않았습니다.");
+          } else {
+            setAnchorEditStatus("편집할 문제를 먼저 답안지에서 선택하세요.");
+          }
+          setTimeout(() => { anchorEditState.suppressNextClick = false; }, 220);
+          return;
+        }
+        pendingAnchorHit = pendingAnchorHit && pendingAnchorHit.kind === "question" && Number(pendingAnchorHit.q) === Number(target.q)
+          ? pendingAnchorHit
+          : {
+            kind: "question",
+            q: target.q,
+            choice: 0,
+            distance: 0,
+            label: `${formatPrintedQuestionLabel(target.q)}번 anchor`,
+            canvas: e.currentTarget || e.target || pdfCanvas,
+          };
+      } else {
+        return;
       }
-      return;
     }
-    const anchorHit = anchorEditState.choiceAreaEditMode ? null : getAnchorEditHitFromEvent(e);
+    const anchorHit = anchorEditState.choiceAreaEditMode ? null : (pendingAnchorHit || getAnchorEditHitFromEvent(e));
     const areaHit = anchorEditState.kind === "choice" && anchorEditState.choiceAreaEditMode
       ? (state.viewMode === "all" ? getAllChoiceClickAreaEditHitFromEvent(e) : getSingleChoiceClickAreaEditHitFromEvent(e))
       : null;
@@ -7118,6 +7246,13 @@
     anchorEditState.dragQ = Number(hit.q) || Number(state.focusQ) || 0;
     if (anchorEditState.dragQ) setAnchorEditTargetQuestion(anchorEditState.dragQ, { syncFocus: true });
     anchorEditState.dragCanvas = targetCanvas;
+    const dragRect = targetCanvas.getBoundingClientRect();
+    anchorEditState.dragCanvasRect = {
+      left: Number(dragRect.left),
+      top: Number(dragRect.top),
+      width: Number(dragRect.width),
+      height: Number(dragRect.height),
+    };
     anchorEditState.dragPointerId = e.pointerId;
     anchorEditState.dragStartX = e.clientX;
     anchorEditState.dragStartY = e.clientY;
@@ -7165,6 +7300,8 @@
   async function onAnchorEditPointerUp(e){
     if (!anchorEditState.dragging || anchorEditState.dragPointerId !== e.pointerId) return;
     const moved = anchorEditState.dragMoved;
+    const wasChoiceAreaEditMode = anchorEditState.choiceAreaEditMode;
+    const wasInteractionMode = anchorEditState.interactionMode;
     const dragKind = anchorEditState.dragKind;
     const dragChoice = anchorEditState.dragChoice;
     const targetCanvas = anchorEditState.dragCanvas || pdfCanvas;
@@ -7199,7 +7336,11 @@
     resetAnchorEditDragState();
     setTimeout(() => { anchorEditState.suppressNextClick = false; }, 180);
     e.preventDefault();
-    if (!moved) return;
+    const commitStationaryQuestionAnchor = !moved
+      && !wasChoiceAreaEditMode
+      && wasInteractionMode !== "drag"
+      && dragKind === "question";
+    if (!moved && !commitStationaryQuestionAnchor) return;
     if (dragKind === "choiceArea") {
       if (!areaRatios || !Number.isFinite(dragQ) || dragQ <= 0 || !Number.isFinite(areaPage) || areaPage <= 0) return;
       anchorEditState.kind = "choice";
@@ -7214,6 +7355,11 @@
     if (dragKind === "question") {
       anchorEditState.kind = "question";
       point.q = dragQ || getAnchorEditTargetQuestion(state.focusQ || 1);
+      if (!isAnchorEditPointOnQuestionPage(point, point.q)) {
+        setAnchorEditStatus(getAnchorEditRejectedTargetMessage(point, point.q));
+        showToastAndSnackbar("현재 선택 문제의 페이지/단 밖이라 저장하지 않았습니다.");
+        return;
+      }
       setAnchorEditTargetQuestion(point.q, { syncFocus: true });
       stageManualQuestionAnchor(point);
     } else {
@@ -7972,6 +8118,11 @@
       ? getAllCanvasPointFromEvent(e, editQ)
       : getSinglePdfPointFromEvent(e);
     if (!point) return false;
+    if (mode === "all" && !isAnchorEditPointOnQuestionPage(point, editQ)) {
+      setAnchorEditStatus(getAnchorEditRejectedTargetMessage(point, editQ));
+      showToastAndSnackbar("현재 선택 문제의 페이지/단 밖이라 저장하지 않았습니다.");
+      return true;
+    }
     const prevPage = mode === "all" ? getCurrentQuestionAnchorPageForSimpleRefresh(editQ) : NaN;
     point.q = editQ;
     setAnchorEditTargetQuestion(editQ, { syncFocus: true, resetChoice: false });
@@ -8057,23 +8208,37 @@
     const point = getAllCanvasPointFromEvent(e);
     document.documentElement.dataset.quizAnchorEditPoint = point ? `${point.page}:${point.xRatio.toFixed(4)}:${point.yRatio.toFixed(4)}` : "none";
     if (!point) return false;
-    const selectedQForQuestionAnchor = getAnchorEditTargetQuestion(state.focusQ || 0);
-    if (!isAllModeQuestionAnchorEditPointAllowed(point, selectedQForQuestionAnchor)) {
-      const label = Number.isFinite(selectedQForQuestionAnchor) && selectedQForQuestionAnchor > 0
-        ? `${formatPrintedQuestionLabel(selectedQForQuestionAnchor)}번`
-        : "현재 선택 문제";
-      setAnchorEditStatus(`${label} 문제 영역이 아닙니다. 답안지에서 편집할 문제를 선택하거나 스크롤 문제 락을 해제하세요.`);
-      return true;
+    let q = 0;
+    let rejectedQ = 0;
+    if (anchorEditState.kind === "question") {
+      const target = resolveAllModeQuestionAnchorEditTarget(point);
+      q = target.q;
+      rejectedQ = target.rejectedQ;
+    } else {
+      const selectedQForChoiceAnchor = getAnchorEditTargetQuestion(state.focusQ || 0);
+      if (!isAllModeQuestionAnchorEditPointAllowed(point, selectedQForChoiceAnchor)) {
+        setAnchorEditStatus(getAnchorEditRejectedTargetMessage(point, selectedQForChoiceAnchor));
+        showToastAndSnackbar("현재 선택 문제의 페이지/단 밖이라 저장하지 않았습니다.");
+        return true;
+      }
+      if (!isAnchorEditQuestionLocked() && isPointInInactiveAnchorColumn(point)) {
+        setAnchorEditStatus(`${getAnchorEditActiveColumn()}단 선택 상태입니다. 반대쪽 흐림 영역은 편집하지 않습니다.`);
+        return true;
+      }
+      q = resolveAnchorEditAllModeTargetQuestion(point);
     }
-    if (anchorEditState.kind !== "question" && !isAnchorEditQuestionLocked() && isPointInInactiveAnchorColumn(point)) {
-      setAnchorEditStatus(`${getAnchorEditActiveColumn()}단 선택 상태입니다. 반대쪽 흐림 영역은 편집하지 않습니다.`);
-      return true;
-    }
-    const q = anchorEditState.kind === "question"
-      ? selectedQForQuestionAnchor
-      : resolveAnchorEditAllModeTargetQuestion(point);
     if (!Number.isFinite(q) || q <= 0) {
-      setAnchorEditStatus("편집할 문제를 먼저 답안지에서 선택하세요.");
+      if (rejectedQ) {
+        setAnchorEditStatus(getAnchorEditRejectedTargetMessage(point, rejectedQ));
+        showToastAndSnackbar("현재 선택 문제의 페이지/단 밖이라 저장하지 않았습니다.");
+      } else {
+        setAnchorEditStatus("편집할 문제를 먼저 답안지에서 선택하세요.");
+      }
+      return true;
+    }
+    if (anchorEditState.kind === "question" && !isAnchorEditPointOnQuestionPage(point, q)) {
+      setAnchorEditStatus(getAnchorEditRejectedTargetMessage(point, q));
+      showToastAndSnackbar("현재 선택 문제의 페이지/단 밖이라 저장하지 않았습니다.");
       return true;
     }
     point.q = q;
@@ -11577,25 +11742,25 @@
     if (!ctx || !Number.isFinite(x) || !Number.isFinite(y)) return;
     const canvas = ctx.canvas;
     const style = getAnchorDebugStyle(options.tone || options.sourceTone || "anchor");
-    const defaultRadius = Math.max(17, Math.min(32, (canvas.width || 1000) * 0.0155)) * getAnchorChoiceRadiusScale();
+    const defaultRadius = Math.max(7, Math.min(16, (canvas.width || 1000) * 0.0072)) * getAnchorChoiceRadiusScale();
     const optionRadius = Number(options.r);
-    const r = Math.max(6, Math.min(56, Number.isFinite(optionRadius) ? optionRadius : defaultRadius));
-    const fontSize = Math.max(13, Math.min(24, (canvas.width || 1000) * 0.014));
+    const r = Math.max(4, Math.min(32, Number.isFinite(optionRadius) ? optionRadius : defaultRadius));
+    const fontSize = Math.max(8, Math.min(14, (canvas.width || 1000) * 0.0082));
     ctx.save();
     if (options.selected === true) {
       ctx.save();
-      ctx.lineWidth = Math.max(4, r * 0.24);
+      ctx.lineWidth = Math.max(2, r * 0.16);
       ctx.strokeStyle = "rgba(37,99,235,0.95)";
       ctx.fillStyle = "rgba(37,99,235,0.10)";
       ctx.shadowColor = "rgba(37,99,235,0.38)";
-      ctx.shadowBlur = Math.max(8, r * 0.42);
+      ctx.shadowBlur = Math.max(4, r * 0.30);
       ctx.beginPath();
-      ctx.arc(x, y, r + Math.max(5, r * 0.23), 0, Math.PI * 2);
+      ctx.arc(x, y, r + Math.max(3, r * 0.18), 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
       ctx.restore();
     }
-    ctx.lineWidth = Math.max(style.lineWidth, r * (style.label === "anchor" ? 0.16 : 0.11));
+    ctx.lineWidth = Math.max(1.2, r * (style.label === "anchor" ? 0.14 : 0.10));
     ctx.strokeStyle = style.stroke;
     ctx.fillStyle = style.softFill;
     ctx.beginPath();
@@ -11609,22 +11774,22 @@
     const labelY = Math.max(fontSize, Math.min((canvas.height || 0) - fontSize, y - r * 0.6));
     const labelText = String(label || "");
     if (anchorEditState.enabled && labelText) {
-      const tagFont = Math.max(12, fontSize * 0.76);
+      const tagFont = Math.max(7, fontSize * 0.72);
       ctx.font = `900 ${tagFont}px sans-serif`;
       const tagText = ` ${labelText} `;
-      const tagW = Math.min((canvas.width || 0) - 8, ctx.measureText(tagText).width + 14);
-      const tagH = tagFont + 12;
-      const tagX = Math.max(4, Math.min((canvas.width || 0) - tagW - 4, x + r + 8));
-      const tagY = Math.max(4, Math.min((canvas.height || 0) - tagH - 4, y - r - tagH * 0.35));
+      const tagW = Math.min((canvas.width || 0) - 8, ctx.measureText(tagText).width + 10);
+      const tagH = tagFont + 8;
+      const tagX = Math.max(4, Math.min((canvas.width || 0) - tagW - 4, x + r + 5));
+      const tagY = Math.max(4, Math.min((canvas.height || 0) - tagH - 4, y - r - tagH * 0.2));
       ctx.fillStyle = "rgba(255,255,255,.94)";
       ctx.strokeStyle = "rgba(239,43,43,.78)";
-      ctx.lineWidth = Math.max(2, tagFont * 0.12);
+      ctx.lineWidth = Math.max(1, tagFont * 0.08);
       ctx.beginPath();
       ctx.roundRect(tagX, tagY, tagW, tagH, tagH / 2);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = "#e11d48";
-      ctx.fillText(tagText.trim(), tagX + 8, tagY + tagH / 2);
+      ctx.fillText(tagText.trim(), tagX + 6, tagY + tagH / 2);
       ctx.font = `800 ${fontSize}px sans-serif`;
       ctx.fillStyle = style.fill;
     }
@@ -11664,8 +11829,8 @@
       const y = seg.destTop + ((centerY - seg.top) / sy);
       const dw = Math.max(1, aw / sx);
       const dh = Math.max(1, ah / sy);
-      const rawRadius = Math.max(Math.max(dw, dh) * (centerBased ? 1.18 : 0.78), Math.max(1, seg.destWidth) * 0.0135);
-      const r = Math.max(6, Math.min(56, rawRadius * getAnchorChoiceRadiusScale()));
+      const rawRadius = Math.max(Math.max(dw, dh) * (centerBased ? 0.56 : 0.44), Math.max(1, seg.destWidth) * 0.0062);
+      const r = Math.max(4, Math.min(32, rawRadius * getAnchorChoiceRadiusScale()));
       return { x, y, r, centerBased, segment: true };
     }
     const sx = srcWidth / destWidth;
@@ -11674,8 +11839,8 @@
     const y = (centerY - Number(srcTop || 0)) / sy;
     const dw = Math.max(1, aw / sx);
     const dh = Math.max(1, ah / sy);
-    const rawRadius = Math.max(Math.max(dw, dh) * (centerBased ? 1.18 : 0.78), destWidth * 0.0135);
-    const r = Math.max(6, Math.min(56, rawRadius * getAnchorChoiceRadiusScale()));
+    const rawRadius = Math.max(Math.max(dw, dh) * (centerBased ? 0.56 : 0.44), destWidth * 0.0062);
+    const r = Math.max(4, Math.min(32, rawRadius * getAnchorChoiceRadiusScale()));
     return { x, y, r, centerBased };
   }
 
@@ -12594,30 +12759,42 @@
     return true;
   }
 
+  function getQuestionPageSegmentColumnEvidence(pageNo){
+    const safePage = Number(pageNo);
+    const evidence = {
+      hasAny: false,
+      hasLeftSegment: false,
+      hasRightSegment: false,
+    };
+    if (!Number.isFinite(safePage)) return evidence;
+    const pageMap = state.pdfNav?.questionPageMap;
+    const segmentsMap = state.pdfNav?.questionSegments;
+    if (!segmentsMap) return evidence;
+    for (let q = 1; q <= QUESTION_COUNT; q++){
+      const mappedPage = Array.isArray(pageMap) ? Number(pageMap[q]) : NaN;
+      if (Number.isFinite(mappedPage) && Math.floor(mappedPage) !== safePage) continue;
+      const segments = Array.isArray(segmentsMap[String(q)]) ? segmentsMap[String(q)] : [];
+      for (const seg of segments){
+        if (Number.isFinite(Number(seg?.page)) && Number(seg.page) !== safePage) continue;
+        const left = Number.isFinite(Number(seg?.left)) ? Number(seg.left) : 0;
+        const right = Number.isFinite(Number(seg?.right)) ? Number(seg.right) : 1;
+        const width = Math.max(0, right - left);
+        if (width <= 0) continue;
+        evidence.hasAny = true;
+        if (width > 0.72) continue;
+        if (right <= 0.64 || (left < 0.5 && right <= 0.72)) evidence.hasLeftSegment = true;
+        if (left >= 0.36) evidence.hasRightSegment = true;
+      }
+    }
+    return evidence;
+  }
+
   function isTwoColumnQuestionPage(pageNo){
     const safePage = Number(pageNo);
     if (!Number.isFinite(safePage)) return false;
-    const pageMap = state.pdfNav?.questionPageMap;
-    const segmentsMap = state.pdfNav?.questionSegments;
-    let hasLeftSegment = false;
-    let hasRightSegment = false;
-    if (segmentsMap) {
-      for (let q = 1; q <= QUESTION_COUNT; q++){
-        const mappedPage = Array.isArray(pageMap) ? Number(pageMap[q]) : NaN;
-        if (Number.isFinite(mappedPage) && Math.floor(mappedPage) !== safePage) continue;
-        const segments = Array.isArray(segmentsMap[String(q)]) ? segmentsMap[String(q)] : [];
-        for (const seg of segments){
-          if (Number.isFinite(Number(seg?.page)) && Number(seg.page) !== safePage) continue;
-          const left = Number.isFinite(Number(seg?.left)) ? Number(seg.left) : 0;
-          const right = Number.isFinite(Number(seg?.right)) ? Number(seg.right) : 1;
-          const width = Math.max(0, right - left);
-          if (width > 0.72) continue;
-          if (right <= 0.64 || (left < 0.5 && right <= 0.72)) hasLeftSegment = true;
-          if (left >= 0.36) hasRightSegment = true;
-        }
-      }
-      if (hasLeftSegment && hasRightSegment) return true;
-    }
+    const segmentEvidence = getQuestionPageSegmentColumnEvidence(safePage);
+    if (segmentEvidence.hasLeftSegment && segmentEvidence.hasRightSegment) return true;
+    if (segmentEvidence.hasAny) return false;
     const questionXs = [];
     for (let q = 1; q <= QUESTION_COUNT; q++){
       const anchor = getQuestionAnchorForEditFind(q);
@@ -12913,8 +13090,14 @@
     const directMap = state.pdfNav?.questionColumnBoundsMap;
     const direct = directMap && typeof directMap === "object" ? normalizeQuestionColumnBounds(directMap[String(q)], pageNo) : null;
     if (direct && Number(direct.page) === Number(pageNo)) return direct;
+    const segmentEvidence = getQuestionPageSegmentColumnEvidence(pageNo);
+    if (segmentEvidence.hasAny && !(segmentEvidence.hasLeftSegment && segmentEvidence.hasRightSegment)) return null;
 
-    const stored = state.pdfNav?.questionAnchorMap;
+    const primaryStored = state.pdfNav?.questionAnchorMap;
+    const fallbackStored = state.pdfNav?.questionLabelMap;
+    const stored = primaryStored && typeof primaryStored === "object" && Object.keys(primaryStored).length
+      ? primaryStored
+      : fallbackStored;
     if (!stored || typeof stored !== "object") return null;
     const current = stored[String(q)];
     if (!current || Number(current.page) !== Number(pageNo)) return null;
@@ -12942,6 +13125,8 @@
     if (!Number.isFinite(pageNo) || !Number.isFinite(q)) return null;
     const storedBounds = getStoredQuestionColumnBoundsForPage(pageNo, q);
     if (storedBounds) return storedBounds;
+    const segmentEvidence = getQuestionPageSegmentColumnEvidence(pageNo);
+    if (segmentEvidence.hasAny && !(segmentEvidence.hasLeftSegment && segmentEvidence.hasRightSegment)) return null;
     let anchorMap = null;
     try{
       anchorMap = await getQuestionStartAnchorsForPage(pageNo);
