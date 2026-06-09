@@ -113,15 +113,16 @@
   ],
   "questionLabelMap": {
     "1": {
-      "q": 1,
-      "label": "1",
       "page": 1,
-      "ratio": 0.20761279845505617,
-      "yRatio": 0.20761279845505617,
-      "xRatio": 0.2973603690357853,
-      "wRatio": 0.025,
-      "hRatio": 0.018,
+      "xRatio": 0.09015942825728422,
+      "yRatio": 0.20481927710843373,
+      "label": 1,
+      "anchorColumn": 0,
       "source": "manual-anchor",
+      "q": 1,
+      "ratio": 0.20481927710843373,
+      "wRatio": 0.02,
+      "hRatio": 0.018,
       "anchorMode": "center",
       "confidence": 1
     },
@@ -733,11 +734,12 @@
     "1": [
       {
         "page": 1,
-        "top": 0.20761279845505617,
+        "top": 0.14981927710843373,
         "bottom": 0.4386086280606296,
         "left": 0,
         "right": 1,
-        "source": "manual-anchor"
+        "column": null,
+        "source": "page-segment"
       }
     ],
     "2": [
@@ -1935,7 +1937,7 @@
   ],
   "questionTopRatioMap": [
     null,
-    0.20761279845505617,
+    0.14981927710843373,
     0.40360862806062964,
     0.5897726389428682,
     0.6915993004275165,
@@ -7082,7 +7084,7 @@
   "warnings": [
     "선택지 위치 감지가 부족합니다(276/400). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
   ],
-  "generatedAt": "2026-06-08T22:18:51.438Z",
+  "generatedAt": "2026-06-09T02:49:45.598Z",
   "choiceClickAreaMap": {},
   "_manualBase": {
     "questionLabelMap": {
@@ -7092,23 +7094,7 @@
         "yRatio": 0.20481927710843373,
         "anchorColumn": 0
       }
-    },
-    "questionTopRatioMap": {
-      "1": 0.14981927710843373
-    },
-    "questionSegments": {
-      "1": [
-        {
-          "page": 1,
-          "top": 0.14981927710843373,
-          "bottom": 0.4386086280606296,
-          "left": 0,
-          "right": 1,
-          "column": null,
-          "source": "page-segment"
-        }
-      ]
     }
   },
-  "manualEditedAt": "2026-06-08T22:18:51.438Z"
+  "manualEditedAt": "2026-06-09T02:49:45.598Z"
 }

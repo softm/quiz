@@ -5730,7 +5730,30 @@
     }
     const areaMode = options.overlay === "area" || options.choiceAreaEditMode === true;
     setAnchorEditOverlayDebugFlags(areaMode, { render: false });
-    await syncCurrentAnchorMapPathToManifest().catch(() => "");
+    let pendingPatternLoad = null;
+    const startPatternLoadInBackground = () => {
+      if (pendingPatternLoad || hasUsableAnchorEditBase()) return pendingPatternLoad;
+      pendingPatternLoad = loadQuestionAnchorPattern({ force: false }).then((pattern) => {
+        if (isUsablePdfPatternResult(pattern, { allowLowConfidence: true })) {
+          applyPdfPatternResult(pattern, "anchor");
+          return true;
+        }
+        return false;
+      }).catch(() => false);
+      return pendingPatternLoad;
+    };
+    if (!(currentAnchorMapPath || state.pdfNav?.anchorMapPath) && state.viewMode === "all") {
+      const candidatePath = getWritableAnchorMapPath();
+      if (candidatePath) {
+        currentAnchorMapPath = candidatePath;
+        if (state.pdfNav) state.pdfNav.anchorMapPath = candidatePath;
+        setAnchorDetailPath(candidatePath);
+        startPatternLoadInBackground();
+      }
+    }
+    if (!(currentAnchorMapPath || state.pdfNav?.anchorMapPath)) {
+      await syncCurrentAnchorMapPathToManifest().catch(() => "");
+    }
     if (!currentAnchorMapPath && !state.pdfNav?.anchorMapPath) {
       const pattern = await loadQuestionAnchorPattern({ force: false });
       currentAnchorMapPath = pattern?.anchorMapPath || currentAnchorMapPath;
@@ -5744,10 +5767,14 @@
     if (currentAnchorMapPath || state.pdfNav?.anchorMapPath) {
       if (state.viewMode === "all") {
         const totalPages = Math.max(1, (state.allPageCanvases || []).length - 1);
-        await ensureAnchorDetailsForQuestions(getAnchorDetailWindowQuestions(totalPages, selectedQ));
+        const detailPromise = ensureAnchorDetailsForQuestions(getAnchorDetailWindowQuestions(totalPages, selectedQ));
+        detailPromise.catch(() => {});
       } else {
         await ensureAnchorDetailsForQuestions([selectedQ]);
       }
+    }
+    if (state.viewMode === "all" && !hasUsableAnchorEditBase()) {
+      startPatternLoadInBackground();
     }
     cancelScheduledAnchorEditStart();
     anchorEditStartRetryCount = 0;
@@ -12522,10 +12549,17 @@
         .map((page) => Math.trunc(Number(page) || 0))
         .filter((page) => page >= 1 && page <= totalPages)
       : [];
-    await Promise.race([
-      ensureAnchorDetailsForQuestions(detailQuestions),
-      sleep(1200),
+    const detailPromise = ensureAnchorDetailsForQuestions(detailQuestions);
+    const detailReady = await Promise.race([
+      detailPromise.then(() => true).catch(() => false),
+      sleep(80).then(() => false),
     ]);
+    if (!detailReady) {
+      detailPromise.then((ok) => {
+        if (!ok || markerToken !== state.allMarkerToken || state.viewMode !== "all") return;
+        refreshAllModeMarkersWithoutScroll();
+      }).catch(() => {});
+    }
     if (!isCurrentMarkerRun()) return;
     const pagesToRestore = new Set(visiblePages);
     for (const pageNo of forcedPages) pagesToRestore.add(pageNo);
