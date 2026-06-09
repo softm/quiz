@@ -2574,10 +2574,16 @@
   let tesseractLoaderPromise = null;
   let questionManifestPromise = null;
   let questionAnchorMapPromise = null;
+  let anchorResetAvailabilityTimer = 0;
+  let anchorDebugRefreshTimer = 0;
+  let anchorDebugUrlTimer = 0;
+  let anchorEditPanelPositionTimer = 0;
   let currentAnchorMapPath = "";
   const anchorDetailLoadState = {
     path: "",
     version: "",
+    baseLoaded: false,
+    basePromise: null,
     loadedQs: new Set(),
     promises: new Map(),
     fullData: null,
@@ -4021,6 +4027,8 @@
     if (anchorDetailLoadState.path === path && anchorDetailLoadState.version === version) return;
     anchorDetailLoadState.path = path;
     anchorDetailLoadState.version = version;
+    anchorDetailLoadState.baseLoaded = false;
+    anchorDetailLoadState.basePromise = null;
     anchorDetailLoadState.loadedQs = new Set();
     anchorDetailLoadState.promises = new Map();
     anchorDetailLoadState.fullData = null;
@@ -4045,16 +4053,69 @@
     return Object.keys(out).length ? out : null;
   }
 
+  function pickAnchorQuestionListClient(list, qs){
+    if (!Array.isArray(list)) return null;
+    const questionSet = new Set(normalizeAnchorQuestionList(qs).map((q) => String(q)));
+    if (!questionSet.size) return null;
+    const out = list.filter((item) => questionSet.has(String(Math.trunc(Number(item?.q)))));
+    return out.length ? out : null;
+  }
+
   function buildClientAnchorDataSlice(anchorData, qs = []){
+    if (!anchorData || typeof anchorData !== "object") return null;
     const questions = normalizeAnchorQuestionList(qs);
     return {
       ...anchorData,
       partial: true,
       detailQuestions: questions.length ? questions : null,
+      questionLabelMap: questions.length ? pickAnchorQuestionMapClient(anchorData.questionLabelMap, questions) : null,
+      questionColumnBoundsMap: questions.length ? pickAnchorQuestionMapClient(anchorData.questionColumnBoundsMap, questions) : null,
+      anchors: questions.length ? pickAnchorQuestionListClient(anchorData.anchors, questions) : null,
       questionSegments: questions.length ? pickAnchorQuestionMapClient(anchorData.questionSegments, questions) : null,
       choiceAnchorMap: questions.length ? pickAnchorQuestionMapClient(anchorData.choiceAnchorMap, questions) : null,
       choiceClickAreaMap: questions.length ? pickAnchorQuestionMapClient(anchorData.choiceClickAreaMap, questions) : null,
     };
+  }
+
+  function buildClientAnchorBaseData(anchorData){
+    if (!anchorData || typeof anchorData !== "object") return null;
+    return {
+      version: anchorData.version,
+      kind: anchorData.kind,
+      questionNo: anchorData.questionNo,
+      questionPdf: anchorData.questionPdf,
+      pageCount: anchorData.pageCount,
+      questionCount: anchorData.questionCount,
+      choiceCount: anchorData.choiceCount,
+      questionStartNo: anchorData.questionStartNo,
+      questionEndNo: anchorData.questionEndNo,
+      printedQuestionNoMap: Array.isArray(anchorData.printedQuestionNoMap) ? anchorData.printedQuestionNoMap : null,
+      questionPageMap: Array.isArray(anchorData.questionPageMap) ? anchorData.questionPageMap : null,
+      questionTopRatioMap: Array.isArray(anchorData.questionTopRatioMap) ? anchorData.questionTopRatioMap : null,
+      rawAnchorCount: anchorData.rawAnchorCount,
+      sourceStats: anchorData.sourceStats || null,
+      confidence: anchorData.confidence,
+      warnings: anchorData.warnings || [],
+      generatedAt: anchorData.generatedAt || "",
+      manualEditedAt: anchorData.manualEditedAt || "",
+      partial: true,
+      detailQuestions: [],
+    };
+  }
+
+  async function fetchAnchorBaseData(anchorPath){
+    if (isAdminHost) {
+      const url = new URL(PDF_ANCHOR_DATA_URL, location.href);
+      url.searchParams.set("path", anchorPath);
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
+      return buildClientAnchorBaseData(data.anchorData || null);
+    }
+    if (!anchorDetailLoadState.fullData) {
+      anchorDetailLoadState.fullData = await fetchLocalJson(anchorPath);
+    }
+    return buildClientAnchorBaseData(anchorDetailLoadState.fullData);
   }
 
   async function fetchAnchorDataSlice(anchorPath, qs = []){
@@ -4066,12 +4127,12 @@
       const res = await fetch(url.toString(), { cache: "no-store" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
-      return data.anchorData || null;
+      return questions.length ? buildClientAnchorDataSlice(data.anchorData || null, questions) : (data.anchorData || null);
     }
     if (!anchorDetailLoadState.fullData) {
       anchorDetailLoadState.fullData = await fetchLocalJson(anchorPath);
     }
-    return buildClientAnchorDataSlice(anchorDetailLoadState.fullData, questions);
+    return questions.length ? buildClientAnchorDataSlice(anchorDetailLoadState.fullData, questions) : anchorDetailLoadState.fullData;
   }
 
   function clearAnchorDetailCachesForQuestion(q){
@@ -4118,9 +4179,50 @@
     }
   }
 
+  function mergeAnchorBaseData(anchorData){
+    if (!anchorData || typeof anchorData !== "object") return false;
+    if (anchorData.kind !== "question-anchor-map") return false;
+    const pageMap = Array.isArray(anchorData.questionPageMap) ? anchorData.questionPageMap.slice(0, QUESTION_COUNT + 1) : null;
+    const topMap = Array.isArray(anchorData.questionTopRatioMap) ? anchorData.questionTopRatioMap.slice(0, QUESTION_COUNT + 1) : null;
+    if (!pageMap || !topMap || pageMap.length < QUESTION_COUNT + 1 || topMap.length < QUESTION_COUNT + 1) return false;
+    const versionKey = getAnchorDetailVersionKey(anchorData);
+    if (anchorDetailLoadState.path && anchorDetailLoadState.version !== versionKey) {
+      anchorDetailLoadState.version = versionKey;
+      anchorDetailLoadState.loadedQs = new Set();
+      anchorDetailLoadState.promises = new Map();
+    }
+    state.pdfNav.questionPageMap = pageMap;
+    state.pdfNav.questionTopRatioMap = topMap;
+    state.pdfNav.pageCount = Number(anchorData.pageCount) || state.pdfNav.pageCount || null;
+    state.pdfNav.questionCount = QUESTION_COUNT;
+    state.pdfNav.choiceCount = Number(anchorData.choiceCount) || state.pdfNav.choiceCount || CHOICE_COUNT;
+    state.pdfNav.questionStartNo = Number(anchorData.questionStartNo) || QUESTION_START_NO || 1;
+    state.pdfNav.questionEndNo = Number(anchorData.questionEndNo) || QUESTION_END_NO || ((QUESTION_START_NO || 1) + QUESTION_COUNT - 1);
+    if (Array.isArray(anchorData.printedQuestionNoMap)) {
+      state.pdfNav.printedQuestionNoMap = anchorData.printedQuestionNoMap.slice(0, QUESTION_COUNT + 1);
+    }
+    state.pdfNav.confidence = Number(anchorData.confidence || state.pdfNav.confidence || 0);
+    state.pdfNav.patternSource = "anchor";
+    state.pdfNav.source = getCurrentPdfSourceKey();
+    state.pdfNav.generatedAt = anchorData.generatedAt || state.pdfNav.generatedAt || "";
+    state.pdfNav.manualEditedAt = anchorData.manualEditedAt || state.pdfNav.manualEditedAt || "";
+    state.pdfNav.version = PDF_MAP_VERSION;
+    anchorDetailLoadState.baseLoaded = true;
+    try{
+      document.documentElement.dataset.quizAnchorBaseLoaded = "1";
+      document.documentElement.dataset.quizAnchorBasePath = anchorDetailLoadState.path || "";
+    }catch(_){}
+    return true;
+  }
+
   function mergeAnchorDetailData(anchorData){
     if (!anchorData || typeof anchorData !== "object") return;
     if (anchorDetailLoadState.path) setAnchorDetailPath(anchorDetailLoadState.path, getAnchorDetailVersionKey(anchorData));
+    mergeAnchorBaseData(anchorData);
+    const detailPattern = anchorMapToPdfPattern(anchorData);
+    mergeQuestionDetailMap("questionAnchorMap", detailPattern?.questionAnchorMap);
+    mergeQuestionDetailMap("questionLabelMap", detailPattern?.questionLabelMap || detailPattern?.questionAnchorMap);
+    mergeQuestionDetailMap("questionColumnBoundsMap", anchorData.questionColumnBoundsMap);
     mergeQuestionDetailMap("questionSegments", anchorData.questionSegments);
     mergeQuestionDetailMap("choiceAnchorMap", anchorData.choiceAnchorMap);
     mergeQuestionDetailMap("choiceClickAreaMap", anchorData.choiceClickAreaMap);
@@ -4129,11 +4231,39 @@
     }
   }
 
+  async function ensureAnchorBaseMap(){
+    const anchorPath = currentAnchorMapPath || state.pdfNav?.anchorMapPath || "";
+    if (!anchorPath) return hasUsableAnchorEditBase();
+    setAnchorDetailPath(anchorPath);
+    if (anchorDetailLoadState.baseLoaded && hasUsableAnchorEditBase()) return true;
+    if (hasUsableAnchorEditBase()) {
+      anchorDetailLoadState.baseLoaded = true;
+      return true;
+    }
+    if (anchorDetailLoadState.basePromise) return await anchorDetailLoadState.basePromise;
+    const promise = (async () => {
+      try{
+        const data = await fetchAnchorBaseData(anchorPath);
+        return mergeAnchorBaseData(data) && hasUsableAnchorEditBase();
+      }catch(_){
+        return hasUsableAnchorEditBase();
+      }finally{
+        if (anchorDetailLoadState.basePromise === promise) anchorDetailLoadState.basePromise = null;
+      }
+    })();
+    anchorDetailLoadState.basePromise = promise;
+    return await promise;
+  }
+
   async function ensureAnchorDetailsForQuestions(qs){
     const anchorPath = currentAnchorMapPath || state.pdfNav?.anchorMapPath || "";
     if (!anchorPath) return false;
     setAnchorDetailPath(anchorPath);
     const missing = normalizeAnchorQuestionList(qs).filter((q) => !anchorDetailLoadState.loadedQs.has(q));
+    try{
+      document.documentElement.dataset.quizAnchorDetailMissing = missing.join(",");
+      if (missing.length) document.documentElement.dataset.quizAnchorDetailLastRequested = missing.join(",");
+    }catch(_){}
     if (!missing.length) return true;
     const key = missing.join(",");
     if (anchorDetailLoadState.promises.has(key)) return await anchorDetailLoadState.promises.get(key);
@@ -4142,6 +4272,7 @@
         const data = await fetchAnchorDataSlice(anchorPath, missing);
         mergeAnchorDetailData(data);
         for (const q of missing) anchorDetailLoadState.loadedQs.add(q);
+        try{ document.documentElement.dataset.quizAnchorDetailLoaded = [...anchorDetailLoadState.loadedQs].sort((a, b) => a - b).join(","); }catch(_){}
         return true;
       }catch(_){
         return false;
@@ -4767,6 +4898,14 @@
     }
   }
 
+  function scheduleAnchorEditResetAvailability(){
+    if (anchorResetAvailabilityTimer) window.clearTimeout(anchorResetAvailabilityTimer);
+    anchorResetAvailabilityTimer = window.setTimeout(() => {
+      anchorResetAvailabilityTimer = 0;
+      applyAnchorEditResetAvailability();
+    }, 120);
+  }
+
   function getAnchorChoiceRadiusScale(){
     const scale = Number(state.anchorChoiceRadiusScale);
     return Number.isFinite(scale) ? Math.max(0.25, Math.min(1.6, scale)) : 1;
@@ -4870,12 +5009,28 @@
     }catch(_){}
   }
 
-  function refreshAnchorDebugView(){
+  function scheduleAnchorDebugUrlUpdate(delayMs = 120){
+    if (anchorDebugUrlTimer) window.clearTimeout(anchorDebugUrlTimer);
+    anchorDebugUrlTimer = window.setTimeout(() => {
+      anchorDebugUrlTimer = 0;
+      updateAnchorDebugUrl();
+    }, Math.max(0, Number(delayMs) || 0));
+  }
+
+  function refreshAnchorDebugView(options = {}){
     if (state.viewMode === "all") {
-      refreshAllModeMarkersWithoutScroll();
+      refreshAllModeMarkersWithoutScroll(options);
     } else if (state.viewMode === "single") {
       navigatePdfToQuestion(state.focusQ || 1);
     }
+  }
+
+  function scheduleAnchorDebugViewRefresh(delayMs = 80, options = {}){
+    if (anchorDebugRefreshTimer) window.clearTimeout(anchorDebugRefreshTimer);
+    anchorDebugRefreshTimer = window.setTimeout(() => {
+      anchorDebugRefreshTimer = 0;
+      refreshAnchorDebugView(options);
+    }, Math.max(0, Number(delayMs) || 0));
   }
 
   function setAnchorDebugEnabled(enabled, options = {}){
@@ -5050,6 +5205,15 @@
       anchorEditPanel.style.top = "auto";
       anchorEditPanel.style.bottom = "16px";
     }
+  }
+
+  function scheduleAnchorEditPanelPosition(delayMs = 0){
+    if (anchorEditPanelPositionTimer) window.clearTimeout(anchorEditPanelPositionTimer);
+    anchorEditPanelPositionTimer = window.setTimeout(() => {
+      anchorEditPanelPositionTimer = 0;
+      updateAnchorEditPanelPosition();
+      requestAnimationFrame(updateAnchorEditPanelPosition);
+    }, Math.max(0, Number(delayMs) || 0));
   }
 
   function isAnchorColumnLayerActive(){
@@ -5278,7 +5442,7 @@
       btnAnchorEditResetSelected.textContent = "초기화";
     }
     if (btnAnchorEditReset) btnAnchorEditReset.textContent = "전체 초기화";
-    applyAnchorEditResetAvailability();
+    scheduleAnchorEditResetAvailability();
     if (btnAnchorEditSave) {
       btnAnchorEditSave.disabled = !anchorEditState.enabled || anchorEditState.saving || !anchorEditState.dirty;
       btnAnchorEditSave.title = anchorEditState.dirty ? "변경 사항을 저장합니다." : "저장할 변경 사항이 없습니다.";
@@ -5297,8 +5461,7 @@
     }
     document.body.classList.toggle("anchor-edit-dragging", anchorEditState.dragging);
     syncAnchorColumnLayerUi();
-    updateAnchorEditPanelPosition();
-    requestAnimationFrame(updateAnchorEditPanelPosition);
+    scheduleAnchorEditPanelPosition();
   }
 
   function setAnchorEditKind(kind){
@@ -5729,52 +5892,43 @@
       return;
     }
     const areaMode = options.overlay === "area" || options.choiceAreaEditMode === true;
-    setAnchorEditOverlayDebugFlags(areaMode, { render: false });
-    let pendingPatternLoad = null;
-    const startPatternLoadInBackground = () => {
-      if (pendingPatternLoad || hasUsableAnchorEditBase()) return pendingPatternLoad;
-      pendingPatternLoad = loadQuestionAnchorPattern({ force: false }).then((pattern) => {
-        if (isUsablePdfPatternResult(pattern, { allowLowConfidence: true })) {
-          applyPdfPatternResult(pattern, "anchor");
-          return true;
-        }
-        return false;
-      }).catch(() => false);
-      return pendingPatternLoad;
-    };
-    if (!(currentAnchorMapPath || state.pdfNav?.anchorMapPath) && state.viewMode === "all") {
+    setAnchorEditOverlayDebugFlags(areaMode, { render: false, updateUrl: false });
+    scheduleAnchorDebugUrlUpdate();
+    const selectedQ = getAnchorEditTargetQuestion(state.focusQ || 1) || 1;
+    if (!(currentAnchorMapPath || state.pdfNav?.anchorMapPath)) {
       const candidatePath = getWritableAnchorMapPath();
       if (candidatePath) {
         currentAnchorMapPath = candidatePath;
         if (state.pdfNav) state.pdfNav.anchorMapPath = candidatePath;
         setAnchorDetailPath(candidatePath);
-        startPatternLoadInBackground();
       }
     }
     if (!(currentAnchorMapPath || state.pdfNav?.anchorMapPath)) {
       await syncCurrentAnchorMapPathToManifest().catch(() => "");
     }
-    if (!currentAnchorMapPath && !state.pdfNav?.anchorMapPath) {
-      const pattern = await loadQuestionAnchorPattern({ force: false });
-      currentAnchorMapPath = pattern?.anchorMapPath || currentAnchorMapPath;
-      if (currentAnchorMapPath && state.pdfNav) state.pdfNav.anchorMapPath = currentAnchorMapPath;
-    }
     if (!currentAnchorMapPath && !state.pdfNav?.anchorMapPath && !hasUsableAnchorEditBase()) {
       setAnchorEditStatus("PDF 자동 매핑 분석 후 앵커/문항영역 편집을 시작할 수 있습니다.");
       return;
     }
-    const selectedQ = getAnchorEditTargetQuestion(state.focusQ || 1) || 1;
     if (currentAnchorMapPath || state.pdfNav?.anchorMapPath) {
       if (state.viewMode === "all") {
+        await ensureAnchorBaseMap();
         const totalPages = Math.max(1, (state.allPageCanvases || []).length - 1);
-        const detailPromise = ensureAnchorDetailsForQuestions(getAnchorDetailWindowQuestions(totalPages, selectedQ));
-        detailPromise.catch(() => {});
+        const visibleQuestions = getAnchorDetailWindowQuestions(totalPages, selectedQ, {
+          visibleOnly: true,
+          maxQuestions: 16,
+        });
+        try{ document.documentElement.dataset.quizAnchorVisibleQuestions = visibleQuestions.join(","); }catch(_){}
+        if (visibleQuestions.length) {
+          ensureAnchorDetailsForQuestions(visibleQuestions)
+            .then((ok) => {
+              if (ok && anchorEditState.enabled && state.viewMode === "all") scheduleAnchorDebugViewRefresh(350);
+            })
+            .catch(() => {});
+        }
       } else {
         await ensureAnchorDetailsForQuestions([selectedQ]);
       }
-    }
-    if (state.viewMode === "all" && !hasUsableAnchorEditBase()) {
-      startPatternLoadInBackground();
     }
     cancelScheduledAnchorEditStart();
     anchorEditStartRetryCount = 0;
@@ -5798,7 +5952,18 @@
     if (anchorEditAutoNextChoice) anchorEditAutoNextChoice.checked = true;
     anchorEditState.lastQuestionQ = getAnchorEditTargetQuestion(state.focusQ || 0) || 0;
     syncAnchorEditUi();
-    refreshAnchorDebugView();
+    if (state.viewMode === "all" && !areaMode) {
+      const totalPages = Math.max(1, (state.allPageCanvases || []).length - 1);
+      scheduleAnchorDebugViewRefresh(0, {
+        quick: true,
+        questions: getAnchorDetailWindowQuestions(totalPages, selectedQ, {
+          visibleOnly: true,
+          maxQuestions: 16,
+        }),
+      });
+    } else {
+      scheduleAnchorDebugViewRefresh();
+    }
     if (areaMode) {
       setAnchorEditStatus(state.viewMode === "all"
         ? "전체보기 영역편집: 빨간 문항영역을 드래그하거나 오른쪽 아래를 잡아 조정하세요."
@@ -7763,8 +7928,14 @@
     }
     if (state.viewMode === "all") {
       setFocusQuestionSilently(safeQ);
+      await ensureAnchorBaseMap();
       const totalPages = Math.max(1, (state.allPageCanvases || []).length - 1);
-      await ensureAnchorDetailsForQuestions(getAnchorDetailWindowQuestions(totalPages, safeQ));
+      const visibleQuestions = getAnchorDetailWindowQuestions(totalPages, safeQ, {
+        visibleOnly: true,
+        maxQuestions: 16,
+      });
+      try{ document.documentElement.dataset.quizAnchorVisibleQuestions = visibleQuestions.join(","); }catch(_){}
+      await ensureAnchorDetailsForQuestions(visibleQuestions);
       refreshAllModeMarkersWithoutScroll();
       await waitForNextFrame();
     }
@@ -12197,7 +12368,119 @@
     return [...pages].sort((a, b) => a - b);
   }
 
-  function getAnchorDetailWindowQuestions(totalPages = null, baseQ = state.focusQ){
+  function getVisibleAllModePageRanges(totalPages = null, options = {}){
+    const maxPage = Number.isFinite(Number(totalPages))
+      ? Math.max(1, Math.floor(Number(totalPages)))
+      : Math.max(1, (state.allPageCanvases || []).length - 1);
+    if (state.viewMode !== "all" || !Array.isArray(state.allPageCanvases)) return [];
+    const viewerRect = pdfViewer?.getBoundingClientRect
+      ? pdfViewer.getBoundingClientRect()
+      : { top: 0, bottom: window.innerHeight, left: 0, right: window.innerWidth };
+    const padPx = Math.max(0, Number(options.padPx ?? 24) || 0);
+    const viewTop = Math.max(0, viewerRect.top);
+    const viewBottom = Math.min(window.innerHeight, viewerRect.bottom || window.innerHeight);
+    const ranges = [];
+    for (let p = 1; p <= maxPage; p++){
+      const canvas = state.allPageCanvases[p];
+      if (!canvas) continue;
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) continue;
+      const visibleTop = Math.max(rect.top, viewTop);
+      const visibleBottom = Math.min(rect.bottom, viewBottom);
+      if (visibleBottom <= visibleTop) continue;
+      const topRatio = Math.max(0, Math.min(1, (visibleTop - rect.top - padPx) / rect.height));
+      const bottomRatio = Math.max(0, Math.min(1, (visibleBottom - rect.top + padPx) / rect.height));
+      if (bottomRatio <= topRatio) continue;
+      ranges.push({
+        pageNo: p,
+        top: topRatio,
+        bottom: bottomRatio,
+        visiblePx: visibleBottom - visibleTop,
+      });
+    }
+    return ranges;
+  }
+
+  function getQuestionVisibleStartRatio(pageNo, q, startCache = null){
+    const key = `${pageNo}:${q}`;
+    if (startCache && startCache.has(key)) return startCache.get(key);
+    let ratio = null;
+    const anchor = getQuestionDebugAnchorRatio(pageNo, q);
+    if (anchor && Number.isFinite(Number(anchor.ratio))) {
+      ratio = Math.max(0, Math.min(1, Number(anchor.ratio)));
+    } else {
+      const segments = getStoredQuestionSegmentsForPage(pageNo, q);
+      if (segments.length) {
+        ratio = Math.min(...segments.map((seg) => Number(seg.top)).filter(Number.isFinite));
+      }
+    }
+    if (!Number.isFinite(ratio)) ratio = null;
+    if (startCache) startCache.set(key, ratio);
+    return ratio;
+  }
+
+  function getQuestionVisibleSpanOnPage(pageNo, q, pageQuestions, startCache = null){
+    const segments = getStoredQuestionSegmentsForPage(pageNo, q);
+    if (segments.length) {
+      const top = Math.min(...segments.map((seg) => Number(seg.top)).filter(Number.isFinite));
+      const bottom = Math.max(...segments.map((seg) => Number(seg.bottom)).filter(Number.isFinite));
+      if (Number.isFinite(top) && Number.isFinite(bottom) && bottom > top) {
+        return { top: Math.max(0, Math.min(1, top)), bottom: Math.max(0, Math.min(1, bottom)), source: "segment" };
+      }
+    }
+    const start = getQuestionVisibleStartRatio(pageNo, q, startCache);
+    if (!Number.isFinite(start)) return null;
+    let nextStart = 1;
+    for (const otherQ of pageQuestions){
+      if (Number(otherQ) === Number(q)) continue;
+      const otherStart = getQuestionVisibleStartRatio(pageNo, otherQ, startCache);
+      if (Number.isFinite(otherStart) && otherStart > start + 0.004 && otherStart < nextStart) {
+        nextStart = otherStart;
+      }
+    }
+    const footerStart = getFooterStartRatioForPage(pageNo);
+    if (Number.isFinite(footerStart) && footerStart > start + 0.02) nextStart = Math.min(nextStart, footerStart);
+    const bottom = Math.max(start + 0.045, Math.min(1, nextStart - 0.004));
+    return { top: Math.max(0, Math.min(1, start)), bottom, source: "anchor" };
+  }
+
+  function ratioRangesOverlap(aTop, aBottom, bTop, bBottom, pad = 0.012){
+    return Number(aBottom) >= Number(bTop) - pad && Number(aTop) <= Number(bBottom) + pad;
+  }
+
+  function getVisibleQuestionsOnAllModePage(range, options = {}){
+    if (!range || !Number.isFinite(Number(range.pageNo))) return [];
+    const pageNo = Math.max(1, Math.floor(Number(range.pageNo)));
+    const pageQuestions = getQuestionsOnPdfPage(pageNo);
+    if (!pageQuestions.length) return [];
+    const startCache = new Map();
+    const out = [];
+    for (const q of pageQuestions){
+      const span = getQuestionVisibleSpanOnPage(pageNo, q, pageQuestions, startCache);
+      if (!span) continue;
+      if (ratioRangesOverlap(span.top, span.bottom, range.top, range.bottom, options.padRatio ?? 0.012)) {
+        out.push({ q, top: span.top });
+      }
+    }
+    out.sort((a, b) => a.top - b.top || a.q - b.q);
+    return out.map((item) => item.q);
+  }
+
+  function getVisibleAllModeQuestions(totalPages = null, options = {}){
+    const qs = new Set();
+    const ranges = getVisibleAllModePageRanges(totalPages, options);
+    for (const range of ranges){
+      for (const q of getVisibleQuestionsOnAllModePage(range, options)) qs.add(q);
+    }
+    const normalized = normalizeAnchorQuestionList([...qs]);
+    const maxQuestions = Math.max(1, Math.trunc(Number(options.maxQuestions) || 16));
+    return normalized.slice(0, maxQuestions);
+  }
+
+  function getAnchorDetailWindowQuestions(totalPages = null, baseQ = state.focusQ, options = {}){
+    if (options.visibleOnly === true) {
+      return getVisibleAllModeQuestions(totalPages, options);
+    }
     const qs = new Set();
     const priority = new Set();
     for (const pageNo of getVisibleAllModePages(totalPages)){
@@ -12403,18 +12686,19 @@
     return true;
   }
 
-  async function drawChoiceAnchorDebugMarkersAll(pageNo, q){
+  async function drawChoiceAnchorDebugMarkersAll(pageNo, q, options = {}){
     if (!ANCHOR_DEBUG || !Number.isFinite(pageNo) || !Number.isFinite(q)) return false;
     let sourceTone = "anchor";
     let list = getReliableChoiceAnchorsForQuestion(q, pageNo);
     if (!Array.isArray(list) || !list.length) {
+      if (options.allowPdfFallback === false) return false;
       sourceTone = "pdf";
       const segment = getStoredQuestionSegment(q, pageNo);
-      const options = segment
+      const segmentOptions = segment
         ? { startRatio: Number(segment.top), endRatio: Number(segment.bottom) }
         : null;
       try{
-        list = await getChoiceAnchorsForQuestion(pageNo, q, options);
+        list = await getChoiceAnchorsForQuestion(pageNo, q, segmentOptions);
         if (Array.isArray(list) && list.length) state.questionChoiceAnchorCache[`${Number(pageNo)}:${Number(q)}`] = list;
       }catch(_){
         list = [];
@@ -12539,22 +12823,33 @@
     return true;
   }
 
-  async function redrawAllModeMarkers(totalPages){
+  async function redrawAllModeMarkers(totalPages, options = {}){
     const markerToken = ++state.allMarkerToken;
     const isCurrentMarkerRun = () => markerToken === state.allMarkerToken;
+    const quick = !!options.quick;
     const visiblePages = getVisibleAllModePages(totalPages);
-    const detailQuestions = getAnchorDetailWindowQuestions(totalPages);
+    const explicitQuestions = normalizeAnchorQuestionList(options.questions || []);
+    const detailQuestions = explicitQuestions.length
+      ? explicitQuestions
+      : getAnchorDetailWindowQuestions(totalPages, state.focusQ, {
+        visibleOnly: true,
+        maxQuestions: options.maxQuestions || (quick ? 12 : 18),
+      });
     const forcedPages = Array.isArray(state.allModeForcedMarkerPages)
       ? state.allModeForcedMarkerPages
         .map((page) => Math.trunc(Number(page) || 0))
         .filter((page) => page >= 1 && page <= totalPages)
       : [];
-    const detailPromise = ensureAnchorDetailsForQuestions(detailQuestions);
-    const detailReady = await Promise.race([
-      detailPromise.then(() => true).catch(() => false),
-      sleep(80).then(() => false),
-    ]);
-    if (!detailReady) {
+    let detailReady = false;
+    let detailPromise = null;
+    if (!quick) {
+      detailPromise = ensureAnchorDetailsForQuestions(detailQuestions);
+      detailReady = await Promise.race([
+        detailPromise.then(() => true).catch(() => false),
+        sleep(80).then(() => false),
+      ]);
+    }
+    if (!quick && !detailReady && detailPromise) {
       detailPromise.then((ok) => {
         if (!ok || markerToken !== state.allMarkerToken || state.viewMode !== "all") return;
         refreshAllModeMarkersWithoutScroll();
@@ -12579,31 +12874,21 @@
         if (!Number.isFinite(pageNo)) continue;
         const safePage = Math.max(1, Math.min(totalPages, Math.floor(pageNo)));
         if (ANCHOR_DEBUG) drawAnchorDebugMarkerAll(safePage, q);
-        await drawChoiceClickAreasAll(safePage, q);
-        if (ANCHOR_DEBUG) await drawChoiceAnchorDebugMarkersAll(safePage, q);
+        if (!quick) await drawChoiceClickAreasAll(safePage, q);
+        if (ANCHOR_DEBUG) await drawChoiceAnchorDebugMarkersAll(safePage, q, { allowPdfFallback: !quick && detailReady });
         if (q % 12 === 0) await waitForNextFrame();
       }
     }
-    for (const q of detailQuestions){
-      if (!isCurrentMarkerRun()) return;
-      const selected = normalizeChoiceValue(state.answers[q]);
-      if (!Number.isFinite(selected)) continue;
-      const pageNo = getAllModePageForQuestion(q, totalPages);
-      const gradeState = getViewerGradeState(q);
-      if (gradeState) await drawAllModeQuestionNumberMarker(pageNo, q, gradeState);
-      await drawAllModeSelectedMarker(pageNo, q);
-      if (q % 8 === 0) await waitForNextFrame();
-    }
-    if (anchorEditState.enabled && (ANCHOR_DEBUG || ANCHOR_CLICK_AREA_DEBUG)) {
+    if (!quick) {
       for (const q of detailQuestions){
         if (!isCurrentMarkerRun()) return;
+        const selected = normalizeChoiceValue(state.answers[q]);
+        if (!Number.isFinite(selected)) continue;
         const pageNo = getAllModePageForQuestion(q, totalPages);
-        if (!Number.isFinite(pageNo)) continue;
-        const safePage = Math.max(1, Math.min(totalPages, Math.floor(pageNo)));
-        if (ANCHOR_DEBUG) drawAnchorDebugMarkerAll(safePage, q);
-        await drawChoiceClickAreasAll(safePage, q);
-        if (ANCHOR_DEBUG) await drawChoiceAnchorDebugMarkersAll(safePage, q);
-        if (q % 12 === 0) await waitForNextFrame();
+        const gradeState = getViewerGradeState(q);
+        if (gradeState) await drawAllModeQuestionNumberMarker(pageNo, q, gradeState);
+        await drawAllModeSelectedMarker(pageNo, q);
+        if (q % 8 === 0) await waitForNextFrame();
       }
     }
     if (!isCurrentMarkerRun()) return;
@@ -12620,7 +12905,7 @@
     state.allModeForcedMarkerPages = [];
   }
 
-  function refreshAllModeMarkersWithoutScroll(){
+  function refreshAllModeMarkersWithoutScroll(options = {}){
     if (state.viewMode !== "all") return;
     if (!Array.isArray(state.allPageCanvases) || !state.allPageCanvases.length) return;
     state.allMarkerToken += 1;
@@ -12631,7 +12916,7 @@
         return canvas ? Math.max(max, idx) : max;
       }, 0);
       if (!totalPages) return;
-      redrawAllModeMarkers(totalPages).catch(() => {});
+      redrawAllModeMarkers(totalPages, options).catch(() => {});
     });
   }
 
@@ -15260,8 +15545,13 @@
     rememberPdfPointerPosition(e);
     const clickPoint = getAllCanvasPointFromEvent(e);
     const roughQ = guessAllModeQuestionFromPoint(clickPoint);
+    const visibleDetailQuestions = getAnchorDetailWindowQuestions(
+      Math.max(1, (state.allPageCanvases || []).length - 1),
+      state.focusQ,
+      { visibleOnly: true, maxQuestions: 16 }
+    );
     await ensureAnchorDetailsForQuestions([
-      ...getQuestionsOnPdfPage(pageNo),
+      ...visibleDetailQuestions,
       ...(Number.isFinite(roughQ) && roughQ > 0 ? [roughQ] : []),
     ]);
     const directChoiceHit = findAllModeChoiceAnchorHit(clickPoint, { requireSameColumn: true });
