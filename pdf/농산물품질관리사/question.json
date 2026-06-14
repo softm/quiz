@@ -28,11 +28,13 @@
     "questionEndNo": 100,
     "ocrStatus": "정상",
     "ocrPublished": true,
-    "anchorMap": "quiz/pdf/농산물품질관리사/2023년 제20회 농산물품질관리사 1차_anchor.json",
-    "anchorStatus": "위치맵 확인 필요",
-    "anchorConfidence": 0.3,
-    "anchorWarnings": [],
-    "anchorGeneratedAt": "2026-06-05T23:37:49.896Z"
+    "anchorMap": "quiz/pdf/농산물품질관리사/2022년 제19회 농산물품질관리사 1차_anchor.json",
+    "anchorStatus": "위치맵 생성",
+    "anchorConfidence": 0.9551999999999999,
+    "anchorWarnings": [
+      "선택지 위치 감지가 부족합니다(316/400). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
+    ],
+    "anchorGeneratedAt": "2026-06-09T13:32:17.899Z"
   },
   {
     "gNo": "01",
@@ -113,7 +115,7 @@
     "anchorWarnings": [
       "선택지 위치 감지가 부족합니다(276/400). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
     ],
-    "anchorGeneratedAt": "2026-06-09T10:08:14.574Z",
+    "anchorGeneratedAt": "2026-06-14T13:24:08.074Z",
     "choiceCount": 4
   },
   {

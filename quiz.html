@@ -2419,6 +2419,7 @@
     allNavToken: 0,
     allMarkerToken: 0,
     allMarkerRefreshRaf: 0,
+    allMarkerScrollIdleTimer: 0,
     pdfScrollSyncRaf: 0,
     pdfScrollSyncLastQ: 0,
     pdfScrollSyncSuppressUntil: 0,
@@ -12868,6 +12869,9 @@
       if (p % 4 === 0) await waitForNextFrame();
     }
     if (ANCHOR_DEBUG || ANCHOR_CLICK_AREA_DEBUG) {
+      const allowChoiceAnchorPdfFallback = !quick
+        && detailReady
+        && (!anchorEditState.enabled || Array.isArray(options.questions));
       for (const q of detailQuestions){
         if (!isCurrentMarkerRun()) return;
         const pageNo = getAllModePageForQuestion(q, totalPages);
@@ -12875,7 +12879,7 @@
         const safePage = Math.max(1, Math.min(totalPages, Math.floor(pageNo)));
         if (ANCHOR_DEBUG) drawAnchorDebugMarkerAll(safePage, q);
         if (!quick) await drawChoiceClickAreasAll(safePage, q);
-        if (ANCHOR_DEBUG) await drawChoiceAnchorDebugMarkersAll(safePage, q, { allowPdfFallback: !quick && detailReady });
+        if (ANCHOR_DEBUG) await drawChoiceAnchorDebugMarkersAll(safePage, q, { allowPdfFallback: allowChoiceAnchorPdfFallback });
         if (q % 12 === 0) await waitForNextFrame();
       }
     }
@@ -13186,6 +13190,15 @@
   function handlePdfViewportScroll(){
     updateViewerTopBadge();
     queuePdfScrollFocusSync();
+    if (state.viewMode === "all" && anchorEditState.enabled) {
+      refreshAllModeMarkersWithoutScroll({ quick: true });
+      if (state.allMarkerScrollIdleTimer) window.clearTimeout(state.allMarkerScrollIdleTimer);
+      state.allMarkerScrollIdleTimer = window.setTimeout(() => {
+        state.allMarkerScrollIdleTimer = 0;
+        if (state.viewMode === "all" && anchorEditState.enabled) refreshAllModeMarkersWithoutScroll();
+      }, 700);
+      return;
+    }
     refreshAllModeMarkersWithoutScroll();
   }
 
