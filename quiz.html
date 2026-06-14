@@ -11183,6 +11183,18 @@
     const viewWidth = Math.max(320, (pdfViewer.clientWidth || 900) - 20);
     const outputScale = getPdfOutputScale({ mode: "all" });
     const key = `${getQuestionPdfBaseUrl()}|${state.pdfZoom}|${Math.round(viewWidth)}|s:${outputScale}`;
+    const targetQ = Number.isFinite(q) ? q : (state.focusQ || 1);
+    const pageMap = state.pdfNav.questionPageMap;
+    const ratioMap = state.pdfNav.questionTopRatioMap;
+    const mappedTargetPage = (Array.isArray(pageMap) && Number.isFinite(pageMap[targetQ]))
+      ? Math.max(1, Math.min(pdf.numPages, Math.floor(pageMap[targetQ])))
+      : null;
+    const earlyTargetPage = Number.isFinite(mappedTargetPage)
+      ? mappedTargetPage
+      : Math.max(1, Math.min(pdf.numPages, getPdfPageByQuestion(targetQ)));
+    const earlyTargetRatio = (Array.isArray(pageMap) && Array.isArray(ratioMap) && pageMap[targetQ] === earlyTargetPage && Number.isFinite(ratioMap[targetQ]))
+      ? Math.max(0, Math.min(1, Number(ratioMap[targetQ])))
+      : 0.12;
 
     if (state.allPagesRenderKey !== key) {
       state.allPagesReady = false;
@@ -11198,6 +11210,45 @@
           endDelayedPdfLoading();
         }
         pdfStatus.textContent = `전체 페이지 로딩 중 · ${pageNo}/${pdf.numPages}페이지`;
+      };
+      let earlyTargetFocused = false;
+      const shouldPreviewAnchorsDuringRender = () => (
+        state.viewMode === "all"
+        && (ANCHOR_DEBUG || ANCHOR_CLICK_AREA_DEBUG || anchorEditState.enabled || ANCHOR_EDIT_START)
+      );
+      const focusRenderedTargetPage = (pageNo) => {
+        if (!shouldPreviewAnchorsDuringRender()) return false;
+        if (earlyTargetFocused || state.scrollTopOnModeChange) return false;
+        if (!Number.isFinite(earlyTargetPage) || Number(pageNo) !== Number(earlyTargetPage)) return false;
+        const targetCanvas = state.allPageCanvases[earlyTargetPage];
+        if (!targetCanvas) return false;
+        const ratio = mobileViewport
+          ? Math.max(0.03, Math.min(0.8, earlyTargetRatio))
+          : Math.max(0.04, Math.min(0.88, earlyTargetRatio));
+        const top = targetCanvas.offsetTop + (targetCanvas.clientHeight * ratio) - 20;
+        scrollPdfViewportTo(Math.max(0, top));
+        state.currentPdfPage = earlyTargetPage;
+        earlyTargetFocused = true;
+        return true;
+      };
+      const refreshRenderedAnchorMarkers = (pageNo, options = {}) => {
+        if (!shouldPreviewAnchorsDuringRender()) return;
+        if (navToken !== state.allNavToken) return;
+        const force = options.force === true;
+        if (!force) return;
+        const questions = getAnchorDetailWindowQuestions(pdf.numPages, targetQ, {
+          visibleOnly: true,
+          maxQuestions: 12,
+        });
+        if (!questions.length && Number.isFinite(targetQ)) questions.push(targetQ);
+        scheduleAnchorDebugViewRefresh(0, {
+          quick: true,
+          questions,
+        });
+      };
+      const afterAllPageRendered = (pageNo) => {
+        const focused = focusRenderedTargetPage(pageNo);
+        refreshRenderedAnchorMarkers(pageNo, { force: focused || pageNo === 1 });
       };
       for (let p = 1; p <= pdf.numPages; p++){
         __quizBootMark(`renderAll-page-${p}-start`);
@@ -11283,6 +11334,7 @@
             destHeight
           };
           markAllPageRendered(p);
+          afterAllPageRendered(p);
           await waitForNextFrame();
           continue;
         }
@@ -11306,6 +11358,7 @@
           destHeight: canvas.height
         };
         markAllPageRendered(p);
+        afterAllPageRendered(p);
         await waitForNextFrame();
       }
       state.allPagesRenderKey = key;
@@ -11315,10 +11368,6 @@
     }
     state.allModeLastViewerWidth = Math.round(pdfViewer.clientWidth || viewWidth || 0);
 
-    const targetQ = Number.isFinite(q) ? q : (state.focusQ || 1);
-    
-    const pageMap = state.pdfNav.questionPageMap;
-    const ratioMap = state.pdfNav.questionTopRatioMap;
     let targetPage = null;
     let located = null;
     let presetRatio = null;
