@@ -7066,19 +7066,34 @@
     const meta = pointOrMeta?.meta || state.allPageCanvasMeta?.[pageNo];
     if (!canvas || !meta || !Number.isFinite(Number(q)) || !Number.isFinite(Number(pageNo))) return [];
     const syncPoints = buildAllModeChoiceAreaPoints(q, pageNo, { ...pointOrMeta, canvas, meta });
-    if (syncPoints.length || pointOrMeta?.allowFallback === false) return syncPoints;
+    const visibleChoiceCount = Math.max(1, Math.min(5, Number(state.pdfNav?.choiceCount) || CHOICE_COUNT));
+    if (syncPoints.length >= visibleChoiceCount || pointOrMeta?.allowFallback === false) return syncPoints;
     const segment = getStoredQuestionSegment(q, pageNo);
     const options = segment
       ? { startRatio: Number(segment.top), endRatio: Number(segment.bottom) }
       : null;
     let anchors = [];
     try{
-      anchors = await getChoiceAnchorsForQuestion(pageNo, q, options);
+      anchors = await getChoiceAnchorsForQuestion(pageNo, q, {
+        ...(options || {}),
+        ignoreStored: syncPoints.length > 0 && syncPoints.length < visibleChoiceCount,
+      });
       if (Array.isArray(anchors) && anchors.length) state.questionChoiceAnchorCache[`${Number(pageNo)}:${Number(q)}`] = anchors;
     }catch(_){
       anchors = [];
     }
-    return buildAllModeChoicePointsFromAnchors(Array.isArray(anchors) ? anchors : [], q, pageNo, canvas, meta, pointOrMeta);
+    const fallbackPoints = buildAllModeChoicePointsFromAnchors(Array.isArray(anchors) ? anchors : [], q, pageNo, canvas, meta, pointOrMeta);
+    if (!syncPoints.length || fallbackPoints.length <= syncPoints.length) return syncPoints.length ? syncPoints : fallbackPoints;
+    const byChoice = new Map();
+    for (const point of fallbackPoints) {
+      const choice = Number(point.choice);
+      if (Number.isInteger(choice) && choice >= 1 && choice <= visibleChoiceCount) byChoice.set(choice, point);
+    }
+    for (const point of syncPoints) {
+      const choice = Number(point.choice);
+      if (Number.isInteger(choice) && choice >= 1 && choice <= visibleChoiceCount) byChoice.set(choice, point);
+    }
+    return [...byChoice.values()].sort((a, b) => Number(a.choice) - Number(b.choice));
   }
 
   function getAllChoiceClickAreaEditHitFromEvent(e){
@@ -12201,14 +12216,46 @@
     if (!ANCHOR_DEBUG || !fullCanvas || !Number.isFinite(q) || !Number.isFinite(pageNo)) return;
     let sourceTone = "anchor";
     let list = getReliableChoiceAnchorsForQuestion(q, pageNo);
+    const visibleChoiceCount = Math.max(1, Math.min(5, Number(state.pdfNav.choiceCount) || CHOICE_COUNT));
+    const visibleRange = getSingleVisibleRatioRange({
+      fullHeightPx: fullCanvas.height,
+      cropStartPx: srcTop,
+      cropHeightPx: srcHeight,
+      segmentDraws
+    });
+    const countChoicesOnPage = (items) => {
+      const set = new Set();
+      for (const item of Array.isArray(items) ? items : []) {
+        if (Number(item?.page || pageNo) !== Number(pageNo)) continue;
+        const choice = Number(item.choice);
+        if (Number.isInteger(choice) && choice >= 1 && choice <= visibleChoiceCount) set.add(choice);
+      }
+      return set.size;
+    };
+    if (Array.isArray(list) && list.length && countChoicesOnPage(list) < visibleChoiceCount) {
+      try{
+        const fallback = await getChoiceAnchorsForQuestion(pageNo, q, {
+          startRatio: visibleRange.startRatio,
+          endRatio: visibleRange.endRatio,
+          ignoreStored: true,
+        });
+        if (Array.isArray(fallback) && fallback.length) {
+          const byChoice = new Map();
+          for (const item of fallback.filter((entry) => Number(entry?.page || pageNo) === Number(pageNo))) {
+            const choice = Number(item.choice);
+            if (Number.isInteger(choice) && choice >= 1 && choice <= visibleChoiceCount) byChoice.set(choice, item);
+          }
+          for (const item of list.filter((entry) => Number(entry?.page || pageNo) === Number(pageNo))) {
+            const choice = Number(item.choice);
+            if (Number.isInteger(choice) && choice >= 1 && choice <= visibleChoiceCount) byChoice.set(choice, item);
+          }
+          list = [...byChoice.values()].sort((a, b) => Number(a.choice) - Number(b.choice));
+          if (list.length) state.questionChoiceAnchorCache[`${Number(pageNo)}:${Number(q)}`] = list;
+        }
+      }catch(_){}
+    }
     if (!Array.isArray(list) || !list.length) {
       sourceTone = "pdf";
-      const visibleRange = getSingleVisibleRatioRange({
-        fullHeightPx: fullCanvas.height,
-        cropStartPx: srcTop,
-        cropHeightPx: srcHeight,
-        segmentDraws
-      });
       const startRatio = visibleRange.startRatio;
       const endRatio = visibleRange.endRatio;
       try{
@@ -12221,7 +12268,6 @@
     for (const item of list){
       if (Number(item?.page || pageNo) !== Number(pageNo)) continue;
       const choice = Number(item.choice);
-      const visibleChoiceCount = Math.max(1, Math.min(5, Number(state.pdfNav.choiceCount) || CHOICE_COUNT));
       if (!Number.isInteger(choice) || choice < 1 || choice > visibleChoiceCount) continue;
       const projected = projectChoiceAnchorToCanvas(item, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, pdfCanvas.width, pdfCanvas.height, segmentDraws);
       const x = projected?.x;
@@ -12740,13 +12786,45 @@
     if (!ANCHOR_DEBUG || !Number.isFinite(pageNo) || !Number.isFinite(q)) return false;
     let sourceTone = "anchor";
     let list = getReliableChoiceAnchorsForQuestion(q, pageNo);
+    const allowPdfFallback = options.allowPdfFallback !== false;
+    const segment = getStoredQuestionSegment(q, pageNo);
+    const segmentOptions = segment
+      ? { startRatio: Number(segment.top), endRatio: Number(segment.bottom) }
+      : null;
+    const choiceLimit = Math.max(1, Math.min(5, Number(state.pdfNav?.choiceCount) || CHOICE_COUNT));
+    const countChoicesOnPage = (items) => {
+      const set = new Set();
+      for (const item of Array.isArray(items) ? items : []) {
+        if (Number(item?.page || pageNo) !== Number(pageNo)) continue;
+        const choice = Number(item.choice);
+        if (Number.isInteger(choice) && choice >= 1 && choice <= choiceLimit) set.add(choice);
+      }
+      return set.size;
+    };
+    if (allowPdfFallback && Array.isArray(list) && list.length && countChoicesOnPage(list) < choiceLimit) {
+      try{
+        const fallback = await getChoiceAnchorsForQuestion(pageNo, q, {
+          ...(segmentOptions || {}),
+          ignoreStored: true,
+        });
+        if (Array.isArray(fallback) && fallback.length) {
+          const byChoice = new Map();
+          for (const item of fallback.filter((entry) => Number(entry?.page || pageNo) === Number(pageNo))) {
+            const choice = Number(item.choice);
+            if (Number.isInteger(choice) && choice >= 1 && choice <= choiceLimit) byChoice.set(choice, item);
+          }
+          for (const item of list.filter((entry) => Number(entry?.page || pageNo) === Number(pageNo))) {
+            const choice = Number(item.choice);
+            if (Number.isInteger(choice) && choice >= 1 && choice <= choiceLimit) byChoice.set(choice, item);
+          }
+          list = [...byChoice.values()].sort((a, b) => Number(a.choice) - Number(b.choice));
+          if (list.length) state.questionChoiceAnchorCache[`${Number(pageNo)}:${Number(q)}`] = list;
+        }
+      }catch(_){}
+    }
     if (!Array.isArray(list) || !list.length) {
-      if (options.allowPdfFallback === false) return false;
+      if (!allowPdfFallback) return false;
       sourceTone = "pdf";
-      const segment = getStoredQuestionSegment(q, pageNo);
-      const segmentOptions = segment
-        ? { startRatio: Number(segment.top), endRatio: Number(segment.bottom) }
-        : null;
       try{
         list = await getChoiceAnchorsForQuestion(pageNo, q, segmentOptions);
         if (Array.isArray(list) && list.length) state.questionChoiceAnchorCache[`${Number(pageNo)}:${Number(q)}`] = list;
@@ -12884,6 +12962,8 @@
       : getAnchorDetailWindowQuestions(totalPages, state.focusQ, {
         visibleOnly: true,
         maxQuestions: options.maxQuestions || (quick ? 12 : 18),
+        padPx: options.padPx,
+        padRatio: options.padRatio,
       });
     const forcedPages = Array.isArray(state.allModeForcedMarkerPages)
       ? state.allModeForcedMarkerPages
@@ -12918,9 +12998,7 @@
       if (p % 4 === 0) await waitForNextFrame();
     }
     if (ANCHOR_DEBUG || ANCHOR_CLICK_AREA_DEBUG) {
-      const allowChoiceAnchorPdfFallback = !quick
-        && detailReady
-        && (!anchorEditState.enabled || Array.isArray(options.questions));
+      const allowChoiceAnchorPdfFallback = !quick && detailReady;
       for (const q of detailQuestions){
         if (!isCurrentMarkerRun()) return;
         const pageNo = getAllModePageForQuestion(q, totalPages);
@@ -13240,12 +13318,14 @@
     updateViewerTopBadge();
     queuePdfScrollFocusSync();
     if (state.viewMode === "all" && anchorEditState.enabled) {
-      refreshAllModeMarkersWithoutScroll({ quick: true });
+      refreshAllModeMarkersWithoutScroll({ maxQuestions: 24, padPx: 520 });
       if (state.allMarkerScrollIdleTimer) window.clearTimeout(state.allMarkerScrollIdleTimer);
       state.allMarkerScrollIdleTimer = window.setTimeout(() => {
         state.allMarkerScrollIdleTimer = 0;
-        if (state.viewMode === "all" && anchorEditState.enabled) refreshAllModeMarkersWithoutScroll();
-      }, 700);
+        if (state.viewMode === "all" && anchorEditState.enabled) {
+          refreshAllModeMarkersWithoutScroll({ maxQuestions: 24, padPx: 520 });
+        }
+      }, 120);
       return;
     }
     refreshAllModeMarkersWithoutScroll();
