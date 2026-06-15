@@ -50,17 +50,10 @@
       "anchorColumn": 0
     },
     "3": {
-      "q": 3,
-      "label": "38",
       "page": 1,
-      "ratio": 0.34327514126450825,
-      "yRatio": 0.34327514126450825,
-      "xRatio": 0.22100724480968856,
-      "wRatio": 0.025,
-      "hRatio": 0.018,
-      "source": "manual-anchor",
-      "anchorMode": "center",
-      "confidence": 1
+      "xRatio": 0.048922800718132854,
+      "yRatio": 0.2859860494610019,
+      "anchorColumn": 0
     },
     "4": {
       "page": 1,
@@ -114,7 +107,15 @@
       "page": 1,
       "xRatio": 0.5098743267504489,
       "yRatio": 0.18833227647431833,
-      "anchorColumn": 1
+      "label": 12,
+      "anchorColumn": 1,
+      "source": "manual-anchor",
+      "q": 12,
+      "ratio": 0.18833227647431833,
+      "wRatio": 0.02,
+      "hRatio": 0.018,
+      "anchorMode": "center",
+      "confidence": 1
     },
     "13": {
       "page": 1,
@@ -425,11 +426,12 @@
     "3": [
       {
         "page": 1,
-        "top": 0.34327514126450825,
+        "top": 0.2659860494610019,
         "bottom": 0.3845656309448319,
         "left": 0,
         "right": 0.5148114901256733,
-        "source": "manual-anchor"
+        "column": 0,
+        "source": "column-segment"
       }
     ],
     "4": [
@@ -707,7 +709,7 @@
     null,
     0.08196892834495878,
     0.14157577679137603,
-    0.34327514126450825,
+    0.23098604946100193,
     0.34956563094483195,
     0.43865884590995563,
     0.5280691185795814,
@@ -2199,33 +2201,17 @@
   "warnings": [
     "일부 선택지 위치가 누락되었습니다(84/100). 틀린 좌표 대신 누락으로 표시합니다."
   ],
-  "generatedAt": "2026-06-09T13:24:26.692Z",
+  "generatedAt": "2026-06-15T14:53:06.324Z",
+  "choiceClickAreaMap": {},
   "_manualBase": {
     "questionLabelMap": {
-      "3": {
+      "12": {
         "page": 1,
-        "xRatio": 0.048922800718132854,
-        "yRatio": 0.2859860494610019,
-        "anchorColumn": 0
+        "xRatio": 0.5098743267504489,
+        "yRatio": 0.18833227647431833,
+        "anchorColumn": 1
       }
-    },
-    "questionTopRatioMap": {
-      "3": 0.23098604946100193
-    },
-    "questionSegments": {
-      "3": [
-        {
-          "page": 1,
-          "top": 0.2659860494610019,
-          "bottom": 0.3845656309448319,
-          "left": 0,
-          "right": 0.5148114901256733,
-          "column": 0,
-          "source": "column-segment"
-        }
-      ]
     }
   },
-  "choiceClickAreaMap": {},
-  "manualEditedAt": "2026-06-09T13:24:26.692Z"
+  "manualEditedAt": "2026-06-15T14:53:06.324Z"
 }

@@ -1058,10 +1058,22 @@ function questionAnswerCountIssue(row){
   return "";
 }
 
+function correctJsonReady(row){
+  return Boolean(row?.correctJson && manifestFileExists(row.correctJson));
+}
+
+function answerSourceReady(row){
+  return Boolean(String(row?.answerSourceId || "").trim());
+}
+
+function quizAnswerReady(row){
+  return correctJsonReady(row) || answerSourceReady(row);
+}
+
 function isPublishedQuestion(row){
   return manifestPublishedReady(row);
 }
-// SOFTM-OCR: 게시 기준은 문제 PDF 존재 여부로 고정하고 정답/OCR 품질은 보조 진단으로 분리 - 2026-05-31
+// SOFTM-OCR: 문제 PDF 준비 상태와 정답 JSON 준비 상태를 분리해 최종 게시 가능 여부를 산정 - 2026-05-31
 
 function collectDescendantCatNos(categories, catNo){
   const out = new Set([String(catNo || "")]);
@@ -1107,10 +1119,11 @@ function inferAnchorMapPath(row){
   const explicit = stripManifestPrefix(row?.anchorMap || "");
   if (explicit && manifestFileExists(explicit)) return explicit;
   const questionPdf = stripManifestPrefix(row?.questionPdf || "");
-  if (!/\.pdf$/i.test(questionPdf)) return explicit;
+  if (!/\.pdf$/i.test(questionPdf)) return "";
   const inferred = questionPdf.replace(/\.pdf$/i, "_anchor.json");
-  return manifestFileExists(inferred) ? inferred : explicit;
+  return manifestFileExists(inferred) ? inferred : "";
 }
+// SOFTM-위치맵: manifest에 남은 anchorMap 경로라도 실제 파일이 없으면 삭제된 위치맵과 동일하게 취급 - 2026-06-15
 
 function containsManualAnchorValue(value){
   if (!value || typeof value !== "object") return false;
@@ -1260,14 +1273,29 @@ function answerDiagSummary(row, data){
       answerPairs: data.answerPairs || 0,
     };
   }
-  if (row?.correctJson && manifestFileExists(row.correctJson)) {
+  if (correctJsonReady(row)) {
     return { status: "정상", tone: "ok", warnings: baseWarnings, textChars: data?.textChars || 0, answerPairs: data?.answerPairs || 0 };
+  }
+  if (String(row?.correctJson || "").trim()) {
+    return {
+      status: "정답 JSON 없음",
+      tone: "warn",
+      warnings: [...baseWarnings, "정답 JSON 경로가 있지만 실제 파일을 찾을 수 없습니다."],
+      textChars: data?.textChars || 0,
+      answerPairs: data?.answerPairs || 0,
+    };
   }
   if (String(row?.answerSourceId || "").trim()) {
     return { status: "정답 원본 연결", tone: "ok", warnings: baseWarnings, textChars: data?.textChars || 0, answerPairs: data?.answerPairs || 0 };
   }
   if (answerFiles.length) {
-    return { status: answerFiles.length > 1 ? `정답 파일 ${answerFiles.length}개 연결` : "정답 파일 연결", tone: "ok", warnings: baseWarnings, textChars: data?.textChars || 0, answerPairs: data?.answerPairs || 0 };
+    return {
+      status: "정답 JSON 필요",
+      tone: "warn",
+      warnings: [...baseWarnings, "정답 원본 파일은 연결되어 있지만 correct.json 연결이 없습니다. 정답 JSON을 생성하세요."],
+      textChars: data?.textChars || 0,
+      answerPairs: data?.answerPairs || 0,
+    };
   }
   return { status: "정답 없음", tone: "warn", warnings: ["정답 파일 또는 정답 원본 ID가 연결되지 않았습니다."], textChars: data?.textChars || 0, answerPairs: data?.answerPairs || 0 };
 }
@@ -1290,13 +1318,15 @@ async function buildCatalogDataset(dataset, datasetLabel, categories, questions)
     const answerDiag = answerDiagSummary({ ...row, answerPdf: primaryAnswerPdf, answerPdfs }, answerDiagnostics);
     const anchorMapPath = inferAnchorMapPath(row);
     const anchorMeta = readAnchorMapMeta(anchorMapPath);
+    const hasAnchorMapFile = Boolean(anchorMapPath);
     const workState = questionWorkState(row, anchorMapPath, anchorMeta);
     const ocrIssue = questionDiag.status !== "정상" ? questionDiag.status : "";
     const countIssue = questionAnswerCountIssue(row);
     const answerStatus = String(answerDiag.status || "");
-    const answerOk = ["정상", "정답 원본 연결", "정답 파일 연결"].includes(answerStatus) || /^정답 파일 \d+개 연결$/.test(answerStatus);
-    const answerIssue = countIssue || (!answerOk ? answerDiag.status : "");
-    const published = manifestReady && fileIssue === "정상";
+    const answerReady = quizAnswerReady(row);
+    const answerOk = answerReady && ["정상", "정답 원본 연결"].includes(answerStatus);
+    const answerIssue = countIssue || (!answerReady ? "정답 JSON 없음" : (!answerOk ? answerDiag.status : ""));
+    const published = manifestReady && fileIssue === "정상" && answerReady;
     const issue = fileIssue !== "정상" ? fileIssue : (answerIssue || fileIssue);
     const derivedPdf = isDerivedPdfPath(row?.questionPdf || "");
     const originalCandidatePath = derivedPdf ? originalCandidateForDerivedPdf(row?.questionPdf || "") : "";
@@ -1327,19 +1357,21 @@ async function buildCatalogDataset(dataset, datasetLabel, categories, questions)
       answerEndNo: row?.answerEndNo || "",
       choiceCount: row?.choiceCount || "",
       anchorMap: anchorMapPath,
-      anchorStatus: row?.anchorStatus || anchorMeta.status || "",
-      anchorConfidence: row?.anchorConfidence || anchorMeta.confidence || "",
-      anchorWarnings: Array.isArray(row?.anchorWarnings) && row.anchorWarnings.length ? row.anchorWarnings : (anchorMeta.warnings || []),
-      anchorGeneratedAt: row?.anchorGeneratedAt || anchorMeta.generatedAt || "",
-      anchorManualEditedAt: anchorMeta.manualEditedAt || "",
-      hasManualAnchorEdits: Boolean(anchorMeta.hasManualEdits),
-      hasManualQuestionAreaEdits: Boolean(anchorMeta.hasQuestionAreaEdits),
-      hasManualAnchorPositionEdits: Boolean(anchorMeta.hasAnchorPositionEdits),
+      anchorStatus: hasAnchorMapFile ? (anchorMeta.status || row?.anchorStatus || "") : "",
+      anchorConfidence: hasAnchorMapFile ? (anchorMeta.confidence ?? row?.anchorConfidence ?? "") : "",
+      anchorWarnings: hasAnchorMapFile ? (Array.isArray(row?.anchorWarnings) && row.anchorWarnings.length ? row.anchorWarnings : (anchorMeta.warnings || [])) : [],
+      anchorGeneratedAt: hasAnchorMapFile ? (anchorMeta.generatedAt || row?.anchorGeneratedAt || "") : "",
+      anchorManualEditedAt: hasAnchorMapFile ? (anchorMeta.manualEditedAt || "") : "",
+      hasManualAnchorEdits: hasAnchorMapFile && Boolean(anchorMeta.hasManualEdits),
+      hasManualQuestionAreaEdits: hasAnchorMapFile && Boolean(anchorMeta.hasQuestionAreaEdits),
+      hasManualAnchorPositionEdits: hasAnchorMapFile && Boolean(anchorMeta.hasAnchorPositionEdits),
+      // SOFTM-위치맵: _anchor.json 파일이 임의 삭제된 경우 stale manifest 보조 필드도 UI 응답에서 제거 - 2026-06-15
       workState: workState.label,
       workStateSteps: workState.steps,
       workStateInitial: workState.initial,
       workStateTone: workState.tone,
       answerSourceId: row?.answerSourceId || "",
+      answerReady,
       published,
       issue,
       fileIssue,
@@ -1373,7 +1405,7 @@ async function buildCatalogDataset(dataset, datasetLabel, categories, questions)
       answerPairs: answerDiag.answerPairs || 0,
       hasQuestionFile: manifestFileExists(row?.questionPdf || ""),
       hasAnswerFile: answerPdfs.length ? answerPdfs.some((item) => manifestFileExists(item)) : Boolean(row?.answerSourceId),
-      hasCorrectJson: row?.correctJson ? manifestFileExists(row.correctJson) : false,
+      hasCorrectJson: correctJsonReady(row),
       seq: Number(row?.seq || 0),
     };
   }));
@@ -1385,7 +1417,7 @@ async function buildCatalogDataset(dataset, datasetLabel, categories, questions)
     const rows = normalizedQuestions.filter((item) => catNos.has(String(item.catNo || "")));
     const published = rows.filter((item) => item.published).length;
     const answerMapped = rows.filter((item) => item.answerPdf || item.answerSourceId).length;
-    const correctReady = rows.filter((item) => item.correctJson || item.answerSourceId).length;
+    const correctReady = rows.filter((item) => item.hasCorrectJson || item.answerSourceId).length;
     const ocrWarning = rows.filter((item) => item.needsOcr).length;
     return {
       dataset,
@@ -2714,6 +2746,115 @@ async function updateCategoryQuestionManifest(row, fields){
   }catch(_){}
 }
 
+function correctJsonRelForQuestion(row){
+  const explicit = stripManifestPrefix(row?.correctJson || "");
+  if (explicit) return explicit;
+  const questionPdf = stripManifestPrefix(row?.questionPdf || "");
+  if (!questionPdf) return "";
+  return path.posix.join(path.posix.dirname(questionPdf), "correct.json");
+}
+
+function normalizeCorrectJsonRelPath(value){
+  const rel = stripManifestPrefix(value);
+  if (!rel || !rel.startsWith("pdf/") || path.posix.basename(rel) !== "correct.json") {
+    throw new Error("정답 JSON은 pdf 하위의 correct.json만 삭제할 수 있습니다.");
+  }
+  return rel;
+}
+
+function correctItemMatchesQuestion(item, row){
+  const questionPdf = stripManifestPrefix(row?.questionPdf || "");
+  const itemQuestionPdf = stripManifestPrefix(item?.questionPdf || "");
+  if (questionPdf && itemQuestionPdf && sameManagedRelPath(itemQuestionPdf, questionPdf)) return true;
+  const questionNo = String(row?.questionNo || "");
+  const itemQuestionNo = String(item?.questionNo || "");
+  if (!questionNo || !itemQuestionNo || questionNo !== itemQuestionNo) return false;
+  return !questionPdf || !itemQuestionPdf || sameManagedRelPath(itemQuestionPdf, questionPdf);
+}
+
+function correctManifestClearFields(){
+  return {
+    correctJson: "",
+    answerCount: "",
+    answerStartNo: "",
+    answerEndNo: "",
+  };
+}
+
+function withCorrectManifestCleared(row){
+  const next = { ...(row || {}), ...correctManifestClearFields() };
+  delete next.printedAnswerNoMap;
+  delete next.answerIndexMode;
+  return next;
+}
+
+function formatAnswerArray(values, indent = 0, perLine = 10){
+  const lines = ["["];
+  if (values.length) {
+    const pad = " ".repeat(indent + 2);
+    const last = values.length - 1;
+    for (let start = 0; start < values.length; start += perLine) {
+      const chunk = [];
+      for (let idx = start; idx < Math.min(start + perLine, values.length); idx += 1) {
+        const raw = JSON.stringify(values[idx]);
+        chunk.push(idx < last ? `${raw},` : raw);
+      }
+      lines.push(`${pad}${chunk.join(" ")}`);
+    }
+  }
+  lines.push(`${" ".repeat(indent)}]`);
+  return lines.join("\n");
+}
+
+function formatCorrectJsonValue(value, indent = 0, keyName = ""){
+  if (keyName === "answers" && Array.isArray(value)) return formatAnswerArray(value, indent);
+  if (Array.isArray(value)) {
+    if (!value.length) return "[]";
+    const lines = ["["];
+    for (let idx = 0; idx < value.length; idx += 1) {
+      const rendered = formatCorrectJsonValue(value[idx], indent + 2);
+      lines.push(`${" ".repeat(indent + 2)}${rendered}${idx < value.length - 1 ? "," : ""}`);
+    }
+    lines.push(`${" ".repeat(indent)}]`);
+    return lines.join("\n");
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value);
+    if (!entries.length) return "{}";
+    const lines = ["{"];
+    entries.forEach(([key, child], idx) => {
+      const rendered = formatCorrectJsonValue(child, indent + 2, key);
+      lines.push(`${" ".repeat(indent + 2)}${JSON.stringify(String(key))}: ${rendered}${idx < entries.length - 1 ? "," : ""}`);
+    });
+    lines.push(`${" ".repeat(indent)}}`);
+    return lines.join("\n");
+  }
+  return JSON.stringify(value);
+}
+
+async function writeCorrectJsonFile(abs, payload){
+  await fsp.writeFile(abs, `${formatCorrectJsonValue(payload)}\n`, "utf8");
+}
+
+async function clearCategoryQuestionManifestCorrectFields(row){
+  const questionPdf = stripManifestPrefix(row?.questionPdf || "");
+  if (!questionPdf) return;
+  const dirRel = path.posix.dirname(questionPdf);
+  const localManifestAbs = resolveWorkspacePath(path.posix.join(dirRel, "question.json"));
+  if (!fs.existsSync(localManifestAbs)) return;
+  try{
+    const localRows = JSON.parse(await fsp.readFile(localManifestAbs, "utf8"));
+    if (!Array.isArray(localRows)) return;
+    const idx = localRows.findIndex((item) => (
+      (row?.questionNo && String(item?.questionNo || "") === String(row.questionNo))
+      || sameManagedRelPath(item?.questionPdf || "", questionPdf)
+    ));
+    if (idx < 0) return;
+    localRows[idx] = withCorrectManifestCleared(localRows[idx]);
+    await fsp.writeFile(localManifestAbs, `${JSON.stringify(localRows, null, 2)}\n`, "utf8");
+  }catch(_){}
+}
+
 const anchorManifestFieldKeys = ["anchorMap", "anchorStatus", "anchorConfidence", "anchorWarnings", "anchorGeneratedAt"];
 
 function withoutAnchorManifestFields(row){
@@ -3109,6 +3250,119 @@ function runGenerateCategoryManifest(body){
   ), Promise.resolve([])).then((results) => ({ category, categoryPath, results }));
 }
 // SOFTM-GEN: 선택 카테고리만 question/correct JSON을 갱신하는 관리자 재생성 흐름 추가 - 2026-05-30
+
+function parseLastJsonLine(output){
+  const lines = String(output || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i -= 1){
+    if (!lines[i].startsWith("{")) continue;
+    try{
+      return JSON.parse(lines[i]);
+    }catch(_){}
+  }
+  return {};
+}
+
+async function handleCorrectGenerate(req, res){
+  const body = JSON.parse((await readBody(req)).toString("utf8") || "{}");
+  const found = findQuestionManifestRow(body);
+  const row = found.row;
+  const questionNo = String(row?.questionNo || "");
+  const questionPdf = stripManifestPrefix(row?.questionPdf || "");
+  const answerPdf = stripManifestPrefix(row?.answerPdf || "");
+  if (!questionPdf) throw new Error("문제 PDF 경로가 없습니다.");
+  if (!answerPdf) throw new Error("정답 원본 파일이 연결되지 않았습니다.");
+  if (!manifestFileExists(answerPdf)) throw new Error(`정답 원본 파일을 찾을 수 없습니다: ${answerPdf}`);
+
+  const scriptPath = path.join(scriptDir, "gen_correct_one.py");
+  const args = [
+    scriptPath,
+    "--manifest",
+    found.manifestName,
+    "--question-no",
+    questionNo,
+    "--question-pdf",
+    questionPdf,
+  ];
+  const result = await new Promise((resolve, reject) => {
+    execFile("python3", args, { cwd: root, maxBuffer: 80 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) {
+        err.message = stderr || stdout || err.message;
+        reject(err);
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
+  });
+  const parsed = parseLastJsonLine(result.stdout);
+  const refreshed = findQuestionManifestRow({ dataset: found.dataset, questionNo, path: questionPdf });
+  const correctJson = stripManifestPrefix(refreshed.row?.correctJson || parsed.correctJson || "");
+  const count = Number(refreshed.row?.answerCount || parsed.count || 0);
+  sendJson(res, 200, {
+    ok: true,
+    questionNo,
+    questionNm: refreshed.row?.questionNm || row?.questionNm || "",
+    answerPdf,
+    correctJson,
+    count,
+    itemAction: parsed.itemAction || "",
+    manifestName: found.manifestName,
+    output: String(result.stdout || "").trim(),
+    errorOutput: String(result.stderr || "").trim(),
+    message: correctJson ? `정답 JSON을 생성하고 회차에 연결했습니다(${count}개).` : "정답 JSON 생성은 끝났지만 연결 상태를 확인하지 못했습니다.",
+  });
+}
+// SOFTM-GEN: 회차 상세에서 현재 회차 하나만 correct.json에 추가/교체하는 관리자 API 추가 - 2026-06-15
+
+async function handleCorrectDelete(req, res){
+  const body = await readSmallJsonRequest(req);
+  const found = findQuestionManifestRow(body);
+  const row = found.row;
+  const correctRel = normalizeCorrectJsonRelPath(correctJsonRelForQuestion(row));
+  const correctAbs = await resolveExistingWorkspacePath(correctRel);
+  let beforeCount = 0;
+  let afterCount = 0;
+  let itemDeleted = false;
+  let fileDeleted = false;
+
+  if (fs.existsSync(correctAbs)) {
+    const payload = JSON.parse(await fsp.readFile(correctAbs, "utf8"));
+    const items = Array.isArray(payload?.items) ? payload.items : null;
+    if (!items) throw new Error("correct.json items 배열을 찾을 수 없습니다.");
+    beforeCount = items.length;
+    const nextItems = items.filter((item) => !correctItemMatchesQuestion(item, row));
+    afterCount = nextItems.length;
+    itemDeleted = nextItems.length !== items.length;
+    if (itemDeleted) {
+      if (nextItems.length) {
+        await writeCorrectJsonFile(correctAbs, { ...payload, items: nextItems });
+      } else {
+        await fsp.unlink(correctAbs);
+        fileDeleted = true;
+      }
+    }
+  } else if (!row?.correctJson) {
+    throw new Error("삭제할 정답 JSON 파일이 없습니다.");
+  }
+
+  found.rows[found.index] = withCorrectManifestCleared(found.rows[found.index]);
+  await writeJsonFile(found.manifestName, found.rows);
+  await clearCategoryQuestionManifestCorrectFields(row);
+  sendJson(res, 200, {
+    ok: true,
+    questionNo: row.questionNo || "",
+    questionNm: row.questionNm || "",
+    correctJson: correctRel,
+    itemDeleted,
+    fileDeleted,
+    beforeCount,
+    afterCount,
+    manifestName: found.manifestName,
+    message: itemDeleted
+      ? "공유 correct.json에서 현재 회차 정답 항목을 삭제하고 연결을 해제했습니다."
+      : "correct.json에서 현재 회차 항목은 찾지 못했지만 manifest 연결은 해제했습니다.",
+  });
+}
+// SOFTM-GEN: 공유 correct.json에서 현재 회차 항목만 제거하고 manifest 연결을 해제하는 API 추가 - 2026-06-15
 
 function pushArg(args, flag, value){
   const raw = String(value || "").trim();
@@ -3573,6 +3827,8 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/admin/anchor-ocr" && req.method === "POST") return await handleAnchorOcr(req, res);
     if (url.pathname === "/api/admin/anchor-delete" && req.method === "POST") return await handleAnchorDelete(req, res);
     if (url.pathname === "/api/admin/question-reset" && req.method === "POST") return await handleQuestionResetInitial(req, res);
+    if (url.pathname === "/api/admin/correct-generate" && req.method === "POST") return await handleCorrectGenerate(req, res);
+    if (url.pathname === "/api/admin/correct-delete" && req.method === "POST") return await handleCorrectDelete(req, res);
     if (url.pathname === "/api/admin/download") return await handleAdminDownload(req, res, url);
     if (url.pathname === "/api/admin/hwp-html") return await handleHwpHtml(req, res, url);
     if (url.pathname === "/api/admin/hwp-preview") return await handleHwpPreview(req, res, url);

@@ -9,7 +9,7 @@
     "questionNo": "0001",
     "questionPdf": "quiz/pdf/농산물품질관리사/2022년 제19회 농산물품질관리사 1차.pdf",
     "answerPdf": "quiz/pdf/농산물품질관리사/2022년 제19회 농산물품질관리사 1차 최종정답.pdf",
-    "correctJson": "quiz/pdf/농산물품질관리사/correct.json",
+    "correctJson": "",
     "published": true,
     "year": "2022",
     "semester": "",
@@ -20,19 +20,14 @@
     "ocrUniqueQuestionLabels": 100,
     "ocrChoiceLabels": 400,
     "ocrWarnings": [],
-    "answerCount": 100,
+    "answerCount": "",
     "questionCount": 100,
-    "answerStartNo": 1,
-    "answerEndNo": 100,
+    "answerStartNo": "",
+    "answerEndNo": "",
     "questionStartNo": 1,
     "questionEndNo": 100,
     "ocrStatus": "정상",
-    "ocrPublished": true,
-    "anchorMap": "",
-    "anchorStatus": "",
-    "anchorConfidence": "",
-    "anchorWarnings": [],
-    "anchorGeneratedAt": ""
+    "ocrPublished": true
   },
   {
     "gNo": "01",
@@ -96,7 +91,7 @@
     "questionNo": "0003",
     "questionPdf": "quiz/pdf/농산물품질관리사/2023년 제20회 농산물품질관리사 1차.pdf",
     "answerPdf": "quiz/pdf/농산물품질관리사/2023년 제20회 농산물품질관리사 1차 최종정답.pdf",
-    "correctJson": "",
+    "correctJson": "quiz/pdf/농산물품질관리사/correct.json",
     "published": true,
     "year": "2023",
     "semester": "",
@@ -863,7 +858,7 @@
     "anchorWarnings": [
       "일부 선택지 위치가 누락되었습니다(84/100). 틀린 좌표 대신 누락으로 표시합니다."
     ],
-    "anchorGeneratedAt": "2026-06-09T13:24:26.692Z"
+    "anchorGeneratedAt": "2026-06-15T14:53:06.324Z"
   },
   {
     "gNo": "03",

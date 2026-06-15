@@ -3399,7 +3399,8 @@
           const currentSource = getCurrentPdfSourceKey();
           const isCurrentSource = state.pdfNav.source === currentSource;
           const isCurrentVersion = state.pdfNav.version === PDF_MAP_VERSION;
-          if (!isCurrentSource || !isCurrentVersion) {
+          const isCurrentAnchorMapPath = !state.pdfNav.anchorMapPath || isAnchorMapPathCompatibleWithCurrentPdf(state.pdfNav.anchorMapPath);
+          if (!isCurrentSource || !isCurrentVersion || !isCurrentAnchorMapPath) {
             state.pdfNav.mode = "basic";
             state.pdfNav.questionPageMap = null;
             state.pdfNav.questionTopRatioMap = null;
@@ -3424,6 +3425,7 @@
             state.pdfNav.generatedAt = null; // SOFTM-위치맵: 버전/원본 불일치 시 이전 위치맵 생성 시각도 초기화 - 2026-05-30
             state.pdfNav.manualEditedAt = "";
             state.pdfNav.version = PDF_MAP_VERSION;
+            currentAnchorMapPath = ""; // SOFTM-앵커맵: 현재 PDF와 맞지 않는 로컬 UI 앵커맵 경로가 다음 조회 후보로 남지 않게 제거 - 2026-06-15
           }
         }
       }
@@ -3489,15 +3491,13 @@
   }
 
   function getPdfOutputScale(options = {}){
+    /* SOFTM-PDF화질 시작: 전체보기와 한문제보기가 같은 고화질 outputScale 기준을 사용 - 2026-06-15 */
+    void options;
     const dpr = Math.max(1, Number(window.devicePixelRatio) || 1);
     const portraitMobile = window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches;
-    if (options.mode === "all") {
-      return portraitMobile ? Math.min(1.5, dpr * 0.72) : Math.min(1.45, dpr * 0.72);
-    }
-    if (portraitMobile) {
-      return Math.min(4, dpr * 1.45);
-    }
-    return Math.min(2.6, dpr * 1.25);
+    const scale = portraitMobile ? Math.min(4, dpr * 1.45) : Math.min(2.6, dpr * 1.25);
+    /* SOFTM-PDF화질 끝 */
+    return scale;
   }
 
   function resetPdfZoom(){
@@ -3996,14 +3996,45 @@
     return questionManifestPromise;
   }
 
+  /* SOFTM-앵커맵 시작: 중복 questionNo가 있어도 현재 PDF 경로와 맞는 manifest row를 우선 선택 - 2026-06-15 */
+  function normalizeManifestPdfPathForCompare(pathValue){
+    return normalizePdfPathInput(tryDecodeURIComponent(pathValue))
+      .replace(/^quiz\//i, "")
+      .normalize("NFC");
+  }
+
+  function getExpectedAnchorMapPathForCurrentPdf(){
+    const currentPdf = normalizeManifestPdfPathForCompare(QUESTION_PDF_URL);
+    return /\.pdf$/i.test(currentPdf) ? currentPdf.replace(/\.pdf$/i, "_anchor.json") : "";
+  }
+
+  function isAnchorMapPathCompatibleWithCurrentPdf(anchorPath){
+    const normalized = normalizeManifestPdfPathForCompare(anchorPath);
+    const expected = getExpectedAnchorMapPathForCurrentPdf();
+    return !normalized || !expected || normalized === expected;
+  }
+
   async function findQuestionManifestRow(){
     const list = await loadQuestionManifest();
     if (!Array.isArray(list) || list.length === 0) return null;
-    const byNo = QUESTION_NO ? list.find((row) => String(row?.questionNo || "") === String(QUESTION_NO)) : null;
-    if (byNo) return byNo;
-    const targetPdf = normalizePdfPathInput(QUESTION_PDF_URL).normalize("NFC");
-    return list.find((row) => normalizePdfPathInput(row?.questionPdf || "").normalize("NFC") === targetPdf) || null;
+    const targetPdf = normalizeManifestPdfPathForCompare(QUESTION_PDF_URL);
+    const targetExam = normalizeExamKey(EXAM_NAME);
+    const targetCategory = normalizeExamKey(CATEGORY_NAME);
+    const samePdf = (row) => normalizeManifestPdfPathForCompare(row?.questionPdf || "") === targetPdf;
+    const sameExam = (row) => normalizeExamKey(row?.questionNm || row?.exam || row?.title || "") === targetExam;
+    const sameCategory = (row) => {
+      const value = normalizeExamKey(row?.catNm || row?.category || row?.gNm || "");
+      return !targetCategory || !value || value === targetCategory;
+    };
+    const byNo = QUESTION_NO ? list.filter((row) => String(row?.questionNo || "") === String(QUESTION_NO)) : [];
+    return byNo.find(samePdf)
+      || list.find(samePdf)
+      || byNo.find((row) => sameExam(row) && sameCategory(row))
+      || byNo.find(sameExam)
+      || byNo[0]
+      || null;
   }
+  /* SOFTM-앵커맵 끝 */
 
   async function fetchLocalJson(pathValue){
     for (const candidate of buildLocalJsonCandidates(pathValue)){
@@ -6592,6 +6623,197 @@
     };
   }
 
+  /* SOFTM-문항영역 시작: 문항 앵커 옆 텍스트 끝 기준으로 문항영역/활성화 표시 폭을 공유 - 2026-06-15 */
+  function findChoiceTextPixelBounds(canvas, rect, options = {}){
+    if (!canvas || !rect || rect.w < 16 || rect.h < 10) return null;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    const x0 = Math.max(0, Math.floor(rect.x));
+    const y0 = Math.max(0, Math.floor(rect.y));
+    const x1 = Math.min(canvas.width, Math.ceil(rect.x + rect.w));
+    const y1 = Math.min(canvas.height, Math.ceil(rect.y + rect.h));
+    const w = x1 - x0;
+    const h = y1 - y0;
+    if (w < 16 || h < 10) return null;
+    let image;
+    try{
+      image = ctx.getImageData(x0, y0, w, h);
+    }catch(_){
+      return null;
+    }
+    const rowCounts = new Uint16Array(h);
+    const colCounts = new Uint16Array(w);
+    const dark = new Uint8Array(w * h);
+    const data = image.data;
+    let total = 0;
+    for (let y = 0; y < h; y += 1){
+      for (let x = 0; x < w; x += 1){
+        const idx = (y * w + x) * 4;
+        if (!isChoiceAreaDarkPixel(data[idx], data[idx + 1], data[idx + 2], data[idx + 3])) continue;
+        dark[y * w + x] = 1;
+        rowCounts[y] += 1;
+        colCounts[x] += 1;
+        total += 1;
+      }
+    }
+    if (total < Math.max(8, Math.min(64, w * h * 0.0015))) return null;
+    const longestRun = (start, length, step) => {
+      let best = 0;
+      let run = 0;
+      for (let i = 0; i < length; i += 1){
+        if (dark[start + i * step]) {
+          run += 1;
+          if (run > best) best = run;
+        } else {
+          run = 0;
+        }
+      }
+      return best;
+    };
+    const rowLineRunLimit = Math.max(24, w * 0.72);
+    const colLineRunLimit = Math.max(24, h * 0.72);
+    const rowIsLine = new Uint8Array(h);
+    const colIsLine = new Uint8Array(w);
+    for (let y = 0; y < h; y += 1){
+      if (rowCounts[y] >= rowLineRunLimit && longestRun(y * w, w, 1) >= rowLineRunLimit) rowIsLine[y] = 1;
+    }
+    for (let x = 0; x < w; x += 1){
+      if (colCounts[x] >= colLineRunLimit && longestRun(x, h, w) >= colLineRunLimit) colIsLine[x] = 1;
+    }
+    const minLocalX = Math.max(0, Math.floor(Number(options.minLocalX || 0)));
+    let minX = w;
+    let maxX = -1;
+    let minY = h;
+    let maxY = -1;
+    let kept = 0;
+    for (let y = 0; y < h; y += 1){
+      if (rowIsLine[y]) continue;
+      for (let x = minLocalX; x < w; x += 1){
+        if (!dark[y * w + x] || colIsLine[x]) continue;
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+        kept += 1;
+      }
+    }
+    if (kept < Math.max(8, total * 0.12) || maxX < minX || maxY < minY) return null;
+    return {
+      x: x0 + minX,
+      y: y0 + minY,
+      w: maxX - minX + 1,
+      h: maxY - minY + 1,
+      kept,
+      total,
+    };
+  }
+
+  function capChoiceClickAreaRectByAnchor(rect, point, row, pointIndex, options = {}){
+    if (!rect || !point || !row || !Array.isArray(row.points) || row.points.length <= 1) return rect;
+    const r = Math.max(10, Math.min(42, Number(point.r) || Number(options.avgR) || 14));
+    const prev = row.points[pointIndex - 1] || null;
+    const next = row.points[pointIndex + 1] || null;
+    const gap = next ? Number(next.x) - Number(point.x) : (prev ? Number(point.x) - Number(prev.x) : 0);
+    const gapReach = Number.isFinite(gap) && gap > 0 ? gap * 0.58 : r * 9.5;
+    const maxReach = Math.max(r * 5.8, Math.min(r * 10.5, gapReach));
+    const rightCap = Number(point.x) + maxReach;
+    const currentRight = Number(rect.x) + Number(rect.w);
+    const right = Math.min(currentRight, rightCap);
+    const minWidth = Math.max(36, r * 3.3);
+    if (!Number.isFinite(right) || right - Number(rect.x) < minWidth || right >= currentRight - 1) return rect;
+    return {
+      ...rect,
+      w: right - Number(rect.x),
+      source: `${rect.source || "auto-click-area"}-anchor-cap`,
+    };
+  }
+
+  function isEditableStoredChoiceAnchorValue(anchor){
+    const source = String(anchor?.source || "").toLowerCase();
+    const mode = String(anchor?.anchorMode || "").toLowerCase();
+    if (!anchor || anchor.inferred === true) return false;
+    if (
+      source.startsWith("segment-")
+      || source === "pdf"
+      || source.startsWith("pdf-")
+      || source.startsWith("ocr-")
+      || source.includes("fallback")
+    ) return false;
+    if (!source) return true;
+    return mode === "center"
+      || source.includes("manual")
+      || source.includes("image")
+      || source.includes("anchor-map")
+      || source.includes("anchor");
+  }
+
+  function shouldUseChoiceTextPixelFit(point){
+    return isEditableStoredChoiceAnchorValue(point?.anchor || null);
+  }
+
+  function buildChoiceClickAreaRectFromAnchorText(canvas, point, row, pointIndex, bounds, helpers = {}){
+    if (!canvas || !point || !row || !bounds) return null;
+    const clampX = helpers.clampX || ((x) => Math.max(0, Math.min(canvas.width, x)));
+    const clampY = helpers.clampY || ((y) => Math.max(0, Math.min(canvas.height, y)));
+    const makeRect = helpers.makeRect;
+    if (typeof makeRect !== "function") return null;
+    const r = Math.max(10, Math.min(42, Number(point.r) || Number(helpers.avgR) || 14));
+    const next = row.points?.[pointIndex + 1] || null;
+    const multiColumnRow = Array.isArray(row.points) && row.points.length > 1;
+    const verticalSingleChoiceRow = Boolean(helpers.verticalChoiceLayout && !multiColumnRow); // SOFTM-문항영역: 세로형 단일 선택지 행은 긴 텍스트 끝까지 탐색 - 2026-06-15
+    const gapToNext = next ? Number(next.x) - Number(point.x) : NaN;
+    const startX = clampX(Number(point.x) + r * 0.62);
+    const nextBoundary = Number.isFinite(gapToNext) && gapToNext > r * 3
+      ? Number(next.x) - Math.max(r * 1.18, Number(helpers.avgR || r) * 1.05)
+      : Number.POSITIVE_INFINITY;
+    const rowRightReach = Math.max(0, Number(bounds.rowRightLimit ?? canvas.width) - startX);
+    const reachByAnchor = multiColumnRow
+      ? Math.max(r * 8.5, Math.min(r * 15.5, Number.isFinite(gapToNext) ? gapToNext * 0.78 : r * 12))
+      : verticalSingleChoiceRow
+      ? Math.max(r * 22, rowRightReach)
+      : Math.max(r * 16, Math.min(r * 28, Number(bounds.rowRightLimit || canvas.width) - startX));
+    const fallbackRight = clampX(Math.min(
+      Number(bounds.rowRightLimit ?? canvas.width),
+      nextBoundary,
+      startX + reachByAnchor
+    ));
+    const rowTop = Number(bounds.rowTop);
+    const rowBottom = Number(bounds.rowBottom);
+    const baseTop = clampY(Number(point.y) - r * 0.95);
+    const baseBottom = clampY(Number(point.y) + r * 0.95);
+    const scanTop = clampY(Math.max(rowTop, Number(point.y) - r * 1.45));
+    const scanBottom = clampY(Math.min(rowBottom, Number(point.y) + (multiColumnRow ? r * 2.15 : r * 3.8)));
+    const scanRect = makeRect(point.choice, startX, scanTop, fallbackRight, scanBottom);
+    if (!scanRect) return null;
+    const textBounds = findChoiceTextPixelBounds(canvas, scanRect, { minLocalX: 0 });
+    if (!textBounds) {
+      const bottom = Math.max(baseBottom, Math.min(rowBottom, Number(point.y) + r * 1.25));
+      return {
+        ...scanRect,
+        y: Math.max(rowTop, baseTop),
+        h: Math.max(12, bottom - Math.max(rowTop, baseTop)),
+        source: "auto-click-area-anchor-fallback",
+      };
+    }
+    const marginX = Math.max(9, Math.min(26, r * 0.68));
+    const marginY = Math.max(6, Math.min(18, r * 0.42));
+    const left = clampX(Math.max(startX, textBounds.x - marginX));
+    const right = clampX(Math.min(fallbackRight, textBounds.x + textBounds.w + marginX));
+    const top = clampY(Math.max(rowTop, Math.min(baseTop, textBounds.y - marginY)));
+    const bottom = clampY(Math.min(rowBottom, Math.max(baseBottom, textBounds.y + textBounds.h + marginY)));
+    const minWidth = Math.max(42, r * 5.5);
+    const rect = makeRect(point.choice, left, top, Math.max(right, left + minWidth), bottom);
+    return rect ? {
+      ...rect,
+      source: "auto-click-area-text-fit",
+      textLeft: textBounds.x,
+      textRight: textBounds.x + textBounds.w,
+      textTop: textBounds.y,
+      textBottom: textBounds.y + textBounds.h,
+    } : null;
+  }
+  /* SOFTM-문항영역 끝 */
+
   function buildAllModeChoiceClickAreaRects(points, canvas, options = {}){
     if (!Array.isArray(points) || points.length < 2 || !canvas) return [];
     const safe = points
@@ -6708,21 +6930,44 @@
         : Math.min(columnRight - gutter, Math.max(row.maxX + Math.max(80, avgR * 5), Math.min(columnRight - gutter, row.maxX + textReach)));
       row.points.forEach((point, idx) => {
         const multiColumnRow = row.points.length > 1;
-        const left = multiColumnRow
-          ? Math.max(rowLeftLimit, point.x - Math.max(28, avgR * 2.2))
-          : rowLeftLimit;
-        const nextLeft = idx === row.points.length - 1
-          ? rowRightLimit
-          : Math.max(left + 24, row.points[idx + 1].x - Math.max(30, avgR * 2.4));
-        const right = multiColumnRow
-          ? Math.min(rowRightLimit, nextLeft)
-          : rowRightLimit;
-        const rect = makeRect(point.choice, left, rowTop, right, rowBottom);
+        let rect = null;
+        if (shouldUseChoiceTextPixelFit(point)) {
+          rect = buildChoiceClickAreaRectFromAnchorText(canvas, point, row, idx, {
+            rowTop,
+            rowBottom,
+            rowLeftLimit,
+            rowRightLimit,
+            columnLeft,
+            columnRight,
+          }, {
+            avgR,
+            verticalChoiceLayout,
+            clampX,
+            clampY,
+            makeRect,
+          });
+        } else {
+          const left = multiColumnRow
+            ? Math.max(rowLeftLimit, point.x - Math.max(28, avgR * 2.2))
+            : rowLeftLimit;
+          const nextLeft = idx === row.points.length - 1
+            ? rowRightLimit
+            : Math.max(left + 24, row.points[idx + 1].x - Math.max(30, avgR * 2.4));
+          const right = multiColumnRow
+            ? Math.min(rowRightLimit, nextLeft)
+            : rowRightLimit;
+          rect = makeRect(point.choice, left, rowTop, right, rowBottom);
+          if (rect) rect.source = "auto-click-area-anchor-band";
+        }
         if (rect) {
-          rects.push(refineChoiceClickAreaRectByPixels(canvas, rect, {
-            marginX: Math.max(10, avgR * 0.62),
-            marginY: Math.max(8, avgR * 0.52),
-          }));
+          const refinedRect = rect.source === "auto-click-area-text-fit" || rect.source === "auto-click-area-anchor-band"
+            ? rect
+            : refineChoiceClickAreaRectByPixels(canvas, rect, {
+              marginX: Math.max(8, avgR * 0.42),
+              marginY: Math.max(6, avgR * 0.34),
+            });
+          const shouldAnchorCap = multiColumnRow && rect.source !== "auto-click-area-text-fit" && rect.source !== "auto-click-area-anchor-band"; // SOFTM-문항영역: 텍스트 탐색 성공/추정 앵커 행 기반 rect는 이미 경계가 정해져 추가 단축하지 않음 - 2026-06-15
+          rects.push(shouldAnchorCap ? capChoiceClickAreaRectByAnchor(refinedRect, point, row, idx, { avgR }) : refinedRect);
         }
       });
     });
@@ -6753,6 +6998,20 @@
       item.wRatio > 0 &&
       item.hRatio > 0
     );
+  }
+
+  function hasStoredChoiceAnchorMapForQuestion(q, pageNo = null){
+    if (!(currentAnchorMapPath || state.pdfNav?.anchorMapPath)) return false; // SOFTM-문항영역: 실제 앵커맵 경로가 없으면 런타임 추정 문항 앵커를 저장 앵커로 보지 않음 - 2026-06-15
+    const raw = state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)];
+    const stored = getReliableStoredChoiceAnchors(raw).filter(isEditableStoredChoiceAnchorValue);
+    if (!stored.length) return false;
+    if (!Number.isFinite(Number(pageNo))) return true;
+    return stored.some((item) => Number(item?.page || pageNo) === Number(pageNo));
+  }
+
+  function shouldBuildAutoChoiceClickAreaRects(q, pageNo, fallbackPoints = []){
+    if (hasStoredChoiceAnchorMapForQuestion(q, pageNo)) return true;
+    return (Array.isArray(fallbackPoints) ? fallbackPoints : []).some((point) => shouldUseChoiceTextPixelFit(point));
   }
 
   function projectChoiceClickAreaToCanvas(area, canvas, meta){
@@ -6857,9 +7116,11 @@
       .map((area) => projectChoiceClickAreaToCanvas(area, canvas, meta))
       .filter(Boolean);
     const manualChoices = new Set(manualRects.map((rect) => Number(rect.choice)));
-    const autoRects = buildAllModeChoiceClickAreaRects(fallbackPoints, canvas, { q, pageNo, meta })
-      .filter((rect) => !manualChoices.has(Number(rect.choice)))
-      .map((rect) => ({ ...rect, q: Number(q), page: Number(pageNo), manual: false, source: "auto-click-area" }));
+    const autoRects = shouldBuildAutoChoiceClickAreaRects(q, pageNo, fallbackPoints)
+      ? buildAllModeChoiceClickAreaRects(fallbackPoints, canvas, { q, pageNo, meta })
+        .filter((rect) => !manualChoices.has(Number(rect.choice)))
+        .map((rect) => ({ ...rect, q: Number(q), page: Number(pageNo), manual: false, source: "auto-click-area" }))
+      : [];
     return manualRects.concat(autoRects);
   }
 
@@ -6889,7 +7150,53 @@
     return best;
   }
 
-  function findAllModeChoiceAnchorHit(point, options = {}){
+  /* SOFTM-문항클릭 시작: 문항 앵커 원과 문항영역 클릭을 같은 선택 동작으로 통합 - 2026-06-15 */
+  function findChoiceAnchorPointHit(points, canvasX, canvasY, options = {}){
+    if (!Array.isArray(points) || !Number.isFinite(Number(canvasX)) || !Number.isFinite(Number(canvasY))) return null;
+    const maxChoice = Math.max(5, CHOICE_COUNT);
+    let best = null;
+    for (const point of points){
+      const q = Number(point?.q);
+      const choice = Number(point?.choice);
+      const x = Number(point?.x);
+      const y = Number(point?.y);
+      if (!Number.isFinite(q) || !Number.isInteger(choice) || choice < 1 || choice > maxChoice) continue;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      const r = Math.max(8, Math.min(48, Number(point?.r) || Number(options.radius) || 16));
+      const hitRadius = Math.max(16, r + Math.max(6, r * 0.55));
+      const distance = Math.hypot(Number(canvasX) - x, Number(canvasY) - y);
+      if (distance > hitRadius) continue;
+      const hit = {
+        q,
+        choice,
+        distance,
+        score: distance,
+        anchor: point.anchor || null,
+        area: null,
+        source: "choice-anchor",
+      };
+      if (!best || hit.score < best.score) best = hit;
+    }
+    return best;
+  }
+
+  function selectChoiceFromPdfHit(q, choice, options = {}){
+    const safeQ = Math.trunc(Number(q));
+    const safeChoice = Math.trunc(Number(choice));
+    if (!Number.isFinite(safeQ) || safeQ < 1 || safeQ > QUESTION_COUNT) return false;
+    if (!Number.isFinite(safeChoice) || safeChoice < 1 || safeChoice > CHOICE_COUNT) return false;
+    if (state.focusQ !== safeQ) setFocusQuestionSilently(safeQ);
+    chooseByKeyboard(safeChoice, { advance: false, scrollPdf: false });
+    pdfStatus.textContent = `${formatPrintedQuestionLabel(safeQ)}번 ${safeChoice} 선택`;
+    if (options.event) {
+      options.event.preventDefault?.();
+      options.event.stopPropagation?.();
+    }
+    return true;
+  }
+  /* SOFTM-문항클릭 끝 */
+
+  async function findAllModeChoiceAnchorHit(point, options = {}){
     if (!point || !Number.isFinite(point.page)) return null;
     const { page: pageNo, canvas, meta, canvasX, canvasY, fullWidth, fullHeight } = point;
     if (!canvas || !meta) return null;
@@ -6899,10 +7206,25 @@
     for (const q of (questionList.length ? questionList : normalizeAnchorQuestionList(state.focusQ || 1))){
       const mappedPage = Array.isArray(pageMap) ? Number(pageMap[q]) : NaN;
       if (Number.isFinite(mappedPage) && Math.floor(mappedPage) !== Number(pageNo)) continue;
+      const qPoints = await buildAllModeChoiceAreaPointsAsync(q, pageNo, {
+        ...point,
+        canvas,
+        meta,
+        fullWidth,
+        fullHeight,
+        allowFallback: options.allowFallback !== false,
+      }); // SOFTM-문항클릭: 화면에 그리는 문항영역과 같은 포인트 생성 경로로 클릭 hit-test 수행 - 2026-06-15
+      if (qPoints.length) {
+        const rectHit = findAllModeChoiceClickAreaRectHit(qPoints, canvasX, canvasY, canvas, q, pageNo, meta);
+        if (rectHit && (!bestBand || Number(rectHit.score) < Number(bestBand.score))) bestBand = rectHit;
+        const anchorHit = findChoiceAnchorPointHit(qPoints, canvasX, canvasY);
+        if (anchorHit && (!bestBand || Number(anchorHit.score) < Number(bestBand.score))) bestBand = anchorHit;
+        continue;
+      }
       const storedChoices = getReliableChoiceAnchorsForQuestion(q, pageNo);
       const hasManualChoiceArea = getManualChoiceClickAreas(q).some((area) => Number(area.page) === Number(pageNo));
       if ((!Array.isArray(storedChoices) || !storedChoices.length) && !hasManualChoiceArea) continue;
-      const qPoints = [];
+      const syncPoints = [];
       for (const item of (Array.isArray(storedChoices) ? storedChoices : [])){
         if (Number(item?.page || pageNo) !== Number(pageNo)) continue;
         if (options.requireSameColumn !== false && !isAnchorSameColumnAsPoint(item, point)) continue;
@@ -6919,15 +7241,17 @@
           canvas.height
         );
         if (!projected) continue;
-        qPoints.push({ q, choice, page: pageNo, x: projected.x, y: projected.y, r: projected.r, anchor: item });
+        syncPoints.push({ q, choice, page: pageNo, x: projected.x, y: projected.y, r: projected.r, anchor: item });
       }
-      const rectHit = findAllModeChoiceClickAreaRectHit(qPoints, canvasX, canvasY, canvas, q, pageNo, meta);
+      const rectHit = findAllModeChoiceClickAreaRectHit(syncPoints, canvasX, canvasY, canvas, q, pageNo, meta);
       if (rectHit && (!bestBand || Number(rectHit.score) < Number(bestBand.score))) bestBand = rectHit;
+      const anchorHit = findChoiceAnchorPointHit(syncPoints, canvasX, canvasY);
+      if (anchorHit && (!bestBand || Number(anchorHit.score) < Number(bestBand.score))) bestBand = anchorHit;
     }
     return bestBand;
   }
 
-  function hasAllModeChoiceClickAreasForPoint(point, options = {}){
+  async function hasAllModeChoiceClickAreasForPoint(point, options = {}){
     if (!point || !Number.isFinite(point.page)) return false;
     const { page: pageNo, canvas, meta, fullWidth, fullHeight } = point;
     if (!canvas || !meta) return false;
@@ -6936,26 +7260,14 @@
     for (const q of (questionList.length ? questionList : normalizeAnchorQuestionList(state.focusQ || 1))){
       const mappedPage = Array.isArray(pageMap) ? Number(pageMap[q]) : NaN;
       if (Number.isFinite(mappedPage) && Math.floor(mappedPage) !== Number(pageNo)) continue;
-      const storedChoices = getReliableChoiceAnchorsForQuestion(q, pageNo);
-      const qPoints = [];
-      for (const item of (Array.isArray(storedChoices) ? storedChoices : [])){
-        if (Number(item?.page || pageNo) !== Number(pageNo)) continue;
-        if (options.requireSameColumn !== false && !isAnchorSameColumnAsPoint(item, point)) continue;
-        const choice = Number(item.choice);
-        if (!Number.isInteger(choice) || choice < 1 || choice > Math.max(5, CHOICE_COUNT)) continue;
-        const projected = projectChoiceAnchorToCanvas(
-          item,
-          { width: fullWidth, height: fullHeight },
-          Number(meta.srcLeft || 0),
-          0,
-          Number(meta.srcWidth || fullWidth),
-          fullHeight,
-          canvas.width,
-          canvas.height
-        );
-        if (!projected) continue;
-        qPoints.push({ q, choice, page: pageNo, x: projected.x, y: projected.y, r: projected.r, anchor: item });
-      }
+      const qPoints = await buildAllModeChoiceAreaPointsAsync(q, pageNo, {
+        ...point,
+        canvas,
+        meta,
+        fullWidth,
+        fullHeight,
+        allowFallback: options.allowFallback !== false,
+      }); // SOFTM-문항클릭: fallback 차단 여부도 실제 표시되는 문항영역 기준으로 판단 - 2026-06-15
       if (getChoiceClickAreaCanvasRects(q, pageNo, canvas, meta, qPoints).length) return true;
     }
     return false;
@@ -8703,6 +9015,7 @@
     if (!pattern || typeof pattern !== "object") return false;
     if (pattern.version !== PDF_PATTERN_VERSION) return false;
     if (String(pattern.source || "") !== getCurrentPdfSourceKey()) return false;
+    if (pattern.anchorMapPath && !isAnchorMapPathCompatibleWithCurrentPdf(pattern.anchorMapPath)) return false; // SOFTM-앵커맵: 다른 PDF의 앵커맵이 캐시 패턴으로 재적용되는 것을 차단 - 2026-06-15
     if (Number(pattern.questionCount) !== QUESTION_COUNT) return false;
     const configured = getConfiguredQuestionRange();
     const anchorPatternCanOverrideRange = pattern.patternSource === "anchor" && Array.isArray(pattern.printedQuestionNoMap);
@@ -12123,46 +12436,61 @@
     ctx.restore();
   }
 
+  /* SOFTM-활성화표시 시작: 문항 활성화 선을 앵커 옆에서 텍스트 끝까지 표시하고 굵기는 CSS px 기준으로 통일 - 2026-06-15 */
+  function getCanvasCssPixelScale(canvas){
+    if (!canvas || typeof canvas.getBoundingClientRect !== "function") return 1;
+    const rect = canvas.getBoundingClientRect();
+    const cssWidth = Number(rect?.width);
+    const pixelWidth = Number(canvas.width);
+    if (!Number.isFinite(cssWidth) || cssWidth <= 0 || !Number.isFinite(pixelWidth) || pixelWidth <= 0) return 1;
+    return Math.max(0.5, Math.min(4, pixelWidth / cssWidth));
+  }
+
+  function getChoiceFeedbackStrokeWidth(ctx, weight = 1){
+    const scale = getCanvasCssPixelScale(ctx?.canvas);
+    return Math.max(1.4 * scale, Math.min(2.2 * scale, 1.9 * scale * weight));
+  }
+
   function getChoiceFeedbackLine(projected, rect, tone){
     const x = Number(projected?.x);
     const y = Number(projected?.y);
     const r = Math.max(8, Math.min(56, Number(projected?.r) || 16));
     const canvasWidth = Number(projected?.canvasWidth || 0);
-    if (rect && [rect.x, rect.y, rect.w, rect.h].every(Number.isFinite) && rect.w > 0 && rect.h > 0) {
-      const rectLeft = Number(rect.x) + Math.max(2, Math.min(rect.w * 0.025, r * 0.35));
-      const right = Number(rect.x) + Number(rect.w) - Math.max(3, Math.min(rect.w * 0.040, r * 0.34));
-      const anchorEnd = Number.isFinite(x) ? x + r * 1.04 : null;
-      const left = Number.isFinite(anchorEnd)
-        ? Math.max(rectLeft, Math.min(right - 4, anchorEnd))
-        : rectLeft;
-      const underlineY = Number.isFinite(y)
-        ? y + Math.max(4, r * 0.72)
-        : Number(rect.y) + Number(rect.h) * 0.76;
-      const lineY = tone === "correct"
-        ? Math.max(Number(rect.y) + Number(rect.h) * 0.58, Math.min(Number(rect.y) + Number(rect.h) * 0.90, underlineY))
-        : (Number.isFinite(y) ? y : Number(rect.y) + Number(rect.h) * 0.50);
-      return {
-        x1: Math.max(0, left),
-        x2: canvasWidth > 0 ? Math.min(canvasWidth, right) : right,
-        y: lineY,
-        r
-      };
-    }
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    const x1 = x + r * 1.04;
-    const x2 = x + r * 4.7;
+    const canvasCssScale = Math.max(0.5, Math.min(4, Number(projected?.canvasCssScale) || 1));
+    const x1 = Math.max(0, x + r * 0.85);
+    let x2 = x1 + r * 12;
+    if (rect && [rect.x, rect.y, rect.w, rect.h].every(Number.isFinite) && rect.w > 0 && rect.h > 0) {
+      const rectRight = Number(rect.x) + Number(rect.w) - Math.max(2, r * 0.16);
+      const textRight = Number(rect.textRight);
+      const targetRight = Number.isFinite(textRight)
+        ? Math.max(textRight + Math.max(2, r * 0.16), x1 + r * 5.5)
+        : rectRight;
+      x2 = Math.min(rectRight, Math.max(targetRight, x1 + r * 9));
+    }
+    if (x2 <= x1 + Math.max(12, r * 3.5)) x2 = x1 + Math.max(28, r * 9);
+    if (canvasWidth > 0) x2 = Math.min(canvasWidth, x2);
+    const anchorY = tone === "correct" ? y + r + (5 * canvasCssScale) : y;
+    let lineY = anchorY;
+    if (rect && [rect.y, rect.h].every(Number.isFinite) && rect.h > 0) {
+      const topLimit = Number(rect.y) + Number(rect.h) * (tone === "correct" ? 0.50 : 0.28);
+      const bottomLimit = Number(rect.y) + Number(rect.h) * (tone === "correct" ? 0.96 : 0.72);
+      lineY = Math.max(topLimit, Math.min(bottomLimit, anchorY));
+    }
     return {
-      x1: Math.max(0, x1),
-      x2: canvasWidth > 0 ? Math.min(canvasWidth, x2) : x2,
-      y: y + (tone === "correct" ? r * 0.72 : 0),
+      x1,
+      x2,
+      y: lineY,
       r
     };
   }
+  /* SOFTM-활성화표시 끝 */
 
   function drawChoiceCorrectFeedback(ctx, projected, rect = null){
     if (!ctx || !projected || !Number.isFinite(projected.x) || !Number.isFinite(projected.y)) return;
     const r = Math.max(8, Math.min(56, Number(projected.r) || 16));
-    const line = getChoiceFeedbackLine({ ...projected, canvasWidth: ctx.canvas?.width || 0 }, rect, "correct");
+    const canvasCssScale = getCanvasCssPixelScale(ctx.canvas);
+    const line = getChoiceFeedbackLine({ ...projected, canvasWidth: ctx.canvas?.width || 0, canvasCssScale }, rect, "correct");
     ctx.save();
     if (typeof ctx.setTransform === "function") ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
@@ -12171,13 +12499,13 @@
     ctx.lineJoin = "round";
     ctx.strokeStyle = "#004eea";
     ctx.fillStyle = "rgba(0,78,234,0.10)";
-    ctx.lineWidth = Math.max(2.4, r * 0.14);
+    ctx.lineWidth = getChoiceFeedbackStrokeWidth(ctx, 0.88);
     ctx.beginPath();
     ctx.arc(projected.x, projected.y, Math.max(7, r * 0.88), 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     if (line && line.x2 > line.x1 + 4) {
-      ctx.lineWidth = Math.max(2.6, line.r * 0.16);
+      ctx.lineWidth = getChoiceFeedbackStrokeWidth(ctx, 1);
       ctx.beginPath();
       ctx.moveTo(line.x1, line.y);
       ctx.lineTo(line.x2, line.y);
@@ -12188,7 +12516,7 @@
 
   function drawChoiceWrongFeedback(ctx, projected, rect = null){
     if (!ctx || !projected || !Number.isFinite(projected.x) || !Number.isFinite(projected.y)) return;
-    const line = getChoiceFeedbackLine({ ...projected, canvasWidth: ctx.canvas?.width || 0 }, rect, "wrong");
+    const line = getChoiceFeedbackLine({ ...projected, canvasWidth: ctx.canvas?.width || 0, canvasCssScale: getCanvasCssPixelScale(ctx.canvas) }, rect, "wrong");
     if (!line || line.x2 <= line.x1 + 4) return;
     ctx.save();
     if (typeof ctx.setTransform === "function") ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -12197,16 +12525,10 @@
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.strokeStyle = "rgba(224,0,10,0.92)";
-    ctx.lineWidth = Math.max(2.4, line.r * 0.17);
+    ctx.lineWidth = getChoiceFeedbackStrokeWidth(ctx, 1);
     ctx.beginPath();
     ctx.moveTo(line.x1, line.y);
     ctx.lineTo(line.x2, line.y);
-    ctx.stroke();
-    ctx.strokeStyle = "rgba(255,60,42,0.48)";
-    ctx.lineWidth = Math.max(1.2, line.r * 0.07);
-    ctx.beginPath();
-    ctx.moveTo(line.x1, line.y - Math.max(1, line.r * 0.09));
-    ctx.lineTo(line.x2, line.y - Math.max(1, line.r * 0.09));
     ctx.stroke();
     ctx.restore();
   }
@@ -12214,6 +12536,7 @@
 
   async function drawChoiceAnchorDebugMarkersSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws = null){
     if (!ANCHOR_DEBUG || !fullCanvas || !Number.isFinite(q) || !Number.isFinite(pageNo)) return;
+    if (anchorEditState.enabled && !hasStoredChoiceAnchorMapForQuestion(q, pageNo)) return;
     let sourceTone = "anchor";
     let list = getReliableChoiceAnchorsForQuestion(q, pageNo);
     const visibleChoiceCount = Math.max(1, Math.min(5, Number(state.pdfNav.choiceCount) || CHOICE_COUNT));
@@ -12784,6 +13107,7 @@
 
   async function drawChoiceAnchorDebugMarkersAll(pageNo, q, options = {}){
     if (!ANCHOR_DEBUG || !Number.isFinite(pageNo) || !Number.isFinite(q)) return false;
+    if (anchorEditState.enabled && !hasStoredChoiceAnchorMapForQuestion(q, pageNo)) return false;
     let sourceTone = "anchor";
     let list = getReliableChoiceAnchorsForQuestion(q, pageNo);
     const allowPdfFallback = options.allowPdfFallback !== false;
@@ -15542,10 +15866,11 @@
     const areaRects = getChoiceClickAreaCanvasRects(q, meta.page, pdfCanvas, areaMeta, areaPoints);
     const areaHit = findAllModeChoiceClickAreaRectHit(areaPoints, xOnCanvas, yOnCanvas, pdfCanvas, q, meta.page, areaMeta);
     if (areaHit && Number.isFinite(areaHit.choice)) {
-      const choice = Math.max(1, Math.min(CHOICE_COUNT, Math.trunc(areaHit.choice)));
-      chooseByKeyboard(choice, { advance: false });
-      pdfStatus.textContent = `${formatPrintedQuestionLabel(q)}번 ${choice} 선택`;
-      return;
+      if (selectChoiceFromPdfHit(q, areaHit.choice, { event: e })) return;
+    }
+    const anchorHit = findChoiceAnchorPointHit(areaPoints, xOnCanvas, yOnCanvas);
+    if (anchorHit && Number.isFinite(anchorHit.choice)) {
+      if (selectChoiceFromPdfHit(q, anchorHit.choice, { event: e })) return;
     }
     if (areaRects.length) return;
     if (anchors.length){
@@ -15579,27 +15904,21 @@
           const col = xFull < midX ? 0 : 1;
           const row = yFull < midY ? 0 : 1;
           const choice = (row * 2) + col + 1;
-          chooseByKeyboard(choice, { advance: false });
-          pdfStatus.textContent = `${formatPrintedQuestionLabel(q)}번 ${choice} 선택`;
-          return;
+          if (selectChoiceFromPdfHit(q, choice, { event: e })) return;
         }
         if (ySpread <= Math.max(22, xSpread * 0.22)) {
           // 가로 1열 배치
           const sorted = [...points].sort((a, b) => a.cx - b.cx);
           const idx = sorted.findIndex((p, i) => i === sorted.length - 1 || xFull < ((p.cx + sorted[i + 1].cx) * 0.5));
           const choice = Math.max(1, Math.min(CHOICE_COUNT, (idx >= 0 ? idx : (sorted.length - 1)) + 1));
-          chooseByKeyboard(choice, { advance: false });
-          pdfStatus.textContent = `${formatPrintedQuestionLabel(q)}번 ${choice} 선택`;
-          return;
+          if (selectChoiceFromPdfHit(q, choice, { event: e })) return;
         }
         if (xSpread <= Math.max(70, ySpread * 0.35)) {
           // 세로 1열 배치
           const sorted = [...points].sort((a, b) => a.cy - b.cy);
           const idx = sorted.findIndex((p, i) => i === sorted.length - 1 || yFull < ((p.cy + sorted[i + 1].cy) * 0.5));
           const choice = Math.max(1, Math.min(CHOICE_COUNT, (idx >= 0 ? idx : (sorted.length - 1)) + 1));
-          chooseByKeyboard(choice, { advance: false });
-          pdfStatus.textContent = `${formatPrintedQuestionLabel(q)}번 ${choice} 선택`;
-          return;
+          if (selectChoiceFromPdfHit(q, choice, { event: e })) return;
         }
       }
       const horizontalLayout = ySpread <= Math.max(22, xSpread * 0.22);
@@ -15610,9 +15929,7 @@
         const cand = (nearRow.length >= 2 ? nearRow : points)
           .sort((a, b) => Math.abs(xFull - a.cx) - Math.abs(xFull - b.cx))[0];
         if (cand && Math.abs(yFull - cand.cy) <= (rowBand * 1.25)) {
-          chooseByKeyboard(cand.choice, { advance: false });
-          pdfStatus.textContent = `${formatPrintedQuestionLabel(q)}번 ${cand.choice} 선택`;
-          return;
+          if (selectChoiceFromPdfHit(q, cand.choice, { event: e })) return;
         }
       }
       let best = null;
@@ -15636,9 +15953,7 @@
           ? Math.max(180, best.aw * 18.0)
           : Math.max(90, best.aw * 10.0);
         if (best.dy <= yLimit && best.dx <= xLimit) {
-          chooseByKeyboard(best.choice, { advance: false });
-          pdfStatus.textContent = `${formatPrintedQuestionLabel(q)}번 ${best.choice} 선택`;
-          return;
+          if (selectChoiceFromPdfHit(q, best.choice, { event: e })) return;
         }
       }
     }
@@ -15654,8 +15969,7 @@
       // 매우 위쪽 클릭은 1/2, 매우 아래쪽 클릭은 3/4로 보정
       if (ny < 0.40) choice = col === 0 ? 1 : 2;
       if (ny > 0.66) choice = col === 0 ? 3 : 4;
-      chooseByKeyboard(choice, { advance: false });
-      pdfStatus.textContent = `${formatPrintedQuestionLabel(q)}번 ${choice} 선택`;
+      selectChoiceFromPdfHit(q, choice, { event: e });
     }
   }
 
@@ -15696,14 +16010,11 @@
       ...visibleDetailQuestions,
       ...(Number.isFinite(roughQ) && roughQ > 0 ? [roughQ] : []),
     ]);
-    const directChoiceHit = findAllModeChoiceAnchorHit(clickPoint, { requireSameColumn: true });
+    const directChoiceHit = await findAllModeChoiceAnchorHit(clickPoint, { requireSameColumn: true });
     if (directChoiceHit && Number.isFinite(directChoiceHit.q) && Number.isFinite(directChoiceHit.choice)) {
-      const directChoice = Math.max(1, Math.min(CHOICE_COUNT, Math.trunc(directChoiceHit.choice)));
-      setFocusQuestionSilently(directChoiceHit.q);
-      chooseByKeyboard(directChoice, { advance: false });
-      return;
+      if (selectChoiceFromPdfHit(directChoiceHit.q, directChoiceHit.choice, { event: e })) return;
     }
-    if (hasAllModeChoiceClickAreasForPoint(clickPoint, { requireSameColumn: true })) return;
+    if (await hasAllModeChoiceClickAreasForPoint(clickPoint, { requireSameColumn: true })) return;
 
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
@@ -15781,8 +16092,7 @@
       picked = (row * 2) + col + 1;
     }
     const choice = Math.max(1, Math.min(CHOICE_COUNT, Math.trunc(picked)));
-    setFocusQuestionSilently(q);
-    chooseByKeyboard(choice, { advance: false });
+    selectChoiceFromPdfHit(q, choice, { event: e });
   }
 
   // ====== 채점 ======

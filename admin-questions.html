@@ -850,7 +850,8 @@
     function attentionChipsForRow(item){
       const chips = [];
       const hasOcrIssue = Boolean(item.needsOcr || item.questionDiagStatus === "OCR");
-      if (hasNonNormalText(item.issue)) {
+      const answerIssue = String(item.answerIssue || "");
+      if (hasNonNormalText(item.issue) && (!answerIssue || String(item.issue || "") !== answerIssue)) {
         chips.push({ label: item.issue, tone: item.issue.includes("없음") ? "danger" : "warn", title: item.issue });
       }
       if (hasNonNormalText(item.fileIssue)) {
@@ -862,7 +863,7 @@
         chips.push({ label: questionTextDiagLabel(item), tone: "warn", title: warningText(item.questionDiagWarnings) });
       }
       if (hasNonNormalText(item.answerIssue) || (item.answerDiagTone && item.answerDiagTone !== "ok")) {
-        const label = item.answerDiagStatus || item.answerIssue || "정답 확인";
+        const label = item.answerIssue || item.answerDiagStatus || "정답 확인";
         chips.push({ label, tone: label.includes("없음") ? "danger" : "warn", title: warningText(item.answerDiagWarnings) });
       }
       if (Array.isArray(item.anchorWarnings) && item.anchorWarnings.length) {
