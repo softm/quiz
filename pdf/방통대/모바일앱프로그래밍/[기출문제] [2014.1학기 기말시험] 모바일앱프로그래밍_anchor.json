@@ -101,21 +101,21 @@
       "page": 1,
       "xRatio": 0.5098743267504489,
       "yRatio": 0.05294863665187064,
-      "anchorColumn": 1
+      "label": 11,
+      "anchorColumn": 1,
+      "source": "manual-anchor",
+      "q": 11,
+      "ratio": 0.05294863665187064,
+      "wRatio": 0.02,
+      "hRatio": 0.018,
+      "anchorMode": "center",
+      "confidence": 1
     },
     "12": {
       "page": 1,
       "xRatio": 0.5098743267504489,
       "yRatio": 0.18833227647431833,
-      "label": 12,
-      "anchorColumn": 1,
-      "source": "manual-anchor",
-      "q": 12,
-      "ratio": 0.18833227647431833,
-      "wRatio": 0.02,
-      "hRatio": 0.018,
-      "anchorMode": "center",
-      "confidence": 1
+      "anchorColumn": 1
     },
     "13": {
       "page": 1,
@@ -189,29 +189,13 @@
       "page": 2,
       "xRatio": 0.5094254937163375,
       "yRatio": 0.6097019657577679,
-      "label": 24,
-      "anchorColumn": 1,
-      "source": "manual-anchor",
-      "q": 24,
-      "ratio": 0.6097019657577679,
-      "wRatio": 0.02,
-      "hRatio": 0.018,
-      "anchorMode": "center",
-      "confidence": 1
+      "anchorColumn": 1
     },
     "25": {
       "page": 2,
       "xRatio": 0.5094254937163375,
       "yRatio": 0.852568167406468,
-      "label": 25,
-      "anchorColumn": 1,
-      "source": "manual-anchor",
-      "q": 25,
-      "ratio": 0.852568167406468,
-      "wRatio": 0.02,
-      "hRatio": 0.018,
-      "anchorMode": "center",
-      "confidence": 1
+      "anchorColumn": 1
     }
   },
   "questionColumnBoundsMap": {
@@ -1258,10 +1242,11 @@
         "yRatio": 0.07530120481927711,
         "wRatio": 0.01,
         "hRatio": 0.012,
-        "source": "anchor-image",
+        "source": "manual-anchor",
         "anchorMode": "center",
         "layout": "vertical",
-        "confidence": 0.8999999999999999
+        "confidence": 1,
+        "q": 11
       },
       {
         "choice": 2,
@@ -1270,10 +1255,11 @@
         "yRatio": 0.08719086873811034,
         "wRatio": 0.01,
         "hRatio": 0.012,
-        "source": "anchor-image",
+        "source": "manual-anchor",
         "anchorMode": "center",
         "layout": "vertical",
-        "confidence": 0.8999999999999999
+        "confidence": 1,
+        "q": 11
       },
       {
         "choice": 3,
@@ -1282,22 +1268,23 @@
         "yRatio": 0.10034876347495245,
         "wRatio": 0.01,
         "hRatio": 0.012,
-        "source": "anchor-image",
+        "source": "manual-anchor",
         "anchorMode": "center",
         "layout": "vertical",
-        "confidence": 0.8999999999999999
+        "confidence": 1,
+        "q": 11
       },
       {
+        "q": 11,
         "choice": 4,
         "page": 1,
-        "xRatio": 0.558572710951526,
-        "yRatio": 0.11778693722257451,
-        "wRatio": 0.01,
-        "hRatio": 0.012,
-        "source": "anchor-image",
+        "xRatio": 0.5387673956262425,
+        "yRatio": 0.10385964912280701,
+        "wRatio": 0.018,
+        "hRatio": 0.018,
+        "source": "manual-anchor",
         "anchorMode": "center",
-        "layout": "vertical",
-        "confidence": 0.8999999999999999
+        "confidence": 1
       }
     ],
     "12": [
@@ -2217,29 +2204,69 @@
   "warnings": [
     "일부 선택지 위치가 누락되었습니다(84/100). 틀린 좌표 대신 누락으로 표시합니다."
   ],
-  "generatedAt": "2026-06-15T15:24:25.107Z",
+  "generatedAt": "2026-06-15T23:40:14.297Z",
   "choiceClickAreaMap": {},
   "_manualBase": {
     "questionLabelMap": {
-      "12": {
+      "11": {
         "page": 1,
         "xRatio": 0.5098743267504489,
-        "yRatio": 0.18833227647431833,
-        "anchorColumn": 1
-      },
-      "24": {
-        "page": 2,
-        "xRatio": 0.5094254937163375,
-        "yRatio": 0.6097019657577679,
-        "anchorColumn": 1
-      },
-      "25": {
-        "page": 2,
-        "xRatio": 0.5094254937163375,
-        "yRatio": 0.852568167406468,
+        "yRatio": 0.05294863665187064,
         "anchorColumn": 1
       }
+    },
+    "choiceAnchorMap": {
+      "11": [
+        {
+          "choice": 1,
+          "page": 1,
+          "xRatio": 0.5614901256732495,
+          "yRatio": 0.07530120481927711,
+          "wRatio": 0.01,
+          "hRatio": 0.012,
+          "source": "anchor-image",
+          "anchorMode": "center",
+          "layout": "vertical",
+          "confidence": 0.8999999999999999
+        },
+        {
+          "choice": 2,
+          "page": 1,
+          "xRatio": 0.5587971274685817,
+          "yRatio": 0.08719086873811034,
+          "wRatio": 0.01,
+          "hRatio": 0.012,
+          "source": "anchor-image",
+          "anchorMode": "center",
+          "layout": "vertical",
+          "confidence": 0.8999999999999999
+        },
+        {
+          "choice": 3,
+          "page": 1,
+          "xRatio": 0.5596947935368043,
+          "yRatio": 0.10034876347495245,
+          "wRatio": 0.01,
+          "hRatio": 0.012,
+          "source": "anchor-image",
+          "anchorMode": "center",
+          "layout": "vertical",
+          "confidence": 0.8999999999999999
+        },
+        {
+          "choice": 4,
+          "page": 1,
+          "xRatio": 0.558572710951526,
+          "yRatio": 0.11778693722257451,
+          "wRatio": 0.01,
+          "hRatio": 0.012,
+          "source": "anchor-image",
+          "anchorMode": "center",
+          "layout": "vertical",
+          "confidence": 0.8999999999999999
+        }
+      ]
     }
   },
-  "manualEditedAt": "2026-06-15T15:24:25.107Z"
+  "manualEditedAt": "2026-06-15T23:40:14.297Z"
 }
