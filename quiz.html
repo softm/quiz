@@ -8166,23 +8166,64 @@
     setAnchorEditStatus(`${formatPrintedQuestionLabel(q)}번 문제 앵커를 수정했습니다.`);
   }
 
+  /* SOFTM-문항앵커 시작: 선택편집으로 문항 앵커 위치를 다시 찍을 때 원 크기는 같은 문제의 기존 문항 크기를 유지한다 - 2026-06-16 */
+  function clampManualChoiceAnchorRatio(value, fallback, min, max){
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return fallback;
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function medianManualChoiceAnchorRatio(values){
+    const sorted = values
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value) && value > 0)
+      .sort((a, b) => a - b);
+    if (!sorted.length) return null;
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+
+  function getManualChoiceAnchorSizeForPlacement(q, choice){
+    const key = String(q);
+    const staged = getAnchorEditPatch().choiceAnchorMap?.[key];
+    const existing = state.pdfNav?.choiceAnchorMap?.[key];
+    const anchors = (Array.isArray(staged) ? staged : [])
+      .concat(Array.isArray(existing) ? existing : [])
+      .filter((item) => item && Number(item.choice) >= 1 && Number(item.choice) <= CHOICE_COUNT);
+    const siblings = anchors.filter((item) => Number(item.choice) !== Number(choice));
+    const same = anchors.find((item) => Number(item.choice) === Number(choice));
+    const siblingW = medianManualChoiceAnchorRatio(siblings.map((item) => item.wRatio));
+    const siblingH = medianManualChoiceAnchorRatio(siblings.map((item) => item.hRatio));
+    const fallbackW = siblingW ?? Number(same?.wRatio) ?? 0.01;
+    const fallbackH = siblingH ?? Number(same?.hRatio) ?? 0.012;
+    const layoutSource = siblings.find((item) => item?.layout) || same || anchors.find((item) => item?.layout);
+    return {
+      wRatio: clampManualChoiceAnchorRatio(fallbackW, 0.01, 0.006, 0.016),
+      hRatio: clampManualChoiceAnchorRatio(fallbackH, 0.012, 0.006, 0.014),
+      layout: layoutSource?.layout || "",
+    };
+  }
+  /* SOFTM-문항앵커 끝 */
+
   function stageManualChoiceAnchor(point, choiceOverride = null){
     const q = point.q;
     const choice = Math.max(1, Math.min(CHOICE_COUNT, Number(choiceOverride || point.choice || anchorEditState.choice) || 1));
     pushAnchorEditHistory(`${formatPrintedQuestionLabel(q)}-${choice} 문항 앵커`);
     setAnchorEditTargetQuestion(q, { syncFocus: state.viewMode === "single", resetChoice: false });
+    const size = getManualChoiceAnchorSizeForPlacement(q, choice);
     const anchor = {
       q,
       choice,
       page: point.page,
       xRatio: point.xRatio,
       yRatio: point.yRatio,
-      wRatio: 0.018,
-      hRatio: 0.018,
+      wRatio: size.wRatio,
+      hRatio: size.hRatio,
       source: "manual-anchor",
       anchorMode: "center",
       confidence: 1,
     };
+    if (size.layout) anchor.layout = size.layout;
     const existing = state.pdfNav?.choiceAnchorMap?.[String(q)];
     const staged = getAnchorEditPatch().choiceAnchorMap[String(q)];
     const base = Array.isArray(staged) ? staged : (Array.isArray(existing) ? existing : []);
