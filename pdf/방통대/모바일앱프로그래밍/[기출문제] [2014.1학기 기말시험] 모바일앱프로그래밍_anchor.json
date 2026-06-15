@@ -189,13 +189,29 @@
       "page": 2,
       "xRatio": 0.5094254937163375,
       "yRatio": 0.6097019657577679,
-      "anchorColumn": 1
+      "label": 24,
+      "anchorColumn": 1,
+      "source": "manual-anchor",
+      "q": 24,
+      "ratio": 0.6097019657577679,
+      "wRatio": 0.02,
+      "hRatio": 0.018,
+      "anchorMode": "center",
+      "confidence": 1
     },
     "25": {
       "page": 2,
       "xRatio": 0.5094254937163375,
       "yRatio": 0.852568167406468,
-      "anchorColumn": 1
+      "label": 25,
+      "anchorColumn": 1,
+      "source": "manual-anchor",
+      "q": 25,
+      "ratio": 0.852568167406468,
+      "wRatio": 0.02,
+      "hRatio": 0.018,
+      "anchorMode": "center",
+      "confidence": 1
     }
   },
   "questionColumnBoundsMap": {
@@ -2201,7 +2217,7 @@
   "warnings": [
     "일부 선택지 위치가 누락되었습니다(84/100). 틀린 좌표 대신 누락으로 표시합니다."
   ],
-  "generatedAt": "2026-06-15T14:53:06.324Z",
+  "generatedAt": "2026-06-15T15:24:25.107Z",
   "choiceClickAreaMap": {},
   "_manualBase": {
     "questionLabelMap": {
@@ -2210,8 +2226,20 @@
         "xRatio": 0.5098743267504489,
         "yRatio": 0.18833227647431833,
         "anchorColumn": 1
+      },
+      "24": {
+        "page": 2,
+        "xRatio": 0.5094254937163375,
+        "yRatio": 0.6097019657577679,
+        "anchorColumn": 1
+      },
+      "25": {
+        "page": 2,
+        "xRatio": 0.5094254937163375,
+        "yRatio": 0.852568167406468,
+        "anchorColumn": 1
       }
     }
   },
-  "manualEditedAt": "2026-06-15T14:53:06.324Z"
+  "manualEditedAt": "2026-06-15T15:24:25.107Z"
 }

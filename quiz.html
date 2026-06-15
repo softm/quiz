@@ -5253,14 +5253,10 @@
   }
 
   function inferAnchorColumnForQuestion(q){
-    const anchor = getQuestionAnchorForEditFind(Number(q));
-    if (anchor && Number.isFinite(Number(anchor.xRatio))) return Number(anchor.xRatio) >= 0.5 ? 2 : 1;
-    const choices = getReliableChoiceAnchorsForQuestion(q) || [];
-    const xs = choices.map((item) => Number(item?.xRatio)).filter(Number.isFinite);
-    if (xs.length) {
-      const avg = xs.reduce((sum, x) => sum + x, 0) / xs.length;
-      return avg >= 0.5 ? 2 : 1;
-    }
+    const safeQ = Math.trunc(Number(q) || 0);
+    const pageNo = getQuestionPageForScrollFocus(safeQ);
+    const column = getQuestionColumnForScrollFocus(safeQ, pageNo);
+    if (column === 1 || column === 2) return column;
     return getAnchorEditActiveColumn();
   }
 
@@ -5304,9 +5300,122 @@
     return x >= 0.5 ? 2 : 1;
   }
 
+  /* SOFTM-2단스크롤 시작: 스크롤 포커스 단 판정은 문항 앵커보다 문제 세그먼트/컬럼/문제 앵커를 우선 사용 - 2026-06-16 */
+  function getQuestionPageForScrollFocus(q){
+    const safeQ = Math.trunc(Number(q) || 0);
+    if (safeQ < 1 || safeQ > QUESTION_COUNT) return 0;
+    const pageMap = state.pdfNav?.questionPageMap;
+    const mappedPage = Array.isArray(pageMap) ? Number(pageMap[safeQ]) : NaN;
+    if (Number.isFinite(mappedPage) && mappedPage > 0) return Math.floor(mappedPage);
+    for (const map of [state.pdfNav?.questionAnchorMap, state.pdfNav?.questionLabelMap]){
+      const value = map && typeof map === "object" ? (map[String(safeQ)] ?? map[safeQ]) : null;
+      const page = Number(value?.page);
+      if (Number.isFinite(page) && page > 0) return Math.floor(page);
+    }
+    const segments = state.pdfNav?.questionSegments && Array.isArray(state.pdfNav.questionSegments[String(safeQ)])
+      ? state.pdfNav.questionSegments[String(safeQ)]
+      : [];
+    for (const seg of segments){
+      const page = Number(seg?.page);
+      if (Number.isFinite(page) && page > 0) return Math.floor(page);
+    }
+    return 0;
+  }
+
+  function isQuestionMappedToScrollPage(q, pageNo){
+    const safePage = Math.trunc(Number(pageNo) || 0);
+    if (safePage <= 0) return true;
+    const mappedPage = getQuestionPageForScrollFocus(q);
+    return !mappedPage || mappedPage === safePage;
+  }
+
+  function getQuestionSegmentColumnForScrollFocus(q, pageNo){
+    const safeQ = Math.trunc(Number(q) || 0);
+    const safePage = Math.trunc(Number(pageNo) || 0);
+    const segments = state.pdfNav?.questionSegments && Array.isArray(state.pdfNav.questionSegments[String(safeQ)])
+      ? state.pdfNav.questionSegments[String(safeQ)]
+      : [];
+    let best = null;
+    for (const seg of segments){
+      const page = Number(seg?.page);
+      if (safePage > 0 && Number.isFinite(page) && Math.floor(page) !== safePage) continue;
+      const left = Number.isFinite(Number(seg?.left)) ? Math.max(0, Math.min(1, Number(seg.left))) : 0;
+      const right = Number.isFinite(Number(seg?.right)) ? Math.max(0, Math.min(1, Number(seg.right))) : 1;
+      if (right <= left + 0.08) continue;
+      const column = getColumnFromXRatio((left + right) * 0.5);
+      const widthPenalty = Math.max(0, right - left);
+      if (!best || widthPenalty < best.widthPenalty) best = { column, widthPenalty };
+    }
+    return best?.column || 0;
+  }
+
+  function getQuestionStoredAnchorColumnForScrollFocus(q, pageNo){
+    const safeQ = Math.trunc(Number(q) || 0);
+    const safePage = Math.trunc(Number(pageNo) || 0);
+    for (const map of [state.pdfNav?.questionAnchorMap, state.pdfNav?.questionLabelMap]){
+      const value = map && typeof map === "object" ? (map[String(safeQ)] ?? map[safeQ]) : null;
+      if (!value || typeof value !== "object") continue;
+      const page = Number(value.page);
+      if (safePage > 0 && Number.isFinite(page) && Math.floor(page) !== safePage) continue;
+      const x = Number(value.xRatio);
+      if (Number.isFinite(x)) return getColumnFromXRatio(x);
+    }
+    return 0;
+  }
+
+  function isChoiceAnchorTrustedForScrollColumn(anchor){
+    if (!anchor || typeof anchor !== "object") return false;
+    if (anchor.inferred === true) return false;
+    const source = String(anchor.source || "").toLowerCase();
+    if (source.includes("ocr-token") || source.includes("trailing") || source.includes("inferred")) return false;
+    if (source.includes("geometry") || source.includes("fill") || source.startsWith("segment-")) return false;
+    return Number.isFinite(Number(anchor.xRatio));
+  }
+
+  function getQuestionChoiceAnchorColumnForScrollFocus(q, pageNo){
+    const anchors = getReliableChoiceAnchorsForQuestion(q, pageNo) || [];
+    const xs = anchors
+      .filter(isChoiceAnchorTrustedForScrollColumn)
+      .filter((anchor) => pageNo == null || !Number.isFinite(Number(anchor.page)) || Number(anchor.page) === Number(pageNo))
+      .map((anchor) => Number(anchor.xRatio))
+      .filter(Number.isFinite);
+    if (!xs.length) return 0;
+    const avg = xs.reduce((sum, x) => sum + x, 0) / xs.length;
+    return getColumnFromXRatio(avg);
+  }
+
+  function getQuestionColumnForScrollFocus(q, pageNo = null){
+    const safeQ = Math.trunc(Number(q) || 0);
+    const safePage = Math.trunc(Number(pageNo) || 0);
+    if (safeQ < 1 || safeQ > QUESTION_COUNT) return 0;
+    if (safePage > 0 && !isQuestionMappedToScrollPage(safeQ, safePage)) return 0;
+    const bounds = safePage > 0 ? getStoredQuestionColumnBoundsForPage(safePage, safeQ) : null;
+    if (bounds) return getColumnFromXRatio((Number(bounds.left) + Number(bounds.right)) * 0.5);
+    const segmentColumn = getQuestionSegmentColumnForScrollFocus(safeQ, safePage);
+    if (segmentColumn === 1 || segmentColumn === 2) return segmentColumn;
+    const anchorColumn = getQuestionStoredAnchorColumnForScrollFocus(safeQ, safePage);
+    if (anchorColumn === 1 || anchorColumn === 2) return anchorColumn;
+    return getQuestionChoiceAnchorColumnForScrollFocus(safeQ, safePage);
+  }
+
+  function getScrollSyncColumnForPage(pageNo, rect = null){
+    const safePage = Math.trunc(Number(pageNo) || 0);
+    const pointerColumn = getPdfPointerColumnForRect(rect);
+    if (pointerColumn === 1 || pointerColumn === 2) return pointerColumn;
+    for (const q of [state.focusQ, state.pdfScrollSyncLastQ, anchorEditState.editQ, anchorEditState.selectedQ]){
+      const safeQ = Math.trunc(Number(q) || 0);
+      if (safeQ < 1 || safeQ > QUESTION_COUNT) continue;
+      if (safePage > 0 && !isQuestionMappedToScrollPage(safeQ, safePage)) continue;
+      const column = getQuestionColumnForScrollFocus(safeQ, safePage);
+      if (column === 1 || column === 2) return column;
+    }
+    return 0;
+  }
+  /* SOFTM-2단스크롤 끝 */
+
   function rememberPdfPointerPosition(e){
     if (!e || state.viewMode !== "all") return;
-    const point = getAllCanvasPointFromEvent(e);
+    const point = getAllCanvasPointFromEvent(e) || getAllCanvasPointFromClientPosition(e.clientX, e.clientY); // SOFTM-2단스크롤: 캔버스가 아닌 뷰어 자식 위 포인터도 PDF 단 위치로 환산 - 2026-06-16
     if (!point) return;
     anchorEditState.pdfPointerClientX = Number(e.clientX);
     anchorEditState.pdfPointerColumn = getColumnFromXRatio(point.xRatio);
@@ -6158,17 +6267,58 @@
     };
   }
 
+  /* SOFTM-2단스크롤 시작: 편집 패널이 캔버스를 덮어도 뷰어 좌표로 배경 PDF 단 위치를 기억 - 2026-06-16 */
+  function getAllModeCanvasForClientPoint(clientX, clientY){
+    const x = Number(clientX);
+    const y = Number(clientY);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    let best = null;
+    for (const canvas of (state.allPageCanvases || [])){
+      if (!canvas || typeof canvas.getBoundingClientRect !== "function") continue;
+      const pageNo = Number(canvas.dataset?.page);
+      if (!Number.isFinite(pageNo)) continue;
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) continue;
+      const xInside = x >= rect.left && x <= rect.right;
+      const yInside = y >= rect.top && y <= rect.bottom;
+      const visibleTop = Math.max(rect.top, 0);
+      const visibleBottom = Math.min(rect.bottom, window.innerHeight);
+      const visible = Math.max(0, visibleBottom - visibleTop);
+      if (!visible) continue;
+      const distance = yInside ? 0 : Math.min(Math.abs(y - rect.top), Math.abs(y - rect.bottom));
+      const score = distance + (xInside ? 0 : 10000);
+      if (!best || score < best.score) best = { canvas, rect, score };
+    }
+    return best;
+  }
+
+  function getAllCanvasPointFromClientPosition(clientX, clientY, qOverride = null){
+    const hit = getAllModeCanvasForClientPoint(clientX, clientY);
+    if (!hit) return null;
+    const x = Math.max(hit.rect.left + 1, Math.min(hit.rect.right - 1, Number(clientX)));
+    const y = Math.max(hit.rect.top + 1, Math.min(hit.rect.bottom - 1, Number(clientY)));
+    return getAllCanvasPointFromEvent({
+      currentTarget: hit.canvas,
+      clientX: x,
+      clientY: y,
+    }, qOverride, hit.rect);
+  }
+  /* SOFTM-2단스크롤 끝 */
+
   function guessAllModeQuestionFromPoint(point){
     if (!point || !Number.isFinite(point.page)) return 0;
     const pageNo = Number(point.page);
     const y = Number(point.yRatio);
     const x = Number(point.xRatio);
+    const activeColumn = isTwoColumnQuestionPage(pageNo) ? getColumnFromXRatio(x) : 0;
+    const isSameScrollColumn = (q) => !activeColumn || isQuestionInActiveScrollColumn(q, pageNo, activeColumn); // SOFTM-2단스크롤: 전체보기 문제 추정 fallback도 마우스가 위치한 단 후보만 사용 - 2026-06-16
     const pageMap = state.pdfNav?.questionPageMap;
     const segmentsMap = state.pdfNav?.questionSegments;
     let bestSegment = null;
     for (let q = 1; q <= QUESTION_COUNT; q++){
       const mappedPage = Array.isArray(pageMap) ? Number(pageMap[q]) : NaN;
       if (Number.isFinite(mappedPage) && Math.floor(mappedPage) !== pageNo) continue;
+      if (!isSameScrollColumn(q)) continue;
       const segments = segmentsMap && Array.isArray(segmentsMap[String(q)]) ? segmentsMap[String(q)] : [];
       for (const seg of segments){
         if (Number(seg?.page || pageNo) !== pageNo) continue;
@@ -6189,6 +6339,7 @@
     for (let q = 1; q <= QUESTION_COUNT; q++){
       const mappedPage = Array.isArray(pageMap) ? Number(pageMap[q]) : NaN;
       if (Number.isFinite(mappedPage) && Math.floor(mappedPage) !== pageNo) continue;
+      if (!isSameScrollColumn(q)) continue;
       const debugAnchor = getQuestionDebugAnchorRatio(pageNo, q);
       if (!debugAnchor || !Number.isFinite(Number(debugAnchor.ratio))) continue;
       starts.push({ q, ratio: Number(debugAnchor.ratio) });
@@ -7369,15 +7520,17 @@
     const canvas = pointOrMeta?.canvas || state.allPageCanvases?.[pageNo];
     const meta = pointOrMeta?.meta || state.allPageCanvasMeta?.[pageNo];
     if (!canvas || !meta || !Number.isFinite(Number(q)) || !Number.isFinite(Number(pageNo))) return [];
-    const anchors = getReliableChoiceAnchorsForQuestion(q, pageNo);
+    const anchors = getRuntimeChoiceAnchorsForQuestion(q, pageNo);
     return buildAllModeChoicePointsFromAnchors(Array.isArray(anchors) ? anchors : [], q, pageNo, canvas, meta, pointOrMeta);
   }
+  // SOFTM-문항앵커: 전체보기 문항영역 포인트는 낮은 신뢰도 저장 앵커 대신 런타임 복구 경로를 타게 함 - 2026-06-16
 
   async function buildAllModeChoiceAreaPointsAsync(q, pageNo, pointOrMeta = null){
     const canvas = pointOrMeta?.canvas || state.allPageCanvases?.[pageNo];
     const meta = pointOrMeta?.meta || state.allPageCanvasMeta?.[pageNo];
     if (!canvas || !meta || !Number.isFinite(Number(q)) || !Number.isFinite(Number(pageNo))) return [];
     const syncPoints = buildAllModeChoiceAreaPoints(q, pageNo, { ...pointOrMeta, canvas, meta });
+    const storedAnchorCount = getReliableChoiceAnchorsForQuestion(q, pageNo).length;
     const visibleChoiceCount = Math.max(1, Math.min(5, Number(state.pdfNav?.choiceCount) || CHOICE_COUNT));
     if (syncPoints.length >= visibleChoiceCount || pointOrMeta?.allowFallback === false) return syncPoints;
     const segment = getStoredQuestionSegment(q, pageNo);
@@ -7388,7 +7541,7 @@
     try{
       anchors = await getChoiceAnchorsForQuestion(pageNo, q, {
         ...(options || {}),
-        ignoreStored: syncPoints.length > 0 && syncPoints.length < visibleChoiceCount,
+        ignoreStored: storedAnchorCount > syncPoints.length,
       });
       if (Array.isArray(anchors) && anchors.length) state.questionChoiceAnchorCache[`${Number(pageNo)}:${Number(q)}`] = anchors;
     }catch(_){
@@ -7407,6 +7560,7 @@
     }
     return [...byChoice.values()].sort((a, b) => Number(a.choice) - Number(b.choice));
   }
+  // SOFTM-문항앵커: 런타임에서 제외된 저장 문항 앵커가 있으면 fallback 탐색이 같은 저장값을 다시 읽지 않게 함 - 2026-06-16
 
   function getAllChoiceClickAreaEditHitFromEvent(e){
     if (!anchorEditState.enabled || !anchorEditState.choiceAreaEditMode || state.viewMode !== "all" || anchorEditState.kind !== "choice") return null;
@@ -13107,9 +13261,10 @@
 
   async function drawChoiceAnchorDebugMarkersAll(pageNo, q, options = {}){
     if (!ANCHOR_DEBUG || !Number.isFinite(pageNo) || !Number.isFinite(q)) return false;
-    if (anchorEditState.enabled && !hasStoredChoiceAnchorMapForQuestion(q, pageNo)) return false;
     let sourceTone = "anchor";
-    let list = getReliableChoiceAnchorsForQuestion(q, pageNo);
+    const storedList = getReliableChoiceAnchorsForQuestion(q, pageNo);
+    let list = getRuntimeChoiceAnchorsForQuestion(q, pageNo);
+    if (Array.isArray(storedList) && storedList.length && (!Array.isArray(list) || list.length < storedList.length)) sourceTone = "pdf";
     const allowPdfFallback = options.allowPdfFallback !== false;
     const segment = getStoredQuestionSegment(q, pageNo);
     const segmentOptions = segment
@@ -13150,12 +13305,16 @@
       if (!allowPdfFallback) return false;
       sourceTone = "pdf";
       try{
-        list = await getChoiceAnchorsForQuestion(pageNo, q, segmentOptions);
+        list = await getChoiceAnchorsForQuestion(pageNo, q, {
+          ...(segmentOptions || {}),
+          ignoreStored: Array.isArray(storedList) && storedList.length > 0,
+        });
         if (Array.isArray(list) && list.length) state.questionChoiceAnchorCache[`${Number(pageNo)}:${Number(q)}`] = list;
       }catch(_){
         list = [];
       }
     }
+    // SOFTM-문항앵커: 디버그 표시도 낮은 신뢰도 저장 앵커 대신 임시 추정 앵커를 보여줄 수 있게 함 - 2026-06-16
     if (!Array.isArray(list) || !list.length) return false;
     const canvas = state.allPageCanvases[pageNo];
     const meta = state.allPageCanvasMeta[pageNo];
@@ -13463,7 +13622,7 @@
     if (!Number.isFinite(pageNo)) return null;
     const clampedY = Math.max(rect.top + 1, Math.min(rect.bottom - 1, targetY));
     const targetX = getScrollSyncTargetX(rect, viewerRect, pageNo);
-    const targetColumn = isTwoColumnQuestionPage(pageNo) ? getPdfPointerColumnForRect(rect) : 0;
+    const targetColumn = isTwoColumnQuestionPage(pageNo) ? getScrollSyncColumnForPage(pageNo, rect) : 0; // SOFTM-2단스크롤: 포인터가 없을 때도 현재 문제의 기존 단으로 스크롤 포커스 기준을 유지 - 2026-06-16
     const point = getAllCanvasPointFromEvent({
       currentTarget: canvas,
       clientX: targetX,
@@ -13491,7 +13650,7 @@
 
   function getScrollSyncTargetX(rect, viewerRect, pageNo = null){
     let ratio = 0.5;
-    const pointerColumn = getPdfPointerColumnForRect(rect);
+    const pointerColumn = getScrollSyncColumnForPage(pageNo, rect);
     if (pointerColumn && isTwoColumnQuestionPage(pageNo)) ratio = pointerColumn === 2 ? 0.75 : 0.25;
     const rawX = rect.left + rect.width * ratio;
     const visibleLeft = Math.max(rect.left, viewerRect.left, 0);
@@ -13506,32 +13665,11 @@
     activeColumn = Number(activeColumn);
     if (!isTwoColumnQuestionPage(pageNo)) return true;
     if (activeColumn !== 1 && activeColumn !== 2) return true;
-    const isActiveX = (x) => activeColumn === 2 ? x >= 0.5 : x < 0.5;
-    const storedChoices = getReliableChoiceAnchorsForQuestion(q, pageNo) || [];
-    const xs = storedChoices
-      .filter((anchor) => pageNo == null || !Number.isFinite(Number(anchor.page)) || Number(anchor.page) === Number(pageNo))
-      .map((anchor) => Number(anchor.xRatio))
-      .filter(Number.isFinite);
-    if (xs.length) {
-      return xs.some((x) => isActiveX(x));
-    }
-    const segments = state.pdfNav?.questionSegments && Array.isArray(state.pdfNav.questionSegments[String(q)])
-      ? state.pdfNav.questionSegments[String(q)]
-      : [];
-    for (const seg of segments){
-      if (pageNo != null && Number.isFinite(Number(seg?.page)) && Number(seg.page) !== Number(pageNo)) continue;
-      const left = Number.isFinite(Number(seg?.left)) ? Number(seg.left) : 0;
-      const right = Number.isFinite(Number(seg?.right)) ? Number(seg.right) : 1;
-      if (activeColumn === 1 && left < 0.5) return true;
-      if (activeColumn === 2 && right >= 0.5) return true;
-    }
-    const questionAnchor = getQuestionAnchorForEditFind(Number(q));
-    if (questionAnchor && Number.isFinite(Number(questionAnchor.xRatio))) {
-      if (pageNo != null && Number.isFinite(Number(questionAnchor.page)) && Number(questionAnchor.page) !== Number(pageNo)) return false;
-      return isActiveX(Number(questionAnchor.xRatio));
-    }
+    const questionColumn = getQuestionColumnForScrollFocus(q, pageNo);
+    if (questionColumn === 1 || questionColumn === 2) return questionColumn === activeColumn;
     return true;
   }
+  // SOFTM-2단스크롤: 스크롤 단 필터는 choiceAnchorMap보다 문제 단 정보를 우선하여 잘못된 문항 앵커가 포커스를 오염시키지 않게 함 - 2026-06-16
 
   function getQuestionPageSegmentColumnEvidence(pageNo){
     const safePage = Number(pageNo);
@@ -14264,6 +14402,57 @@
     return list.filter(isReliableStoredChoiceAnchor);
   }
   // SOFTM-위치맵: 저장 위치맵에서도 기하 추정/채움 좌표는 실제 선택지 앵커로 사용하지 않음 - 2026-05-30
+
+  /* SOFTM-문항앵커 시작: 전체보기 런타임 표시/클릭은 낮은 신뢰도의 저장 문항 앵커를 보조 추정값으로 대체 가능하게 함 - 2026-06-16 */
+  function isLowTrustChoiceAnchorForRuntime(anchor){
+    if (!anchor || typeof anchor !== "object") return true;
+    if (anchor.inferred === true) return true;
+    const source = String(anchor.source || "").toLowerCase();
+    return source.includes("ocr-token")
+      || source.includes("trailing")
+      || source.includes("inferred")
+      || source.includes("geometry")
+      || source.includes("fill")
+      || source.startsWith("segment-");
+  }
+
+  function isChoiceAnchorInsideQuestionRuntimeScope(anchor, q, pageNo){
+    if (!anchor || typeof anchor !== "object") return false;
+    const page = Number(anchor.page || pageNo);
+    if (Number.isFinite(Number(pageNo)) && Number.isFinite(page) && Number(page) !== Number(pageNo)) return false;
+    const x = Number(anchor.xRatio);
+    const y = Number(anchor.yRatio);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+    const bounds = Number.isFinite(Number(pageNo)) ? getStoredQuestionColumnBoundsForPage(Number(pageNo), Number(q)) : null;
+    if (bounds) {
+      const left = Number(bounds.left);
+      const right = Number(bounds.right);
+      if (Number.isFinite(left) && Number.isFinite(right) && right > left && (x < left - 0.030 || x > right + 0.030)) return false;
+    }
+    const segment = Number.isFinite(Number(pageNo)) ? getStoredQuestionSegment(Number(q), Number(pageNo)) : null;
+    if (segment) {
+      const top = Number(segment.top);
+      const bottom = Number(segment.bottom);
+      const left = Number(segment.left);
+      const right = Number(segment.right);
+      if (Number.isFinite(top) && Number.isFinite(bottom) && (y < top - 0.030 || y > bottom + 0.055)) return false;
+      if (Number.isFinite(left) && Number.isFinite(right) && (x < left - 0.035 || x > right + 0.035)) return false;
+    }
+    return true;
+  }
+
+  function getRuntimeChoiceAnchorsForQuestion(q, pageNo = null, options = {}){
+    const stored = getReliableChoiceAnchorsForQuestion(q, pageNo);
+    if (!Array.isArray(stored) || !stored.length) return [];
+    const scoped = stored.filter((item) => isChoiceAnchorInsideQuestionRuntimeScope(item, q, pageNo));
+    if (!scoped.length) return [];
+    const strict = options.strictSources !== false;
+    if (!strict) return scoped;
+    const trusted = scoped.filter((item) => !isLowTrustChoiceAnchorForRuntime(item));
+    if (trusted.length) return trusted;
+    return [];
+  }
+  /* SOFTM-문항앵커 끝 */
 
   function getStoredQuestionSegment(q, pageNo = null){
     const raw = state.pdfNav?.questionSegments?.[String(q)];
@@ -15648,6 +15837,7 @@
     }
   });
   pdfViewer.addEventListener("scroll", handlePdfViewportScroll);
+  pdfViewer.addEventListener("pointermove", rememberPdfPointerPosition); // SOFTM-2단스크롤: 편집 패널/뷰어 위 마우스 위치도 스크롤 단 기준으로 기록 - 2026-06-16
   window.addEventListener("scroll", handlePdfViewportScroll, { passive: true });
   window.addEventListener("popstate", () => {
     const q = getUrlFocusQuestion() || state.focusQ || 1;
@@ -16014,7 +16204,8 @@
     if (directChoiceHit && Number.isFinite(directChoiceHit.q) && Number.isFinite(directChoiceHit.choice)) {
       if (selectChoiceFromPdfHit(directChoiceHit.q, directChoiceHit.choice, { event: e })) return;
     }
-    if (await hasAllModeChoiceClickAreasForPoint(clickPoint, { requireSameColumn: true })) return;
+    const hasChoiceAreaAtPoint = await hasAllModeChoiceClickAreasForPoint(clickPoint, { requireSameColumn: true });
+    if (hasChoiceAreaAtPoint) return;
 
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
