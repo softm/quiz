@@ -719,6 +719,17 @@
 
               <article class="resetCard">
                 <div class="resetCardHead">
+                  <h3>정답 JSON 관리</h3>
+                  <div class="desc">연결된 정답 원본 파일로 correct.json을 만들거나 현재 회차 항목만 삭제합니다.</div>
+                </div>
+                <div class="resetActions">
+                  <button id="btnGenerateCorrectJson" class="primary">정답 JSON 생성</button>
+                  <button id="btnDeleteCorrectJson" class="danger">정답 JSON 삭제</button>
+                </div>
+              </article>
+
+              <article class="resetCard">
+                <div class="resetCardHead">
                   <h3>위치맵 전체 관리</h3>
                   <div class="desc">PDF 기준 문제 시작 위치와 선택지 위치를 생성, 확인, 삭제합니다.</div>
                 </div>
@@ -1652,6 +1663,8 @@
         $("btnDeleteAnchorMap").disabled = true;
         $("btnRunAnchorOcr").disabled = true;
         $("btnResetQuestionInitial").disabled = true;
+        $("btnGenerateCorrectJson").disabled = true;
+        $("btnDeleteCorrectJson").disabled = true;
         renderResetStateSummary(null);
         updateResetScopeControls(null);
         return;
@@ -1679,6 +1692,15 @@
       renderInlineAnchorMapStatus(item);
       refreshManualAnchorDeleteButton(item).catch(() => setManualAnchorDeleteButton(false, "수정된 위치맵 상태 확인 실패"));
       const answerFiles = answerFilesForItem(item);
+      $("btnGenerateCorrectJson").disabled = !answerFiles.length;
+      $("btnGenerateCorrectJson").textContent = item.correctJson ? "정답 JSON 재생성" : "정답 JSON 생성";
+      $("btnGenerateCorrectJson").title = answerFiles.length
+        ? "정답 원본 파일을 파싱해 correct.json을 생성하고 현재 회차에 연결합니다."
+        : "정답 원본 파일이 없어 생성할 수 없습니다.";
+      $("btnDeleteCorrectJson").disabled = !item.correctJson;
+      $("btnDeleteCorrectJson").title = item.correctJson
+        ? "공유 correct.json에서 현재 회차 정답 항목만 삭제하고 연결을 해제합니다."
+        : "삭제할 정답 JSON 연결이 없습니다.";
       const answerLabel = answerFiles.length > 1
         ? `${answerFiles[0]} 외 ${answerFiles.length - 1}개`
         : (answerFiles[0] || item.correctJson || item.answerSourceId || "없음");
@@ -1692,7 +1714,8 @@
         ["처리상태", itemWorkStateLabel(item)],
         ["풀이 상태", item.published ? "게시 가능" : (item.issue || "미게시")],
         ["문항", item.questionCount ? `${item.questionCount}문항` : "-"],
-        ["정답", answerLabel],
+        ["정답 원본", answerLabel],
+        ["정답 JSON", item.correctJson ? "연결됨" : "없음"],
         ["위치맵", anchorSummary],
         ["문항영역", item.hasManualQuestionAreaEdits ? "수정" : "수정 없음"],
       ].map(([label, value]) => {
@@ -1708,8 +1731,12 @@
         + (item.derivedPdf || isDerivedPdfPath(item.questionPdf) ? derivedNoticeHtml(item) : "");
       // SOFTM-ADMIN: 회차 요약값은 말줄임 표시하고 전체 값은 툴팁으로 확인하도록 보정 - 2026-05-30
       // SOFTM-위치맵: 회차 상세에서 문제·문항 위치맵 생성 여부와 신뢰도를 바로 확인하도록 요약 표시 - 2026-05-30
+      const questionDiagLabel = item.fileIssue && item.fileIssue !== "정상"
+        ? item.fileIssue
+        : (item.questionDiagStatus && item.questionDiagStatus !== "정상" ? item.questionDiagStatus : "문제 파일 정상");
+      const questionDiagTone = questionDiagLabel === "문제 파일 정상" ? "ok" : "warn";
       $("questionDiag").innerHTML = `
-        <strong>문제 진단 ${diagPill(item.published ? "풀이 가능" : (item.issue || "미게시"), item.published ? "ok" : "warn")} ${anchorStatusPill(item)}</strong>
+        <strong>문제 진단 ${diagPill(questionDiagLabel, questionDiagTone)} ${anchorStatusPill(item)}</strong>
         <span class="small" title="${escapeHtml(item.anchorGeneratedAt ? `최종 수정: ${formatAnchorGeneratedAtTitle(item.anchorGeneratedAt)}` : "")}">문제·문항 위치맵: ${escapeHtml(anchorSummary)}\n문항영역: ${escapeHtml(item.hasManualQuestionAreaEdits ? "수정" : "수정 없음")}\nPDF 텍스트: ${escapeHtml(pdfTextSummaryLabel(item))}${item.published && item.needsOcr ? "\nOCR 진단이 있어도 원본 PDF와 정답 연결로 풀이 가능합니다." : ""}\n${escapeHtml(warningText(item.anchorWarnings || []))}</span>
       `;
       // SOFTM-OCR: 상세 화면에서 풀이 가능 상태와 OCR 텍스트 품질 경고를 분리해 표시 - 2026-05-30
@@ -2611,6 +2638,129 @@
     }
     // SOFTM-ADMIN: 상세 화면에서 회차 생성 산출물을 확인 후 초기 상태로 되돌리는 기능 추가 - 2026-06-02
 
+    async function generateCorrectJsonForCurrentQuestion(){
+      const item = state.item;
+      if (!item?.questionNo) {
+        showToast("정답 JSON을 생성할 회차를 먼저 선택하세요.", { title: "정답 JSON 생성", tone: "warn" });
+        return;
+      }
+      const answerFiles = answerFilesForItem(item);
+      if (!answerFiles.length) {
+        showToast("연결된 정답 원본 파일이 없습니다.", { title: "정답 JSON 생성", tone: "warn" });
+        return;
+      }
+      const confirmed = await showConfirmDialog({
+        title: item.correctJson ? "정답 JSON 재생성" : "정답 JSON 생성",
+        message: `정답 원본 파일을 파싱해 correct.json을 생성하고 현재 회차에 연결합니다.\n\n대상: ${item.questionNm || item.questionPdf || item.questionNo}\n정답 원본: ${answerFiles[0]}`,
+        confirmText: item.correctJson ? "재생성" : "생성",
+        cancelText: "취소",
+      });
+      if (!confirmed) return;
+      $("btnGenerateCorrectJson").disabled = true;
+      try{
+        await withProgress({
+          title: item.correctJson ? "정답 JSON 재생성" : "정답 JSON 생성",
+          steps: ["정답 원본 확인", "correct.json 생성", "회차 상태 갱신"],
+          message: "정답 원본 파일을 파싱하고 있습니다.",
+          doneMessage: "정답 JSON 생성이 완료되었습니다.",
+        }, async (progress) => {
+          progress.step(0, "done", "정답 원본 파일 확인 완료");
+          progress.step(1, "running", "정답 JSON 생성 중");
+          const data = await api("/api/admin/correct-generate", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              dataset: state.dataset,
+              questionNo: state.questionNo,
+              path: item.questionPdf || "",
+            }),
+          });
+          progress.step(1, "done", `${data.correctJson || "correct.json"} · ${Number(data.count || 0).toLocaleString()}개`);
+          progress.step(2, "running", "회차 상태를 다시 읽고 있습니다.");
+          await loadQuestion({ keepTarget: true });
+          progress.step(2, "done");
+          $("pdfDiagnoseStatus").innerHTML = `
+            <div class="diagnosisResult ok">
+              <div class="diagnosisHeadline">
+                <div>
+                  <h3 class="diagnosisTitle">정답 JSON 생성: ${diagPill("완료", "ok")}</h3>
+                  <div class="desc">${escapeHtml(data.message || "정답 JSON을 생성했습니다.")}</div>
+                </div>
+              </div>
+            </div>
+          `;
+          showToast("정답 JSON을 생성했습니다.", { title: "정답 JSON 생성", tone: "ok", timeout: 3200 });
+          return data;
+        });
+      } finally {
+        const currentAnswerFiles = answerFilesForItem(state.item);
+        $("btnGenerateCorrectJson").disabled = !currentAnswerFiles.length;
+      }
+    }
+    // SOFTM-GEN: 상세 화면에서 현재 회차의 정답 원본만 파싱해 correct.json에 연결하는 기능 추가 - 2026-06-15
+
+    async function deleteCorrectJsonForCurrentQuestion(){
+      const item = state.item;
+      if (!item?.questionNo) {
+        showToast("정답 JSON을 삭제할 회차를 먼저 선택하세요.", { title: "정답 JSON 삭제", tone: "warn" });
+        return;
+      }
+      if (!item.correctJson) {
+        showToast("삭제할 정답 JSON 연결이 없습니다.", { title: "정답 JSON 삭제", tone: "warn" });
+        return;
+      }
+      const confirmed = await showConfirmDialog({
+        title: "정답 JSON 삭제",
+        message: `공유 correct.json에서 현재 회차 항목만 제거하고 manifest 연결을 해제합니다.\n\n대상: ${item.questionNm || item.questionPdf || item.questionNo}\n정답 JSON: ${item.correctJson}`,
+        confirmText: "삭제",
+        cancelText: "취소",
+      });
+      if (!confirmed) return;
+      $("btnDeleteCorrectJson").disabled = true;
+      try{
+        await withProgress({
+          title: "정답 JSON 삭제",
+          steps: ["삭제 대상 확인", "현재 회차 항목 삭제", "회차 상태 갱신"],
+          message: "공유 correct.json에서 현재 회차 항목을 확인하고 있습니다.",
+          doneMessage: "정답 JSON 삭제가 완료되었습니다.",
+        }, async (progress) => {
+          progress.step(0, "done", "삭제 대상 확인 완료");
+          progress.step(1, "running", "현재 회차 정답 항목 삭제 중");
+          const data = await api("/api/admin/correct-delete", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              dataset: state.dataset,
+              questionNo: state.questionNo,
+              path: item.questionPdf || "",
+            }),
+          });
+          const detail = data.fileDeleted
+            ? "correct.json 파일 삭제"
+            : `${Number(data.beforeCount || 0).toLocaleString()}개 -> ${Number(data.afterCount || 0).toLocaleString()}개`;
+          progress.step(1, "done", detail);
+          progress.step(2, "running", "회차 상태를 다시 읽고 있습니다.");
+          await loadQuestion({ keepTarget: true });
+          progress.step(2, "done");
+          $("pdfDiagnoseStatus").innerHTML = `
+            <div class="diagnosisResult ok">
+              <div class="diagnosisHeadline">
+                <div>
+                  <h3 class="diagnosisTitle">정답 JSON 삭제: ${diagPill("완료", "ok")}</h3>
+                  <div class="desc">${escapeHtml(data.message || "정답 JSON 연결을 해제했습니다.")}</div>
+                </div>
+              </div>
+            </div>
+          `;
+          showToast("정답 JSON을 삭제했습니다.", { title: "정답 JSON 삭제", tone: "ok", timeout: 3200 });
+          return data;
+        });
+      } finally {
+        $("btnDeleteCorrectJson").disabled = !state.item?.correctJson;
+      }
+    }
+    // SOFTM-GEN: 상세 화면에서 공유 correct.json의 현재 회차 항목만 삭제하는 기능 추가 - 2026-06-15
+
     function renderOcrJobStatus(job){
       const logs = Array.isArray(job.logs) ? job.logs.slice(-30).join("\n") : "";
       const progressLabel = `${Number(job.progress || 0)}%${job.progressEstimated ? "(추정)" : ""}`;
@@ -2842,6 +2992,16 @@
       $("btnResetQuestionInitial").title = needsReset ? "초기화할 생성 산출물이 있습니다." : "이미 초기 상태입니다.";
       if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
       showToast(err.message, { title: "회차 초기화 실패", tone: "error" });
+    }));
+    $("btnGenerateCorrectJson").addEventListener("click", () => generateCorrectJsonForCurrentQuestion().catch((err) => {
+      $("btnGenerateCorrectJson").disabled = !answerFilesForItem(state.item).length;
+      if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
+      showToast(err.message, { title: "정답 JSON 생성 실패", tone: "error" });
+    }));
+    $("btnDeleteCorrectJson").addEventListener("click", () => deleteCorrectJsonForCurrentQuestion().catch((err) => {
+      $("btnDeleteCorrectJson").disabled = !state.item?.correctJson;
+      if (!$("pdfDiagnoseStatus").querySelector(".diagnosisResult")) $("pdfDiagnoseStatus").textContent = err.message;
+      showToast(err.message, { title: "정답 JSON 삭제 실패", tone: "error" });
     }));
     $("btnResetQuestionAnchor").addEventListener("click", () => resetScopedAnchorForCurrentQuestion("question").catch((err) => {
       setScopedResetBusy(false);
