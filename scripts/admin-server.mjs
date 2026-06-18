@@ -282,6 +282,7 @@ function cleanManualChoiceAnchor(value, q){
   const xRatio = clampRatio(value.xRatio, null);
   const yRatio = clampRatio(value.yRatio, null);
   if (!page || !choice || !Number.isFinite(xRatio) || !Number.isFinite(yRatio)) return null;
+  const confidence = finiteNumber(value.confidence, 1);
   return {
     ...value,
     q,
@@ -291,9 +292,9 @@ function cleanManualChoiceAnchor(value, q){
     yRatio,
     wRatio: Math.max(0.001, Math.min(0.2, finiteNumber(value.wRatio, 0.018))),
     hRatio: Math.max(0.001, Math.min(0.2, finiteNumber(value.hRatio, 0.018))),
-    source: "manual-anchor",
+    source: value.source || "manual-anchor", // SOFTM-앵커초기화: 형제 앵커를 같이 저장할 때 기존 자동 source를 수동으로 바꾸지 않음 - 2026-06-16
     anchorMode: value.anchorMode || "center",
-    confidence: 1,
+    confidence: Number.isFinite(confidence) ? confidence : 1, // SOFTM-앵커초기화: 형제 자동 앵커의 기존 confidence를 유지 - 2026-06-16
   };
 }
 
@@ -301,6 +302,19 @@ function cleanManualChoiceClickArea(value, q){
   if (!value || typeof value !== "object") return null;
   const page = Math.trunc(finiteNumber(value.page, 0));
   const choice = Math.trunc(finiteNumber(value.choice, 0));
+  /* SOFTM-영역편집 시작: 문항영역 삭제는 자동 추정 재생성을 막는 hidden 마커로 저장 - 2026-06-16 */
+  if (value.hidden === true || String(value.source || "").includes("manual-click-area-hidden")) {
+    if (!page || !choice) return null;
+    return {
+      q,
+      choice,
+      page,
+      hidden: true,
+      source: "manual-click-area-hidden",
+      confidence: 1,
+    };
+  }
+  /* SOFTM-영역편집 끝 */
   const xRatio = clampRatio(value.xRatio, null);
   const yRatio = clampRatio(value.yRatio, null);
   const wRatio = Math.max(0.001, Math.min(1, finiteNumber(value.wRatio, null)));
@@ -349,7 +363,19 @@ function stableAnchorValue(value){
 function normalizeManualComparableValue(key, value){
   if (value === undefined) return null;
   if ((key === "questionSegments" || key === "choiceAnchorMap" || key === "choiceClickAreaMap") && Array.isArray(value) && value.length === 0) return null;
-  return value ?? null;
+  const normalized = value ?? null;
+  /* SOFTM-앵커초기화 시작: q 키 유무만 다른 같은 문항 리스트를 초기화 차이로 보지 않음 - 2026-06-16 */
+  if ((key === "choiceAnchorMap" || key === "choiceClickAreaMap") && normalized && typeof normalized === "object") {
+    const stripQ = (item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+      const next = { ...item };
+      delete next.q;
+      return next;
+    };
+    return Array.isArray(normalized) ? normalized.map(stripQ) : stripQ(normalized);
+  }
+  /* SOFTM-앵커초기화 끝 */
+  return normalized;
 }
 
 function sameManualAnchorValue(key, a, b){
@@ -390,6 +416,20 @@ function manualBaseValue(anchorData, key, storeKey){
   if (!Object.prototype.hasOwnProperty.call(group, storeKey)) return { exists: false, value: null };
   return { exists: true, value: group[storeKey] ?? null };
 }
+
+/* SOFTM-앵커초기화 시작: 클라이언트가 본 수정 전 앵커값을 _manualBase 기준으로 우선 사용 - 2026-06-16 */
+function manualBasePatchValue(manualBasePatch, key, storeKey){
+  const group = manualBasePatch && typeof manualBasePatch === "object" ? manualBasePatch[key] : null;
+  if (!group || typeof group !== "object") return { exists: false, value: null };
+  if (Array.isArray(group)) {
+    const q = Math.trunc(finiteNumber(storeKey, 0));
+    if (q > 0 && Object.prototype.hasOwnProperty.call(group, q)) return { exists: true, value: group[q] ?? null };
+    return { exists: false, value: null };
+  }
+  if (!Object.prototype.hasOwnProperty.call(group, storeKey)) return { exists: false, value: null };
+  return { exists: true, value: group[storeKey] ?? null };
+}
+/* SOFTM-앵커초기화 끝 */
 
 function restorePatchValueFromManualBaseIfSame(anchorData, key, storeKey, value){
   const base = manualBaseValue(anchorData, key, storeKey);
@@ -442,7 +482,7 @@ function normalizeManualAnchorState(anchorData){
   return meta;
 }
 
-function ensureManualAnchorBase(anchorData, patch = {}){
+function ensureManualAnchorBase(anchorData, patch = {}, manualBasePatch = {}){
   if (!anchorData._manualBase || typeof anchorData._manualBase !== "object") anchorData._manualBase = {};
   for (const key of ["questionLabelMap", "questionPageMap", "questionTopRatioMap", "questionSegments", "choiceAnchorMap", "choiceClickAreaMap"]){
     const values = patch[key];
@@ -453,9 +493,13 @@ function ensureManualAnchorBase(anchorData, patch = {}){
       if (q <= 0) continue;
       const storeKey = String(q);
       if (Object.prototype.hasOwnProperty.call(anchorData._manualBase[key], storeKey)) continue;
-      if (Array.isArray(anchorData[key])) anchorData._manualBase[key][storeKey] = cloneJsonValue(anchorData[key][q]);
+      const clientBase = manualBasePatchValue(manualBasePatch, key, storeKey);
+      /* SOFTM-앵커초기화 시작: 파일값 대신 편집 직전 화면 기준값을 초기화 base로 저장 - 2026-06-16 */
+      if (clientBase.exists) anchorData._manualBase[key][storeKey] = cloneJsonValue(clientBase.value);
+      else if (Array.isArray(anchorData[key])) anchorData._manualBase[key][storeKey] = cloneJsonValue(anchorData[key][q]);
       else if (anchorData[key] && typeof anchorData[key] === "object") anchorData._manualBase[key][storeKey] = cloneJsonValue(anchorData[key][storeKey]);
       else anchorData._manualBase[key][storeKey] = null;
+      /* SOFTM-앵커초기화 끝 */
     }
   }
 }
@@ -468,18 +512,15 @@ function restoreManualAnchorBase(anchorData, reset = {}){
   const storeKey = String(q);
   const base = anchorData._manualBase && typeof anchorData._manualBase === "object" ? anchorData._manualBase : {};
   const questionKeys = ["questionLabelMap", "questionPageMap", "questionTopRatioMap", "questionSegments"];
+  let restored = 0;
 
+  /* SOFTM-앵커초기화 시작: base가 null/빈 배열이면 현재 수동 앵커를 유지하지 않고 최초 상태처럼 삭제한다 - 2026-06-16 */
   const restoreAllEntriesForKey = (key) => {
     const keyBase = base[key] && typeof base[key] === "object" ? base[key] : {};
     for (const entryKey of Object.keys(keyBase)) {
       const value = cloneJsonValue(keyBase[entryKey]);
       const currentValue = anchorMapStoredValue(anchorData, key, entryKey);
-      const emptyBase = value == null || ((key === "questionSegments" || key === "choiceAnchorMap" || key === "choiceClickAreaMap") && Array.isArray(value) && !value.length);
-      const currentHasAnchors = Array.isArray(currentValue) && currentValue.length > 0;
-      if (emptyBase && currentHasAnchors && (key === "choiceAnchorMap" || key === "questionSegments")) {
-        delete keyBase[entryKey];
-        continue;
-      }
+      if (!sameManualAnchorValue(key, currentValue, value)) restored += 1;
       setAnchorMapStoredValue(anchorData, key, entryKey, value);
       delete keyBase[entryKey];
     }
@@ -489,6 +530,8 @@ function restoreManualAnchorBase(anchorData, reset = {}){
     const keyBase = base[key] && typeof base[key] === "object" ? base[key] : {};
     if (!Object.prototype.hasOwnProperty.call(keyBase, storeKey)) return;
     const value = cloneJsonValue(keyBase[storeKey]);
+    const currentValue = anchorMapStoredValue(anchorData, key, storeKey);
+    if (!sameManualAnchorValue(key, currentValue, value)) restored += 1;
     if (Array.isArray(anchorData[key])) {
       if (value == null) delete anchorData[key][q];
       else anchorData[key][q] = value;
@@ -499,6 +542,7 @@ function restoreManualAnchorBase(anchorData, reset = {}){
     }
     delete keyBase[storeKey];
   };
+  /* SOFTM-앵커초기화 끝 */
 
   if (scope === "anchorAll") {
     for (const key of [...questionKeys, "choiceAnchorMap"]) restoreAllEntriesForKey(key);
@@ -515,7 +559,7 @@ function restoreManualAnchorBase(anchorData, reset = {}){
     if (manualMeta.hasManualEdits) anchorData.manualEditedAt = now;
     else delete anchorData.manualEditedAt;
     anchorData.generatedAt = now;
-    return anchorData;
+    return restored;
   };
 
   if (scope === "all" || scope === "anchorAll" || scope === "question") {
@@ -527,6 +571,8 @@ function restoreManualAnchorBase(anchorData, reset = {}){
     if (!anchorData.choiceClickAreaMap || typeof anchorData.choiceClickAreaMap !== "object") anchorData.choiceClickAreaMap = {};
     for (const key of Object.keys(keyBase)) {
       const value = cloneJsonValue(keyBase[key]);
+      const currentValue = anchorMapStoredValue(anchorData, "choiceClickAreaMap", key);
+      if (!sameManualAnchorValue("choiceClickAreaMap", currentValue, value)) restored += 1;
       if (value == null || (Array.isArray(value) && !value.length)) delete anchorData.choiceClickAreaMap[key];
       else anchorData.choiceClickAreaMap[key] = value;
       delete keyBase[key];
@@ -557,6 +603,7 @@ function restoreManualAnchorBase(anchorData, reset = {}){
         const nextList = currentList.filter((item) => Number(item?.choice) !== choice);
         if (baseChoice) nextList.push(baseChoice);
         nextList.sort((a, b) => Number(a.choice) - Number(b.choice) || Number(a.yRatio) - Number(b.yRatio) || Number(a.xRatio) - Number(b.xRatio));
+        if (!sameManualAnchorValue(mapKey, currentList, nextList)) restored += 1;
         if (!anchorData[mapKey] || typeof anchorData[mapKey] !== "object") anchorData[mapKey] = {};
         if (nextList.length) anchorData[mapKey][storeKey] = nextList;
         else delete anchorData[mapKey][storeKey];
@@ -566,6 +613,7 @@ function restoreManualAnchorBase(anchorData, reset = {}){
       } else if (scope === "choiceArea" && mapKey === "choiceClickAreaMap") {
         const currentList = Array.isArray(anchorData[mapKey]?.[storeKey]) ? cloneJsonValue(anchorData[mapKey][storeKey]) : [];
         const nextList = currentList.filter((item) => Number(item?.choice) !== choice);
+        if (!sameManualAnchorValue(mapKey, currentList, nextList)) restored += 1;
         if (!anchorData[mapKey] || typeof anchorData[mapKey] !== "object") anchorData[mapKey] = {};
         if (nextList.length) anchorData[mapKey][storeKey] = nextList;
         else delete anchorData[mapKey][storeKey];
@@ -587,13 +635,14 @@ function restoreManualAnchorBase(anchorData, reset = {}){
   if (manualMeta.hasManualEdits) anchorData.manualEditedAt = now;
   else delete anchorData.manualEditedAt;
   anchorData.generatedAt = now;
-  return anchorData;
+  return restored;
 }
 
 function restoreAllManualAnchorBase(anchorData){
   const base = anchorData?._manualBase && typeof anchorData._manualBase === "object" ? anchorData._manualBase : null;
   let restored = 0;
   if (base) {
+    const hadBaseEntries = Object.values(base).some((values) => values && typeof values === "object" && Object.keys(values).length);
     for (const [key, values] of Object.entries(base)){
       if (!values || typeof values !== "object") continue;
       for (const [storeKey, rawValue] of Object.entries(values)){
@@ -601,12 +650,7 @@ function restoreAllManualAnchorBase(anchorData){
         if (q <= 0) continue;
         const value = cloneJsonValue(rawValue);
         const currentValue = anchorMapStoredValue(anchorData, key, storeKey);
-        const emptyBase = value == null || ((key === "questionSegments" || key === "choiceAnchorMap" || key === "choiceClickAreaMap") && Array.isArray(value) && !value.length);
-        const currentHasAnchors = Array.isArray(currentValue) && currentValue.length > 0;
-        if (emptyBase && currentHasAnchors && (key === "choiceAnchorMap" || key === "questionSegments")) {
-          restored += 1;
-          continue;
-        }
+        if (sameManualAnchorValue(key, currentValue, value)) continue; // SOFTM-앵커초기화: base와 같으면 복원 카운트만 늘리지 않고 건너뜀 - 2026-06-16
         if (Array.isArray(anchorData[key])) {
           if (value == null) delete anchorData[key][q];
           else anchorData[key][q] = value;
@@ -620,6 +664,7 @@ function restoreAllManualAnchorBase(anchorData){
     }
     delete anchorData._manualBase;
     delete anchorData.manualEditedAt;
+    if (hadBaseEntries && restored === 0) restored = 1; // SOFTM-앵커초기화: 값은 같아도 _manualBase 정리 결과를 파일에 저장 - 2026-06-16
   } else {
     const manualQuestionKeys = new Set();
     const isManualValue = (value) => value && typeof value === "object" && String(value.source || "").includes("manual");
@@ -674,9 +719,9 @@ function restoreAllManualAnchorBase(anchorData){
   return restored;
 }
 
-function applyManualAnchorPatch(anchorData, patch = {}){
+function applyManualAnchorPatch(anchorData, patch = {}, manualBasePatch = {}){
   if (!patch || typeof patch !== "object") throw new Error("저장할 위치맵 패치가 없습니다.");
-  ensureManualAnchorBase(anchorData, patch);
+  ensureManualAnchorBase(anchorData, patch, manualBasePatch); // SOFTM-앵커초기화: 클라이언트 편집 직전값을 초기화 기준으로 함께 저장 - 2026-06-16
 
   if (patch.questionLabelMap && typeof patch.questionLabelMap === "object"){
     if (!anchorData.questionLabelMap || typeof anchorData.questionLabelMap !== "object") anchorData.questionLabelMap = {};
@@ -906,10 +951,11 @@ async function handleAnchorManualSave(req, res){
       anchorData = normalizeInitialAnchorData(body.baseAnchorData, rel, body);
     }
     if (anchorData.kind !== "question-anchor-map") throw new Error("question-anchor-map 형식이 아닙니다.");
+    let restored = 0;
     if (body.resetManual && typeof body.resetManual === "object") {
-      restoreManualAnchorBase(anchorData, body.resetManual);
+      restored = restoreManualAnchorBase(anchorData, body.resetManual);
     } else {
-      applyManualAnchorPatch(anchorData, body.patch || body);
+      applyManualAnchorPatch(anchorData, body.patch || body, body.manualBasePatch || {}); // SOFTM-앵커초기화: 저장 요청의 편집 직전 base 후보를 서버 초기화 기준으로 전달 - 2026-06-16
     }
     const manualMeta = anchorManualEditMeta(anchorData);
     if (!manualMeta.hasManualEdits && String(anchorData.source || "") === "manual-bootstrap") {
@@ -932,7 +978,7 @@ async function handleAnchorManualSave(req, res){
     try{
       await updateAnchorManifestForManualSave(body, rel, anchorData);
     }catch(_){}
-    sendJson(res, 200, { ok: true, anchorMap: rel, generatedAt: anchorData.generatedAt, manualEditedAt: anchorData.manualEditedAt, anchorData });
+    sendJson(res, 200, { ok: true, anchorMap: rel, restored, generatedAt: anchorData.generatedAt, manualEditedAt: anchorData.manualEditedAt, anchorData });
   }catch(err){
     sendJson(res, 400, { ok: false, error: err?.message || String(err) });
   }

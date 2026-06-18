@@ -27,7 +27,12 @@
     "questionStartNo": 1,
     "questionEndNo": 100,
     "ocrStatus": "정상",
-    "ocrPublished": true
+    "ocrPublished": true,
+    "anchorMap": "",
+    "anchorStatus": "",
+    "anchorConfidence": "",
+    "anchorWarnings": [],
+    "anchorGeneratedAt": ""
   },
   {
     "gNo": "01",
@@ -104,11 +109,9 @@
     "ocrPublished": false,
     "anchorMap": "quiz/pdf/농산물품질관리사/2023년 제20회 농산물품질관리사 1차_anchor.json",
     "anchorStatus": "위치맵 생성",
-    "anchorConfidence": 0.9161999999999999,
-    "anchorWarnings": [
-      "선택지 위치 감지가 부족합니다(276/400). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
-    ],
-    "anchorGeneratedAt": "2026-06-15T15:11:08.690Z",
+    "anchorConfidence": 0.972,
+    "anchorWarnings": [],
+    "anchorGeneratedAt": "2026-06-18T14:38:21.810Z",
     "choiceCount": 4
   },
   {
@@ -263,11 +266,11 @@
     "questionEndNo": 100,
     "ocrStatus": "정상",
     "ocrPublished": true,
-    "anchorMap": "quiz/pdf/농산물품질관리사/2025년 제22회 농산물품질관리사 1차_anchor.json",
-    "anchorStatus": "위치맵 생성",
-    "anchorConfidence": 1,
+    "anchorMap": "",
+    "anchorStatus": "",
+    "anchorConfidence": "",
     "anchorWarnings": [],
-    "anchorGeneratedAt": "2026-06-03T12:16:03.474Z",
+    "anchorGeneratedAt": "",
     "choiceCount": 4
   }
 ]

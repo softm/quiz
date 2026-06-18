@@ -328,7 +328,7 @@ function selectMonotonicAnchors(rawAnchors, startNo, questionCount){
         samePage
         && prevColumn === currentColumn
         && candidates[i].label === candidates[j].label + 1
-        && candidates[i].yRatio - candidates[j].yRatio < 0.045
+        && candidates[i].yRatio - candidates[j].yRatio < 0.075 // SOFTM-위치맵: 페이지 상단 보기 원형이 다음 문제번호로 승격되는 OCR 오검출을 더 강하게 차단 - 2026-06-17
       ) {
         continue;
       }
@@ -684,6 +684,9 @@ function completeQuestionLabelMap(anchorByLocal, pageMap, topMap, questionColumn
       xRatio: anchor.xRatio,
       yRatio: anchor.yRatio,
       anchorColumn: Number(anchor.anchorColumn || 0),
+      text: anchor.text,
+      markerText: anchor.markerText,
+      source: anchor.source,
     };
   }
   const knownXForLane = (q) => {
@@ -765,19 +768,139 @@ function sameSegmentLane(a, b){
   return Math.max(al, bl) < Math.min(ar, br) - 0.08;
 }
 
-function buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questionCount, choiceAnchorMap = {}, questionLabelMap = {}){
+function buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questionCount, choiceAnchorMap = {}, questionLabelMap = {}, choiceCount = 0){
   const out = {};
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  /* SOFTM-연속문항 시작: 2단 문항이 다음 단/페이지로 이어지면 추가 segment를 저장해 스크롤·편집 hit 영역으로 사용 - 2026-06-16 */
+  const minContinuationHeight = 0.060;
   const boundsFor = (q) => {
     const bounds = questionColumnBoundsMap[String(q)] || {};
     const left = Number.isFinite(Number(bounds.left)) ? clamp(Number(bounds.left), 0, 1) : 0;
     const right = Number.isFinite(Number(bounds.right)) ? clamp(Number(bounds.right), 0, 1) : 1;
     return {
+      page: Number.isFinite(Number(bounds.page)) ? Number(bounds.page) : Number(pageMap[q]),
       left,
       right,
       column: Number.isFinite(Number(bounds.column)) ? Number(bounds.column) : null,
     };
   };
+  const pageLanes = new Map();
+  const addPageLane = (page, lane) => {
+    const safePage = Number(page);
+    const column = Number(lane?.column);
+    const left = Number(lane?.left);
+    const right = Number(lane?.right);
+    if (!Number.isFinite(safePage) || !Number.isFinite(column) || !Number.isFinite(left) || !Number.isFinite(right)) return;
+    if (right <= left + 0.08) return;
+    const meta = pageLanes.get(safePage) || new Map();
+    const list = meta.get(column) || [];
+    list.push({ left: clamp(left, 0, 1), right: clamp(right, 0, 1), column });
+    meta.set(column, list);
+    pageLanes.set(safePage, meta);
+  };
+  for (let q = 1; q <= questionCount; q += 1){
+    const lane = boundsFor(q);
+    addPageLane(lane.page, lane);
+  }
+  const laneForPageColumn = (page, column) => {
+    const meta = pageLanes.get(Number(page));
+    const list = meta?.get(Number(column)) || [];
+    if (!list.length) return null;
+    const median = (values) => {
+      const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+      return sorted.length ? sorted[Math.floor(sorted.length / 2)] : NaN;
+    };
+    const left = median(list.map((item) => Number(item.left)));
+    const right = median(list.map((item) => Number(item.right)));
+    if (!Number.isFinite(left) || !Number.isFinite(right) || right <= left + 0.08) return null;
+    return { page: Number(page), left, right, column: Number(column) };
+  };
+  const hasTwoColumnPage = (page) => !!(laneForPageColumn(page, 0) && laneForPageColumn(page, 1));
+  const isLastQuestionInLane = (q, page, lane) => {
+    const currentTop = Number(topMap[q]);
+    for (let other = q + 1; other <= questionCount; other += 1){
+      if (Number(pageMap[other]) !== Number(page)) continue;
+      if (!sameSegmentLane(lane, boundsFor(other))) continue;
+      const otherTop = Number(topMap[other]);
+      if (Number.isFinite(otherTop) && (!Number.isFinite(currentTop) || otherTop > currentTop + 0.018)) return false;
+    }
+    return true;
+  };
+  const questionBoundaryTop = (q) => {
+    const labelTop = Number(questionLabelMap[String(q)]?.yRatio);
+    const top = Number(topMap[q]);
+    if (Number.isFinite(labelTop) && Number.isFinite(top)) return Math.min(labelTop, top);
+    if (Number.isFinite(labelTop)) return labelTop;
+    return Number.isFinite(top) ? top : NaN;
+  };
+  const questionLabelBoundaryTop = (q) => {
+    const labelTop = Number(questionLabelMap[String(q)]?.yRatio);
+    if (Number.isFinite(labelTop)) return labelTop;
+    const top = Number(topMap[q]);
+    return Number.isFinite(top) ? top : NaN;
+  };
+  const hasCompleteChoiceAnchorsInLane = (q, page, lane) => {
+    const expected = Math.max(0, Math.trunc(Number(choiceCount) || 0));
+    if (!expected) return false;
+    const anchors = Array.isArray(choiceAnchorMap?.[String(q)]) ? choiceAnchorMap[String(q)] : [];
+    const choices = new Set();
+    for (const anchor of anchors){
+      if (Number(anchor?.page) !== Number(page)) continue;
+      const x = Number(anchor?.xRatio);
+      const choice = Number(anchor?.choice);
+      if (!Number.isFinite(x) || !Number.isInteger(choice) || choice < 1 || choice > expected) continue;
+      if (x < Number(lane.left) - 0.030 || x > Number(lane.right) + 0.030) continue;
+      choices.add(choice);
+    }
+    return choices.size >= expected;
+  };
+  const buildContinuationSegment = (q, currentLane) => {
+    const page = Number(pageMap[q]);
+    const nextQ = q + 1;
+    const nextPage = Number(pageMap[nextQ]);
+    if (!Number.isFinite(page) || !Number.isFinite(nextPage) || nextQ > questionCount) return null;
+    if (!Number.isFinite(Number(currentLane?.column))) return null;
+    if (!isLastQuestionInLane(q, page, currentLane)) return null;
+    if (hasCompleteChoiceAnchorsInLane(q, page, currentLane)) return null; // SOFTM-연속문항: 현재 단에서 문항앵커가 완결된 문제는 반대 단 continuation을 붙이지 않음 - 2026-06-17
+    let targetPage = 0;
+    let targetColumn = null;
+    let source = "";
+    if (Number(currentLane.column) === 0 && nextPage === page && hasTwoColumnPage(page)) {
+      const nextLane = boundsFor(nextQ);
+      if (Number(nextLane.column) !== 1) return null;
+      targetPage = page;
+      targetColumn = 1;
+      source = "column-continuation";
+    } else if (Number(currentLane.column) === 1 && nextPage > page && hasTwoColumnPage(nextPage)) {
+      const nextLane = boundsFor(nextQ);
+      if (Number(nextLane.column) !== 0) return null;
+      targetPage = nextPage;
+      targetColumn = 0;
+      source = "page-continuation";
+    } else {
+      return null;
+    }
+    const targetLane = laneForPageColumn(targetPage, targetColumn);
+    if (!targetLane) return null;
+    const targetTop = 0.035;
+    const nextBoundary = questionBoundaryTop(nextQ); // SOFTM-연속문항: continuation도 다음 문제 top/label 중 이른 hard boundary를 넘지 않게 제한 - 2026-06-18
+    if (!Number.isFinite(nextBoundary) || nextBoundary <= targetTop + minContinuationHeight) return null;
+    const bottom = clamp(nextBoundary - 0.006, targetTop, 0.970); // SOFTM-연속문항: continuation은 다음 문제번호 직전까지 허용해 하단 이미지 선택지가 잘리지 않게 함 - 2026-06-17
+    if (bottom <= targetTop + minContinuationHeight) return null;
+    return {
+      page: targetPage,
+      top: targetTop,
+      bottom,
+      left: targetLane.left,
+      right: targetLane.right,
+      column: targetLane.column,
+      continuation: true,
+      fromColumn: Number(currentLane.column),
+      toColumn: targetLane.column,
+      source,
+    };
+  };
+  /* SOFTM-연속문항 끝 */
   for (let q = 1; q <= questionCount; q += 1){
     const page = Number(pageMap[q]);
     let start = Number(topMap[q]);
@@ -794,11 +917,12 @@ function buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questio
         }
       }
       if (hasPrevSameLane) {
-        start = Math.max(start, clamp(currentLabelTop - 0.020, 0.02, 0.97));
+        start = Math.max(start, clamp(currentLabelTop - 0.006, 0.02, 0.97)); // SOFTM-위치맵: 다음 문제와 겹치지 않도록 문제 label 위 segment 여백을 줄임 - 2026-06-17
       }
     }
     let end = 0.95;
     let hardEnd = null;
+    let hardBoundary = null;
     for (let next = q + 1; next <= questionCount; next += 1){
       if (Number(pageMap[next]) !== page) continue;
       const nextLane = boundsFor(next);
@@ -808,7 +932,8 @@ function buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questio
       const hasNextLabel = Number.isFinite(nextLabelTop) && nextLabelTop > start + 0.018;
       const nextBoundary = hasNextLabel ? nextLabelTop : nextTop;
       if (!Number.isFinite(nextBoundary) || nextBoundary <= start + 0.018) continue;
-      hardEnd = clamp(nextBoundary - (hasNextLabel ? 0.020 : 0.010), start + 0.05, 0.97);
+      hardBoundary = nextBoundary;
+      hardEnd = clamp(nextBoundary - 0.006, start + 0.05, 0.97); // SOFTM-위치맵: 이전 문제 bottom은 다음 문제 label 직전까지만 허용해 보기 영역 침범을 차단 - 2026-06-17
       end = hardEnd;
       break;
     }
@@ -825,10 +950,18 @@ function buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questio
     }
     if (choiceBottom > start) {
       const extendedEnd = clamp(choiceBottom + 0.035, start + 0.05, 0.97);
-      end = Math.max(end, hardEnd == null ? extendedEnd : Math.min(extendedEnd, hardEnd));
+      if (hardEnd == null) {
+        end = Math.max(end, extendedEnd);
+      } else {
+        const choiceAwareEnd = choiceBottom <= hardEnd + 0.002
+          ? Math.min(extendedEnd, hardEnd)
+          : hardEnd;
+        end = Math.max(end, choiceAwareEnd);
+      }
+      // SOFTM-위치맵: 다음 문제 경계 밖 선택지 후보는 이전 문제 segment를 늘리지 않고 오탐으로 취급 - 2026-06-17
     }
     if (end <= start + 0.045) end = clamp(start + 0.16, start + 0.05, 0.97);
-    out[String(q)] = [{
+    const primary = {
       page,
       top: clamp(start, 0.020, 0.97),
       bottom: clamp(end, Math.min(0.97, start + 0.05), 0.98),
@@ -836,11 +969,15 @@ function buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questio
       right: currentLane.right,
       column: currentLane.column,
       source: currentLane.column != null ? "column-segment" : "page-segment",
-    }];
+    };
+    const segments = [primary];
+    const continuation = buildContinuationSegment(q, currentLane);
+    if (continuation) segments.push(continuation);
+    out[String(q)] = segments;
   }
   return out;
 }
-// SOFTM-위치맵: 문제번호 흐름으로 확정한 문제 영역을 저장해 한문제 보기가 컬럼/영역 조각을 직접 사용하도록 지원 - 2026-06-01
+// SOFTM-위치맵: 문제번호 흐름으로 확정한 문제 영역을 저장해 한문제 보기와 연속 2단 문항을 직접 사용하도록 지원 - 2026-06-01
 
 async function detectChoiceAnchorsFromImages(pageDir, pageMap, topMap, questionCount, choiceCount, questionLabelMap = {}, questionColumnBoundsMap = {}, questionSegments = {}, ocrChoiceCandidates = []){
   const mapPath = path.join(pageDir, "choice-map-input.json");
@@ -1110,9 +1247,10 @@ def nearest(row_items, expected_x, used, max_dx=0.06, compact=False):
         left_density_limit = 0.16 if ("outline" in source or "ocr-token" in source) else 0.070
         if item.get("leftDensity", 0) > left_density_limit:
             continue
-        if item["xRatio"] < 0.13 and item.get("fill", 0) > 0.34 and item.get("wRatio", 0) < 0.012 and item.get("hRatio", 0) < 0.016:
+        if not compact and item["xRatio"] < 0.13 and item.get("fill", 0) > 0.34 and item.get("wRatio", 0) < 0.012 and item.get("hRatio", 0) < 0.016:
             continue
         # SOFTM-위치맵: 페이지 첫 문항의 5. 같은 좁고 진한 문제번호 숫자를 원형 보기 ①로 오인하지 않도록 제외 - 2026-05-30
+        # SOFTM-문항앵커: 2단 compact 좌표계에서는 실제 ①이 왼쪽에 바짝 붙어 같은 조건에 걸리므로 기대 위치 매칭을 우선 - 2026-06-17
         shape_penalty = abs((item["wRatio"] / max(0.0001, item["hRatio"])) - 1.0) * 0.004
         score = dx + shape_penalty + (0.015 if item["fill"] > 0.42 else 0) + (item.get("leftDensity", 0) * 0.05)
         if score < best_score:
@@ -1188,7 +1326,8 @@ def score_horizontal(rows, choice_count, expected_y, question_start=None, compac
     xs = x_template(choice_count, "horizontal", compact)
     max_dx = 0.075 if compact else 0.065
     for row in rows:
-        if question_start is not None and row["y"] - float(question_start) < 0.045:
+        min_horizontal_depth = 0.022 if compact and raw_band < 0.090 else 0.045 # SOFTM-위치맵: 짧은 2단 문항은 선택지 행이 문제번호와 가까워도 가로형 후보로 유지 - 2026-06-16
+        if question_start is not None and row["y"] - float(question_start) < min_horizontal_depth:
             continue
         if row_has_question_number_prefix(row):
             continue
@@ -1613,13 +1752,23 @@ for q in range(1, question_count + 1):
                     break
             except Exception:
                 continue
+    if next_question_start is not None:
+        high = min(high, max(low, float(next_question_start) - 0.001))
+    elif segment is not None:
+        high = min(high, max(low, float(segment.get("bottom") or high) - 0.001))
+    # SOFTM-위치맵: 선택지 후보 탐색은 현재 문제 segment 하단을 hard boundary로 사용해 다음 문제 보기/본문을 끌어오지 않음 - 2026-06-17
     choice_question_start = start
     try:
-        if label_anchor and int(label_anchor.get("page") or 0) == page:
+        label_source = str(label_anchor.get("source") or "").lower() if label_anchor else ""
+        label_is_inferred = bool(label_anchor.get("inferred")) or label_source.startswith("inferred-")
+        if label_anchor and int(label_anchor.get("page") or 0) == page and not label_is_inferred:
             choice_question_start = max(choice_question_start, float(label_anchor.get("yRatio") or choice_question_start))
     except Exception:
         choice_question_start = start
+    current_label_exclusion_dy = 0.014 if not compact_bounds else 0.018 # SOFTM-위치맵: 문제번호 바로 아래 붙은 ① 보기 불렛이 라벨 근접 제외에 함께 지워지지 않게 y 범위를 축소 - 2026-06-17
+    next_label_exclusion_dy = 0.024 if not compact_bounds else 0.028 # SOFTM-위치맵: 다음 문제번호 오탐은 계속 차단하되 현재 문제 첫 보기보다 좁게 분리 - 2026-06-17
     label_exclusion_dx = 0.018 if compact_bounds else 0.045
+    # SOFTM-위치맵: inferred 문제 라벨은 실제 시작점보다 아래로 밀릴 수 있어 선택지 검색 시작점을 올려 잡지 않음 - 2026-06-17
     # SOFTM-위치맵: 첫 선택지 누락 판단은 crop 시작선이 아니라 실제 문제번호 라벨 기준으로 계산 - 2026-06-01
     page_candidates = list(page_feature.get("candidates", [])) + list(ocr_by_page.get(page, []))
     candidates = [
@@ -1632,23 +1781,54 @@ for q in range(1, question_count + 1):
             label_anchor
             and int(label_anchor.get("page") or 0) == page
             and abs(item["xRatio"] - float(label_anchor.get("xRatio") or -1)) <= label_exclusion_dx
-            and abs(item["yRatio"] - float(label_anchor.get("yRatio") or -1)) <= 0.032
+            and abs(item["yRatio"] - float(label_anchor.get("yRatio") or -1)) <= current_label_exclusion_dy
         )
         and not (
             next_label_anchor
             and int(next_label_anchor.get("page") or 0) == page
             and abs(item["xRatio"] - float(next_label_anchor.get("xRatio") or -1)) <= label_exclusion_dx
-            and abs(item["yRatio"] - float(next_label_anchor.get("yRatio") or -1)) <= 0.032
+            and abs(item["yRatio"] - float(next_label_anchor.get("yRatio") or -1)) <= next_label_exclusion_dy
         )
     ]
     if col_left is not None and col_right is not None and col_right > col_left + 0.10 and (col_right - col_left) < 0.86:
-        normalized_candidates = []
-        for item in candidates:
+      normalized_candidates = []
+      for item in candidates:
+          local = dict(item)
+          local["fullXRatio"] = float(item.get("xRatio") or 0)
+          local["xRatio"] = clamp((local["fullXRatio"] - col_left) / max(0.001, col_right - col_left), 0.0, 1.0)
+          normalized_candidates.append(local)
+      candidates = normalized_candidates
+    segment_bullet_high = min(0.965, end - 0.001)
+    if next_question_start is not None:
+        segment_bullet_high = min(segment_bullet_high, float(next_question_start) - 0.001)
+    segment_bullet_high = max(segment_bullet_high, low)
+    segment_bullet_low = max(choice_question_start + 0.014, start + 0.012) # SOFTM-위치맵: 문제번호 바로 아래 붙은 첫 보기 불렛을 후보 탐색 하한에서 자르지 않음 - 2026-06-17
+    segment_bullet_candidates = [
+        item for item in page_candidates
+        if segment_bullet_low <= item["yRatio"] <= segment_bullet_high
+        and (col_left is None or (item["xRatio"] >= col_left and item["xRatio"] <= col_right))
+        and not (
+            label_anchor
+            and int(label_anchor.get("page") or 0) == page
+            and abs(item["xRatio"] - float(label_anchor.get("xRatio") or -1)) <= label_exclusion_dx
+            and abs(item["yRatio"] - float(label_anchor.get("yRatio") or -1)) <= current_label_exclusion_dy
+        )
+        and not (
+            next_label_anchor
+            and int(next_label_anchor.get("page") or 0) == page
+            and abs(item["xRatio"] - float(next_label_anchor.get("xRatio") or -1)) <= label_exclusion_dx
+            and abs(item["yRatio"] - float(next_label_anchor.get("yRatio") or -1)) <= next_label_exclusion_dy
+        )
+    ]
+    if col_left is not None and col_right is not None and col_right > col_left + 0.10 and (col_right - col_left) < 0.86:
+        normalized_segment_bullets = []
+        for item in segment_bullet_candidates:
             local = dict(item)
             local["fullXRatio"] = float(item.get("xRatio") or 0)
             local["xRatio"] = clamp((local["fullXRatio"] - col_left) / max(0.001, col_right - col_left), 0.0, 1.0)
-            normalized_candidates.append(local)
-        candidates = normalized_candidates
+            normalized_segment_bullets.append(local)
+        segment_bullet_candidates = normalized_segment_bullets
+    # SOFTM-위치맵: 선택지 불렛 전용 검색은 end-여백으로 자르지 않고 다음 문제 앵커 직전까지 포함 - 2026-06-17
     # SOFTM-위치맵: 지문/표 박스가 있는 문항은 박스 내부 글자를 선택지로 오인하지 않도록 박스 하단 이후만 탐색 - 2026-06-01
     # SOFTM-위치맵: 선택지 검색 하단은 다음 문제 시작선에서 끊어 다음 문제 본문을 이전 문항 보기로 가져오지 않도록 제한 - 2026-06-01
     # SOFTM-위치맵: 2단 PDF는 현재 문항 컬럼 내부의 원형 후보만 선택지로 사용해 반대 컬럼 본문/보기 오인식을 차단 - 2026-06-01
@@ -1755,17 +1935,20 @@ for q in range(1, question_count + 1):
             s4 = str(anchors[4].get("source", ""))
             small_middle = ("outline" not in s2 and "ocr-token" not in s2 and w2 > 0 and w2 < reliable_w * 0.82)
             small_tail = ("outline" not in s4 and "ocr-token" not in s4 and w4 > 0 and w4 < reliable_w * 0.82)
-            if not (small_middle and small_tail):
-                return None
             start = float(question_start) if question_start is not None else 0.0
             bottom_y = (float(anchors[1].get("yRatio")) + float(anchors[3].get("yRatio"))) * 0.5
-            if bottom_y - start < 0.110:
+            segment_height = float(question_end) - start if question_end is not None else 0.0
+            short_segment_lower_row = segment_height <= 0.165 and bottom_y - start >= max(0.052, segment_height * 0.44)
+            if not (small_middle and small_tail) and not short_segment_lower_row:
                 return None
-            gap = clamp((bottom_y - start) * 0.36, 0.042, 0.070)
+            min_depth = max(0.052, min(0.105, segment_height * 0.46 if question_end is not None else 0.085)) # SOFTM-문항앵커: 짧은 segment의 2행 grid도 아래행만 한 줄 가로형으로 오판하지 않게 깊이 기준을 segment 높이에 맞춤 - 2026-06-18
+            if bottom_y - start < min_depth:
+                return None
+            gap = clamp((bottom_y - start) * 0.28, 0.026, 0.070) # SOFTM-문항앵커: 짧은 2행 선택지는 아래 행 기준 위 행 간격을 작게 추정해 정상 ①② 행을 버리지 않음 - 2026-06-18
             top_y = bottom_y - gap
             if question_end is not None and bottom_y > float(question_end) + 0.030:
                 return None
-            if top_y <= start + 0.035:
+            if top_y <= start + 0.024:
                 return None
             top_left = dict(anchors[1])
             top_right = dict(anchors[3])
@@ -1798,7 +1981,7 @@ for q in range(1, question_count + 1):
     # SOFTM-위치맵: 2행 그리드의 아래 행(③④)을 한 줄 가로형(①②③④)으로 오판하면 위 행 ①②를 보간하고 아래 행 번호를 보존 - 2026-06-01
 
     def score_short_segment_horizontal(row_candidates, question_start, question_end, compact=False):
-        if compact or choice_count != 4 or raw_band > 0.122:
+        if compact or choice_count != 4 or raw_band > 0.240:
             return None
         xs = [0.095, 0.310, 0.522, 0.734]
         rows = rows_from(row_candidates)
@@ -1852,6 +2035,14 @@ for q in range(1, question_count + 1):
                     break
                 used.add(best_idx)
                 local = dict(best_item)
+                source = str(local.get("source") or "")
+                if "outline" not in source and "ocr-token" not in source and best_dx > 0.018:
+                    local["xRatio"] = expected_x
+                    if col_left is not None and col_right is not None and col_right > col_left:
+                        local["fullXRatio"] = col_left + (expected_x * (col_right - col_left))
+                    local["inferred"] = True
+                    local["source"] = f'{local.get("source", "anchor-image")}-expected-x'
+                # SOFTM-위치맵: 한 줄 보기에서 불렛이 약하고 텍스트 조각이 대신 잡히면 기대 x 위치로 문항앵커를 되돌림 - 2026-06-17
                 local["source"] = f'{local.get("source", "anchor-image")}-short-rescue'
                 anchors.append((choice, local))
                 dx_sum += best_dx
@@ -1879,16 +2070,253 @@ for q in range(1, question_count + 1):
         return best
     # SOFTM-위치맵: 3번처럼 아주 짧은 전폭 문항은 새 문제를 만들지 않고 기존 문제영역 안의 완전한 ①~④ 가로행만 복구 - 2026-06-02
 
+    def score_segment_bullet_sequence(row_candidates, question_start, question_end, compact=False):
+        if choice_count < 2:
+            return None
+        expected_x = x_template(choice_count, "vertical", compact)[0]
+        max_dx = 0.070 if compact else 0.032 # SOFTM-위치맵: 전폭 세로 보기의 왼쪽 불렛 후보는 제목 문장 글자 조각을 끌어오지 않도록 x 허용폭 축소 - 2026-06-17
+        start_y = float(question_start) if question_start is not None else start
+        end_y = float(question_end) if question_end is not None else high
+        rows = rows_from(row_candidates)
+        bullet_rows = []
+        for row in rows:
+            try:
+                row_y = float(row.get("y") or 0)
+            except Exception:
+                continue
+            if row_y < start_y + 0.024 or row_y > end_y + 0.016: # SOFTM-위치맵: 문제번호 바로 아래에서 시작하는 ① 보기 불렛이 하한 가드에 잘리지 않게 완화 - 2026-06-17
+                continue
+            best = None
+            best_score = 999.0
+            for item in row.get("items", []):
+                try:
+                    x = float(item.get("xRatio") or 0)
+                    dx = abs(x - expected_x)
+                    wr = float(item.get("wRatio") or 0)
+                    hr = float(item.get("hRatio") or 0)
+                    aspect = float(item.get("aspect", wr / max(0.0001, hr)) or 1.0)
+                    fill = float(item.get("fill") or 0)
+                    left_density = float(item.get("leftDensity") or 0)
+                    source = str(item.get("source") or "")
+                except Exception:
+                    continue
+                if dx > max_dx:
+                    continue
+                if wr < 0.006 or wr > 0.030 or hr < 0.006 or hr > 0.030:
+                    continue
+                if aspect < 0.55 or aspect > 1.55:
+                    continue
+                outline = "outline" in source or "ocr-token" in source
+                if outline:
+                    if fill < 0.070 or fill > 0.280:
+                        continue
+                    if left_density > 0.18:
+                        continue
+                else:
+                    if fill < 0.080 or fill > 0.360:
+                        continue
+                    if left_density > 0.160:
+                        continue
+                score = dx + (0.000 if outline else 0.018) + max(0.0, left_density - 0.030) * 0.25 # SOFTM-위치맵: 첫 보기 ① 내부 획 밀도가 높아도 문제 범위 내 불렛이면 후보로 유지 - 2026-06-17
+                if score < best_score:
+                    best = item
+                    best_score = score
+            if best is not None:
+                bullet_rows.append((row_y, best, best_score))
+        if len(bullet_rows) < max(2, min(choice_count, 3)):
+            return None
+        bullet_rows = sorted(bullet_rows, key=lambda row: row[0])
+        best_layout = None
+        max_window = min(choice_count, len(bullet_rows))
+        for start_idx in range(0, len(bullet_rows) - max_window + 1):
+            window = bullet_rows[start_idx:start_idx + max_window]
+            if len(window) < max_window:
+                continue
+            y_values = [float(row[0]) for row in window]
+            gaps = [y_values[idx + 1] - y_values[idx] for idx in range(len(y_values) - 1)]
+            if gaps and (min(gaps) < 0.008 or max(gaps) > 0.060):
+                continue
+            y_span = y_values[-1] - y_values[0]
+            if y_span < 0.020 or y_span > 0.180:
+                continue
+            if y_values[0] < start_y + max(0.018, raw_band * 0.045): # SOFTM-위치맵: 제목 바로 아래 붙은 ① 보기 행을 보존하면서 제목줄 오인을 최소화 - 2026-06-17
+                continue
+            gap_mean = sum(gaps) / max(1, len(gaps)) if gaps else 0.0
+            gap_variance = sum(abs(gap - gap_mean) for gap in gaps)
+            outline_count = sum(1 for _, item, _ in window if "outline" in str(item.get("source", "")) or "ocr-token" in str(item.get("source", "")))
+            depth = y_values[0] - start_y
+            score = (len(window) * 16.0) + (outline_count * 2.5) + min(6.0, depth * 18.0) - (sum(row[2] for row in window) * 70.0) - (gap_variance * 130.0) - (start_idx * 9.0) # SOFTM-위치맵: 문제 범위 내 ① 후보를 건너뛰고 ②~④/추정행을 ①~④로 밀어 잡지 않도록 앞 window 우선 - 2026-06-17
+            anchors = []
+            for idx, (_, item, _) in enumerate(window, start=1):
+                local = dict(item)
+                local["source"] = f'{local.get("source", "anchor-image")}-segment-bullet'
+                anchors.append((idx, local))
+            layout = {
+                "score": score,
+                "anchors": anchors,
+                "layout": "vertical",
+                "foundCount": len(anchors),
+                "yDistance": abs(((y_values[0] + y_values[-1]) * 0.5) - expected_vertical_y),
+                "firstY": y_values[0],
+                "lastY": y_values[-1],
+                "segmentBulletSequence": True,
+                "compact": compact,
+            }
+            if best_layout is None or score > float(best_layout.get("score", 0)):
+                best_layout = layout
+        return best_layout
+    # SOFTM-위치맵: 문제 앵커~다음 문제 앵커 범위 안의 ①~④ 불렛 시퀀스를 문단/그림/코드 박스와 무관하게 우선 탐색 - 2026-06-17
+
+    def score_segment_bullet_grid_sequence(row_candidates, question_start, question_end, compact=False):
+        if choice_count != 4:
+            return None
+        xs = x_template(choice_count, "grid", compact)
+        if len(xs) < 2:
+            return None
+        max_dx = 0.082 if compact else 0.045
+        start_y = float(question_start) if question_start is not None else start
+        end_y = float(question_end) if question_end is not None else high
+        rows = rows_from(row_candidates)
+        grid_rows = []
+        for row in rows:
+            try:
+                row_y = float(row.get("y") or 0)
+            except Exception:
+                continue
+            if row_y < start_y + 0.020 or row_y > end_y + 0.018:
+                continue
+            used = set()
+            row_anchors = []
+            dx_sum = 0.0
+            outline_count = 0
+            for expected_x in xs[:2]:
+                best = None
+                best_idx = None
+                best_score = 999.0
+                for idx, item in enumerate(row.get("items", [])):
+                    if idx in used:
+                        continue
+                    try:
+                        x = float(item.get("xRatio") or 0)
+                        dx = abs(x - expected_x)
+                        wr = float(item.get("wRatio") or 0)
+                        hr = float(item.get("hRatio") or 0)
+                        aspect = float(item.get("aspect", wr / max(0.0001, hr)) or 1.0)
+                        fill = float(item.get("fill") or 0)
+                        left_density = float(item.get("leftDensity") or 0)
+                        source = str(item.get("source") or "")
+                    except Exception:
+                        continue
+                    if dx > max_dx:
+                        continue
+                    if wr < 0.006 or wr > 0.032 or hr < 0.006 or hr > 0.032:
+                        continue
+                    if aspect < 0.50 or aspect > 1.65:
+                        continue
+                    outline = "outline" in source or "ocr-token" in source
+                    if outline:
+                        if fill < 0.070 or fill > 0.285:
+                            continue
+                        if left_density > 0.20:
+                            continue
+                    else:
+                        if fill < 0.075 or fill > 0.420:
+                            continue
+                        if left_density > 0.100:
+                            continue
+                    score = dx + (0.000 if outline else 0.014) + max(0.0, left_density - 0.030) * 0.20
+                    if score < best_score:
+                        best = item
+                        best_idx = idx
+                        best_score = score
+                if best is not None:
+                    used.add(best_idx)
+                    row_anchors.append((best, best_score))
+                    dx_sum += best_score
+                    if "outline" in str(best.get("source", "")) or "ocr-token" in str(best.get("source", "")):
+                        outline_count += 1
+            if len(row_anchors) >= 2:
+                grid_rows.append({"y": row_y, "anchors": row_anchors, "dx": dx_sum, "outlineCount": outline_count})
+        if len(grid_rows) < 2:
+            return None
+        best_layout = None
+        for i, top_row in enumerate(grid_rows):
+            for bottom_row in grid_rows[i + 1:]:
+                gap = float(bottom_row["y"]) - float(top_row["y"])
+                if gap < 0.030 or gap > 0.120:
+                    continue
+                if float(top_row["y"]) < start_y + max(0.016, raw_band * 0.045): # SOFTM-위치맵: grid 후보 생성 블록 들여쓰기를 복구해 문제 범위 내 2행 불렛 후보를 실제 평가 - 2026-06-18
+                    continue
+                anchors = []
+                for choice, item in [(1, top_row["anchors"][0][0]), (2, top_row["anchors"][1][0]), (3, bottom_row["anchors"][0][0]), (4, bottom_row["anchors"][1][0])]:
+                    local = dict(item)
+                    local["source"] = f'{local.get("source", "anchor-image")}-segment-grid-bullet'
+                    anchors.append((choice, local))
+                dx_sum = float(top_row["dx"]) + float(bottom_row["dx"])
+                outline_count = int(top_row["outlineCount"]) + int(bottom_row["outlineCount"])
+                score = 68.0 + outline_count * 2.0 - dx_sum * 70.0 - abs(gap - 0.070) * 16.0 + min(5.0, (float(top_row["y"]) - start_y) * 12.0)
+                layout = {
+                    "score": score,
+                    "anchors": anchors,
+                    "layout": "grid",
+                    "foundCount": 4,
+                    "yDistance": abs(((float(top_row["y"]) + float(bottom_row["y"])) * 0.5) - expected_grid_y),
+                    "gap": gap,
+                    "firstY": float(top_row["y"]),
+                    "lastY": float(bottom_row["y"]),
+                    "segmentGridBulletSequence": True,
+                    "compact": compact,
+                }
+                if best_layout is None or score > float(best_layout.get("score", 0)):
+                    best_layout = layout
+        return best_layout
+    # SOFTM-위치맵: 문제 범위 안의 ①②/③④ 그리드 불렛도 문단/그림/코드 박스와 무관하게 우선 탐색 - 2026-06-17
+
     compact_column = compact_bounds
     rows = rows_from(candidates)
+    segment_bullets = normalize_layout_score(score_segment_bullet_sequence(segment_bullet_candidates, choice_question_start, segment_bullet_high, compact_column))
+    segment_grid_bullets = normalize_layout_score(score_segment_bullet_grid_sequence(segment_bullet_candidates, choice_question_start, segment_bullet_high, compact_column))
+    strong_vertical_bullets = segment_bullets and segment_bullets.get("layout") == "vertical" and int(segment_bullets.get("foundCount") or 0) >= max(3, min(choice_count, 3)) # SOFTM-위치맵: 실제 세로형 ①~④ 시퀀스가 있으면 같은 행 본문 글자를 오른쪽 grid 불렛으로 오판하지 않음 - 2026-06-18
+    if segment_grid_bullets and not strong_vertical_bullets and (not segment_bullets or float(segment_grid_bullets.get("score", 0)) >= float(segment_bullets.get("score", 0)) - 3.0):
+        segment_bullets = segment_grid_bullets
+    # SOFTM-위치맵: 같은 문제 범위 안에서 세로/그리드 불렛 후보를 모두 평가해 더 안정적인 배치를 선택 - 2026-06-17
+    short_horizontal = normalize_layout_score(score_short_segment_horizontal(segment_bullet_candidates, choice_question_start, segment_bullet_high, compact_column))
     horizontal = normalize_layout_score(score_horizontal(rows, choice_count, expected_horizontal_y, start, compact_column))
     grid = normalize_layout_score(score_grid(rows, choice_count, expected_grid_y, start, compact_column))
     vertical = normalize_layout_score(score_vertical(rows, choice_count, expected_vertical_y, choice_question_start, high, compact_column))
     outline_vertical = normalize_layout_score(score_outline_vertical(rows, choice_count, expected_vertical_y, choice_question_start, high, compact_column))
     rescued_grid = normalize_layout_score(rescue_lower_grid_from_horizontal(horizontal, choice_question_start, high, compact_column))
+    rescued_short_grid = normalize_layout_score(rescue_lower_grid_from_horizontal(short_horizontal, choice_question_start, high, compact_column))
+    if rescued_short_grid and (not rescued_grid or float(rescued_short_grid.get("score", 0)) >= float(rescued_grid.get("score", 0)) - 0.75):
+        rescued_grid = rescued_short_grid # SOFTM-문항앵커: short horizontal 후보도 아래 행만 잡힌 2행 grid인지 검사 - 2026-06-18
     if rescued_grid and (not grid or float(rescued_grid.get("score", 0)) >= float(grid.get("score", 0)) - 0.75):
         grid = rescued_grid
     picked = pick_layout(horizontal, grid, vertical, choice_count, bool(compact_column or (box_floor is not None and choice_count == 4) or rescued_grid))
+    if rescued_grid and picked and picked.get("layout") == "horizontal" and abs(float(picked.get("firstY", 1.0)) - float(rescued_grid.get("lastY", 0.0))) <= 0.020:
+        picked = rescued_grid # SOFTM-문항앵커: 2행 grid의 아래 행만 horizontal로 잡힌 경우 rescued grid를 최종 선택 - 2026-06-18
+    if short_horizontal and (
+        not picked
+        or (picked.get("layout") == "horizontal" and not rescued_grid)
+        or (not rescued_grid and float(short_horizontal.get("score", 0)) >= float(picked.get("score", 0)) - 4.0)
+    ):
+        picked = short_horizontal
+        picked["shortSegmentFallback"] = True
+    # SOFTM-위치맵: ①②③④ 한 줄 보기에서는 일반 배치 추정보다 실제 불렛 시퀀스를 우선해 텍스트로 밀린 앵커를 방지 - 2026-06-17
+    grid_overrides_complete_vertical = segment_bullets and segment_bullets.get("layout") == "grid" and picked and picked.get("layout") == "vertical" and int(picked.get("foundCount") or 0) >= choice_count # SOFTM-위치맵: 완성된 세로형 선택지는 같은 줄 본문 글자 조합 grid 후보보다 우선 - 2026-06-18
+    if segment_bullets and not grid_overrides_complete_vertical and (
+        not picked
+        or raw_band >= 0.220
+        or picked.get("layout") == "vertical"
+        or (
+            picked.get("layout") == "horizontal"
+            and segment_bullets.get("layout") == "vertical"
+            and float(segment_bullets.get("firstY", 1.0)) < float(picked.get("firstY", 1.0)) - 0.030
+            and int(segment_bullets.get("foundCount") or 0) >= max(3, min(choice_count, 3))
+        )
+    ):
+        picked = segment_bullets
+        picked["segmentBulletFallback"] = True
+    # SOFTM-위치맵: 긴 문제영역에서는 배치 추정보다 실제 ①~④ 불렛 시퀀스를 우선해 코드/이미지 뒤 보기 누락을 줄임 - 2026-06-17
     if picked and outline_vertical and picked.get("layout") in ("grid", "horizontal"):
         picked_anchors = picked.get("anchors") or []
         right_non_outline = any(
@@ -1917,7 +2345,7 @@ for q in range(1, question_count + 1):
                         label_anchor
                         and int(label_anchor.get("page") or 0) == page
                         and abs(item["xRatio"] - float(label_anchor.get("xRatio") or -1)) <= label_exclusion_dx
-                        and abs(item["yRatio"] - float(label_anchor.get("yRatio") or -1)) <= 0.032
+                        and abs(item["yRatio"] - float(label_anchor.get("yRatio") or -1)) <= current_label_exclusion_dy
                     )
                 ]
                 if col_left is not None and col_right is not None and col_right > col_left + 0.10 and (col_right - col_left) < 0.86:
@@ -1970,7 +2398,10 @@ function isReliableChoiceAnchor(item, choiceCount){
   const page = Number(item.page);
   const x = Number(item.xRatio);
   const y = Number(item.yRatio);
+  const w = Number(item.wRatio);
+  const h = Number(item.hRatio);
   const confidence = item.confidence == null ? 1 : Number(item.confidence);
+  if (source.includes("ocr-token") && ((Number.isFinite(w) && w > 0.040) || (Number.isFinite(h) && h > 0.035))) return false; // SOFTM-위치맵: 넓은 OCR 숫자 토큰은 본문 조각 오탐으로 보고 선택지 앵커에서 제외 - 2026-06-16
   return Number.isInteger(choice)
     && choice >= 1
     && choice <= choiceCount
@@ -1982,10 +2413,43 @@ function isReliableChoiceAnchor(item, choiceCount){
     && Number.isFinite(y)
     && y >= 0
     && y <= 1
-    && (!Number.isFinite(confidence) || confidence >= 0.45);
+	    && (!Number.isFinite(confidence) || confidence >= 0.45);
 }
 
-function normalizeReliableChoiceMap(imageMap, questionCount, choiceCount){
+function isSuspiciousVerticalChoiceAnchorSet(anchors, questionSegments, q, choiceCount){
+  const expected = Math.max(3, Math.min(5, Number(choiceCount) || 4));
+  const list = (Array.isArray(anchors) ? anchors : [])
+    .filter((item) => Number.isInteger(Number(item?.choice)) && Number(item.choice) >= 1 && Number(item.choice) <= expected)
+    .sort((a, b) => Number(a.choice) - Number(b.choice));
+  if (list.length < Math.min(expected, 4)) return false;
+  const page = Number(list[0]?.page);
+  if (!Number.isFinite(page) || list.some((item) => Number(item?.page) !== page)) return false;
+  const xs = list.map((item) => Number(item.xRatio)).filter(Number.isFinite);
+  const ys = list.map((item) => Number(item.yRatio)).filter(Number.isFinite).sort((a, b) => a - b);
+  if (xs.length !== list.length || ys.length !== list.length) return false;
+  const xSpread = Math.max(...xs) - Math.min(...xs);
+  if (xSpread > 0.060) return false;
+  const gaps = [];
+  for (let idx = 0; idx < ys.length - 1; idx += 1){
+    const gap = ys[idx + 1] - ys[idx];
+    if (Number.isFinite(gap) && gap > 0) gaps.push(gap);
+  }
+  if (gaps.length < 2) return false;
+  const minGap = Math.min(...gaps);
+  const maxGap = Math.max(...gaps);
+  if (!(minGap < 0.026 && maxGap > Math.max(0.070, minGap * 3.8))) return false;
+  const segment = (questionSegments?.[String(q)] || []).find((item) => Number(item?.page) === page);
+  if (!segment) return true;
+  const top = Number(segment.top);
+  const bottom = Number(segment.bottom);
+  if (!Number.isFinite(top) || !Number.isFinite(bottom)) return true;
+  const height = bottom - top;
+  if (height < 0.18) return false;
+  return ys[1] < top + Math.max(0.075, height * 0.24);
+}
+// SOFTM-문항영역: 코드/이미지 내부 숫자가 세로형 보기 앵커처럼 잡힌 경우 영역 생성에서 제외 - 2026-06-17
+
+function normalizeReliableChoiceMap(imageMap, questionCount, choiceCount, questionSegments = {}){
   const out = {};
   for (let q = 1; q <= questionCount; q += 1){
     const anchors = imageMap && Array.isArray(imageMap[String(q)]) ? imageMap[String(q)] : [];
@@ -1999,11 +2463,1672 @@ function normalizeReliableChoiceMap(imageMap, questionCount, choiceCount){
       }
     }
     if (byChoice.size) {
-      out[String(q)] = Array.from(byChoice.values()).sort((a, b) => Number(a.choice) - Number(b.choice));
+      const list = Array.from(byChoice.values()).sort((a, b) => Number(a.choice) - Number(b.choice));
+      if (!isSuspiciousVerticalChoiceAnchorSet(list, questionSegments, q, choiceCount)) out[String(q)] = list;
     }
   }
   return out;
 }
+
+function clampGeneratedRatio(value, min = 0, max = 1){
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return min;
+  return Math.max(min, Math.min(max, numeric));
+}
+
+/* SOFTM-문항영역 시작: OCR이 약한 PDF도 위치맵 생성 시 선택지 앵커에서 기본 문항영역을 함께 저장 - 2026-06-16 */
+function repairGridChoiceMap(choiceMap, questionSegments, questionCount, choiceCount){
+  const out = {};
+  const segmentFor = (q, page, point = null) => {
+    const segments = Array.isArray(questionSegments?.[String(q)]) ? questionSegments[String(q)] : [];
+    const samePage = segments.filter((segment) => Number(segment.page) === Number(page));
+    const x = Number(point?.xRatio);
+    const y = Number(point?.yRatio);
+    return samePage.find((segment) => {
+      const left = Number.isFinite(Number(segment?.left)) ? Number(segment.left) : 0;
+      const right = Number.isFinite(Number(segment?.right)) ? Number(segment.right) : 1;
+      const top = Number.isFinite(Number(segment?.top)) ? Number(segment.top) : 0;
+      const bottom = Number.isFinite(Number(segment?.bottom)) ? Number(segment.bottom) : 1;
+      return (!Number.isFinite(x) || (x >= left - 0.030 && x <= right + 0.030))
+        && (!Number.isFinite(y) || (y >= top - 0.030 && y <= bottom + 0.050));
+    }) || samePage[0] || null;
+  };
+  const inferMissingGridAnchor = (q, byChoice, missingChoice) => {
+    if (choiceCount !== 4) return null;
+    const c1 = byChoice.get(1);
+    const c2 = byChoice.get(2);
+    const c3 = byChoice.get(3);
+    const c4 = byChoice.get(4);
+    const page = Number((c1 || c2 || c3 || c4)?.page);
+    if (!Number.isFinite(page)) return null;
+    let x = null;
+    let y = null;
+    if (missingChoice === 1 && c2 && c3 && c4) {
+      x = Number(c3.xRatio);
+      y = Number(c2.yRatio);
+    } else if (missingChoice === 2 && c1 && c3 && c4) {
+      x = Number(c4.xRatio);
+      y = Number(c1.yRatio);
+    } else if (missingChoice === 3 && c1 && c2 && c4) {
+      x = Number(c1.xRatio);
+      y = Number(c4.yRatio);
+    } else if (missingChoice === 4 && c1 && c2 && c3) {
+      x = Number(c2.xRatio);
+      y = Number(c3.yRatio);
+    }
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    const leftX = Number.isFinite(Number(c1?.xRatio)) && Number.isFinite(Number(c3?.xRatio))
+      ? (Number(c1.xRatio) + Number(c3.xRatio)) * 0.5
+      : (Number.isFinite(Number(c1?.xRatio)) ? Number(c1.xRatio) : Number(c3?.xRatio));
+    const rightX = Number.isFinite(Number(c2?.xRatio)) && Number.isFinite(Number(c4?.xRatio))
+      ? (Number(c2.xRatio) + Number(c4.xRatio)) * 0.5
+      : (Number.isFinite(Number(c2?.xRatio)) ? Number(c2.xRatio) : Number(c4?.xRatio));
+    const topY = Number.isFinite(Number(c1?.yRatio)) && Number.isFinite(Number(c2?.yRatio))
+      ? (Number(c1.yRatio) + Number(c2.yRatio)) * 0.5
+      : (Number.isFinite(Number(c1?.yRatio)) ? Number(c1.yRatio) : Number(c2?.yRatio));
+    const bottomY = Number.isFinite(Number(c3?.yRatio)) && Number.isFinite(Number(c4?.yRatio))
+      ? (Number(c3.yRatio) + Number(c4.yRatio)) * 0.5
+      : (Number.isFinite(Number(c3?.yRatio)) ? Number(c3.yRatio) : Number(c4?.yRatio));
+    if (!Number.isFinite(leftX) || !Number.isFinite(rightX) || !Number.isFinite(topY) || !Number.isFinite(bottomY)) return null;
+    const dx = rightX - leftX;
+    const dy = bottomY - topY;
+    if (dx < 0.080 || dx > 0.560 || dy < 0.006 || dy > 0.095) return null;
+    const segment = segmentFor(q, page, { xRatio: x, yRatio: y });
+    const segLeft = clampGeneratedRatio(segment?.left ?? 0, 0, 1);
+    const segRight = clampGeneratedRatio(segment?.right ?? 1, 0, 1);
+    const segTop = clampGeneratedRatio(segment?.top ?? 0, 0, 1);
+    const segBottom = clampGeneratedRatio(segment?.bottom ?? 1, 0, 1);
+    if (x < segLeft - 0.035 || x > segRight + 0.035 || y < segTop - 0.025 || y > segBottom + 0.045) return null;
+    const base = byChoice.get(missingChoice === 1 ? 3 : (missingChoice === 2 ? 4 : (missingChoice === 3 ? 1 : 2))) || c1 || c2 || c3 || c4;
+    return {
+      ...base,
+      choice: missingChoice,
+      page,
+      xRatio: clampGeneratedRatio(x),
+      yRatio: clampGeneratedRatio(y),
+      wRatio: Math.max(0.010, Math.min(0.020, Number(base?.wRatio) || 0.012)),
+      hRatio: Math.max(0.010, Math.min(0.020, Number(base?.hRatio) || 0.012)),
+      source: `${base?.source || "anchor-image"}-post-inferred-grid`,
+      anchorMode: "center",
+      layout: "grid",
+      inferred: true,
+      confidence: Math.min(0.62, Number(base?.confidence) || 0.62),
+    };
+  };
+  const inferMissingHorizontalAnchor = (q, byChoice, missingChoice) => {
+    if (choiceCount !== 4) return null;
+    const present = [...byChoice.values()].filter(Boolean);
+    if (present.length < 3) return null;
+    const page = Number(present[0]?.page);
+    if (!Number.isFinite(page) || present.some((item) => Number(item?.page) !== page)) return null;
+    const ys = present.map((item) => Number(item.yRatio)).filter(Number.isFinite);
+    const xs = present.map((item) => Number(item.xRatio)).filter(Number.isFinite);
+    if (ys.length !== present.length || xs.length !== present.length) return null;
+    const ySpread = Math.max(...ys) - Math.min(...ys);
+    const xSpread = Math.max(...xs) - Math.min(...xs);
+    if (ySpread > 0.018 || xSpread < 0.38) return null;
+    const expectedX = [0, 0.095, 0.310, 0.522, 0.734][missingChoice];
+    const y = ys.reduce((sum, value) => sum + value, 0) / ys.length;
+    const segment = segmentFor(q, page, { xRatio: expectedX, yRatio: y });
+    const segLeft = clampGeneratedRatio(segment?.left ?? 0, 0, 1);
+    const segRight = clampGeneratedRatio(segment?.right ?? 1, 0, 1);
+    const segTop = clampGeneratedRatio(segment?.top ?? 0, 0, 1);
+    const segBottom = clampGeneratedRatio(segment?.bottom ?? 1, 0, 1);
+    if (expectedX < segLeft - 0.020 || expectedX > segRight + 0.020 || y < segTop - 0.020 || y > segBottom + 0.050) return null;
+    const base = present.reduce((best, item) => {
+      if (!best) return item;
+      return Math.abs(Number(item.choice) - missingChoice) < Math.abs(Number(best.choice) - missingChoice) ? item : best;
+    }, null);
+    return {
+      ...base,
+      choice: missingChoice,
+      page,
+      xRatio: clampGeneratedRatio(expectedX),
+      yRatio: clampGeneratedRatio(y),
+      wRatio: Math.max(0.010, Math.min(0.020, Number(base?.wRatio) || 0.012)),
+      hRatio: Math.max(0.010, Math.min(0.020, Number(base?.hRatio) || 0.012)),
+      source: `${base?.source || "anchor-image"}-post-inferred-horizontal`,
+      anchorMode: "center",
+      layout: "horizontal",
+      inferred: true,
+      confidence: Math.min(0.62, Number(base?.confidence) || 0.62),
+    };
+  };
+  // SOFTM-문항앵커: 한 줄 보기에서 한 개 원형만 누락되면 형제 앵커 행과 기대 x 위치로 보수 생성 - 2026-06-17
+  for (let q = 1; q <= questionCount; q += 1){
+    const anchors = Array.isArray(choiceMap?.[String(q)]) ? choiceMap[String(q)].filter((item) => isReliableChoiceAnchor(item, choiceCount)) : [];
+    if (!anchors.length) continue;
+    const byChoice = new Map();
+    for (const item of anchors) byChoice.set(Number(item.choice), { ...item });
+    const missing = [];
+    for (let choice = 1; choice <= choiceCount; choice += 1){
+      if (!byChoice.has(choice)) missing.push(choice);
+    }
+    if (missing.length === 1) {
+      const inferred = inferMissingGridAnchor(q, byChoice, missing[0]) || inferMissingHorizontalAnchor(q, byChoice, missing[0]);
+      if (inferred) byChoice.set(missing[0], inferred);
+    }
+    out[String(q)] = [...byChoice.values()].sort((a, b) => Number(a.choice) - Number(b.choice));
+  }
+  return out;
+}
+
+function buildSegmentChoiceAnchorFallbackMap(choiceMap, questionSegments, questionColumnBoundsMap, pageMap, questionCount, choiceCount, questionLabelMap = {}){
+  const out = {};
+  for (let q = 1; q <= questionCount; q += 1){
+    const existing = Array.isArray(choiceMap?.[String(q)])
+      ? choiceMap[String(q)].filter((item) => isReliableChoiceAnchor(item, choiceCount))
+      : [];
+    const hasCompleteExisting = existing.length >= choiceCount;
+    const hasPartialExisting = existing.length > 0 && existing.length < choiceCount;
+    const segments = Array.isArray(questionSegments?.[String(q)]) ? questionSegments[String(q)] : [];
+    const primary = segments.find((segment) => segment && segment.continuation !== true) || segments[0] || null;
+    const continuation = segments.find((segment) => segment && segment.continuation === true) || null;
+    const primaryHeight = primary ? Number(primary.bottom) - Number(primary.top) : 0;
+    const shouldUseContinuationFallback = primary
+      && continuation
+      && Number(primary.bottom) >= 0.780
+      && Number.isFinite(primaryHeight)
+      && (primaryHeight < 0.115 || Number(primary.top) >= 0.780); // SOFTM-문항앵커: 단 하단에서 시작한 연속 문항은 보기 생성 기준을 다음 단 continuation으로 둠 - 2026-06-18
+    const fallbackSegment = shouldUseContinuationFallback ? continuation : primary;
+    if (!fallbackSegment) {
+      if (existing.length) out[String(q)] = existing;
+      continue;
+    }
+    const page = Number(fallbackSegment.page || pageMap[q]);
+    const left = clampGeneratedRatio(fallbackSegment.left ?? questionColumnBoundsMap?.[String(q)]?.left ?? 0, 0, 1);
+    const right = clampGeneratedRatio(fallbackSegment.right ?? questionColumnBoundsMap?.[String(q)]?.right ?? 1, 0, 1);
+    const top = clampGeneratedRatio(fallbackSegment.top, 0, 1);
+    const bottom = clampGeneratedRatio(fallbackSegment.bottom, 0, 1);
+    const width = right - left;
+    const height = bottom - top;
+    if (!Number.isFinite(page) || page < 1 || width < 0.30) {
+      if (existing.length) out[String(q)] = existing;
+      continue;
+    }
+    const existingXValues = existing.map((item) => Number(item.xRatio)).filter(Number.isFinite);
+    const existingXSpread = existingXValues.length
+      ? Math.max(...existingXValues) - Math.min(...existingXValues)
+      : 0;
+    const isVerticalSegmentFallback = hasCompleteExisting
+      && existingXSpread < 0.080
+      && existing.every((item) => String(item?.source || "").startsWith("segment-choice-anchor") && item?.layout === "vertical");
+    const isCollapsedGridCandidate = existing.length >= Math.min(3, choiceCount)
+      && choiceCount === 4
+      && width >= 0.30
+      && height >= 0.070
+      && height <= 0.130
+      && existingXSpread < Math.max(0.070, width * 0.20)
+      && (height <= 0.105 || existing.some((item) => String(item?.source || "").includes("post-inferred-trailing"))); // SOFTM-문항앵커: 2x2 보기 앵커가 한 열로 몰린 경우 partial/complete 모두 grid fallback으로 교체 - 2026-06-17
+    const existingYValues = existing.map((item) => Number(item.yRatio)).filter(Number.isFinite);
+    const buildHorizontalFromLowerShortRescueGrid = () => {
+      if (choiceCount !== 4 || width < 0.70 || existing.length < 4) return null;
+      const byChoice = new Map(existing.map((item) => [Number(item.choice), item]));
+      const upper = [byChoice.get(1), byChoice.get(2)];
+      const lower = [byChoice.get(3), byChoice.get(4)];
+      if (upper.some((item) => !item) || lower.some((item) => !item)) return null;
+      const upperSources = upper.map((item) => String(item.source || "").toLowerCase());
+      const lowerSources = lower.map((item) => String(item.source || "").toLowerCase());
+      if (!upperSources.every((source) => source.includes("short-rescue") && source.includes("inferred-upper-grid"))) return null;
+      if (!lowerSources.every((source) => source.includes("short-rescue"))) return null;
+      const upperY = upper.map((item) => Number(item.yRatio)).filter(Number.isFinite);
+      const lowerY = lower.map((item) => Number(item.yRatio)).filter(Number.isFinite);
+      if (upperY.length !== 2 || lowerY.length !== 2) return null;
+      const y = lowerY.reduce((sum, value) => sum + value, 0) / lowerY.length;
+      const upperMean = upperY.reduce((sum, value) => sum + value, 0) / upperY.length;
+      if (y - upperMean < Math.max(0.018, height * 0.18)) return null;
+      if (y < top + height * 0.52 || y > bottom - 0.006) return null;
+      const base = lower.reduce((best, item) => Number(item.confidence || 0) > Number(best?.confidence || 0) ? item : best, lower[0]);
+      const xs = [0.095, 0.310, 0.522, 0.734].map((ratio) => clampGeneratedRatio(left + width * ratio, left + width * 0.040, right - width * 0.040));
+      return xs.map((xRatio, index) => ({
+        ...base,
+        choice: index + 1,
+        page,
+        xRatio,
+        yRatio: clampGeneratedRatio(y, top + 0.020, bottom - 0.006),
+        wRatio: Math.max(0.010, Math.min(0.020, width * 0.014)),
+        hRatio: 0.012,
+        source: "segment-choice-anchor-text-horizontal",
+        anchorMode: "center",
+        layout: "horizontal",
+        confidence: Math.min(0.62, Number(base?.confidence) || 0.62),
+        inferred: true,
+      }));
+    };
+    const buildCollapsedColumnGridReplacement = () => {
+      if (choiceCount !== 4 || width >= 0.70 || height < 0.145 || existing.length < 4) return null;
+      const byChoice = new Map(existing.map((item) => [Number(item.choice), item]));
+      const choices = [1, 2, 3, 4].map((choice) => byChoice.get(choice));
+      if (choices.some((item) => !item)) return null;
+      const xs = choices.map((item) => Number(item.xRatio)).filter(Number.isFinite);
+      const ys = choices.map((item) => Number(item.yRatio)).filter(Number.isFinite).sort((a, b) => a - b);
+      if (xs.length !== 4 || ys.length !== 4) return null;
+      const xSpread = Math.max(...xs) - Math.min(...xs);
+      if (xSpread > Math.max(0.045, width * 0.18)) return null;
+      const sources = choices.map((item) => String(item.source || "").toLowerCase());
+      if (!sources.some((source) => source.includes("anchor-image"))) return null;
+      const xLeft = clampGeneratedRatio(Math.min(...xs), left + width * 0.055, right - width * 0.58);
+      const xRight = clampGeneratedRatio(left + width * 0.525, left + width * 0.36, right - width * 0.080);
+      let yTop = NaN;
+      let yBottom = NaN;
+      let source = "segment-choice-anchor-text-grid-collapsed-column";
+      if (ys[1] - ys[0] >= 0.008 && ys[1] - ys[0] <= 0.034 && ys[3] < top + height * 0.72) {
+        yTop = ys[0];
+        yBottom = ys[1];
+      } else if (ys[3] >= top + height * 0.66) {
+        yTop = ys[3];
+        yBottom = Math.min(bottom - 0.006, yTop + Math.max(0.014, Math.min(0.026, height * 0.075)));
+        source = "segment-choice-anchor-tail-grid-collapsed-column";
+      } else {
+        return null;
+      }
+      if (!Number.isFinite(yTop) || !Number.isFinite(yBottom) || yBottom <= yTop) return null;
+      const base = choices.reduce((best, item) => Number(item.confidence || 0) > Number(best?.confidence || 0) ? item : best, choices[0]);
+      return [
+        { choice: 1, xRatio: xLeft, yRatio: yTop },
+        { choice: 2, xRatio: xRight, yRatio: yTop },
+        { choice: 3, xRatio: xLeft, yRatio: yBottom },
+        { choice: 4, xRatio: xRight, yRatio: yBottom },
+      ].map((item) => ({
+        ...base,
+        ...item,
+        page,
+        wRatio: Math.max(0.010, Math.min(0.020, width * 0.024)),
+        hRatio: 0.012,
+        source,
+        anchorMode: "center",
+        layout: "grid",
+        confidence: 0.56,
+        inferred: true,
+      }));
+    };
+    const shortRescueHorizontal = buildHorizontalFromLowerShortRescueGrid();
+    if (shortRescueHorizontal) {
+      out[String(q)] = shortRescueHorizontal;
+      continue;
+    }
+    const collapsedColumnGrid = buildCollapsedColumnGridReplacement();
+    if (collapsedColumnGrid) {
+      out[String(q)] = collapsedColumnGrid;
+      continue;
+    }
+    // SOFTM-문항앵커: 본문/코드 원형을 보기로 오인한 완성 앵커도 문제 segment 안의 실제 보기 행 기준으로 재배치 - 2026-06-18
+    const singleLowerHorizontalSignal = choiceCount === 4
+      && existing.length === 1
+      && width >= 0.70
+      && height >= 0.110
+      && height <= 0.150
+      && existingYValues.length === 1
+      && existingYValues[0] >= top + height * 0.55
+      && existingYValues[0] <= bottom - 0.010; // SOFTM-문항앵커: 전폭 짧은 문항에서 보기 후보 하나가 하단 행에만 잡히면 2행 grid 대신 한 줄 보기로 판단 - 2026-06-18
+    if (singleLowerHorizontalSignal) {
+      const y = clampGeneratedRatio(existingYValues[0], top + height * 0.46, bottom - 0.006);
+      const xs = [0.095, 0.310, 0.522, 0.734].map((ratio) => clampGeneratedRatio(left + width * ratio, left + width * 0.040, right - width * 0.040));
+      out[String(q)] = xs.map((xRatio, index) => ({
+        choice: index + 1,
+        page,
+        xRatio,
+        yRatio: y,
+        wRatio: Math.max(0.010, Math.min(0.020, width * 0.014)),
+        hRatio: 0.012,
+        source: "segment-choice-anchor-text-horizontal",
+        anchorMode: "center",
+        layout: "horizontal",
+        confidence: 0.55,
+        inferred: true,
+      }));
+      continue;
+    }
+    if (isCollapsedGridCandidate) {
+      const xLeft = clampGeneratedRatio(left + width * 0.095, left + width * 0.055, right - width * 0.58);
+      const xRight = clampGeneratedRatio(left + width * 0.522, left + width * 0.36, right - width * 0.10);
+      const yTop = clampGeneratedRatio(top + height * 0.430, top + height * 0.34, bottom - height * 0.34); // SOFTM-문항앵커: 전폭 2행 grid fallback 첫 행이 아래 행으로 밀리지 않도록 segment 중간보다 위에서 시작 - 2026-06-17
+      const yBottom = clampGeneratedRatio(top + height * 0.780, yTop + Math.max(0.018, height * 0.16), bottom - 0.006); // SOFTM-문항앵커: 전폭 2행 grid fallback 아래 행은 실제 두 번째 행 근처로 유지 - 2026-06-17
+      const labelY = Number(questionLabelMap?.[String(q)]?.yRatio);
+      const gridTopHitsQuestionLine = width >= 0.70
+        && height >= 0.110
+        && Number.isFinite(labelY)
+        && Math.abs(yTop - labelY) <= Math.max(0.010, height * 0.13); // SOFTM-문항앵커: grid 첫 행이 문제번호/문제문 줄이면 실제 보기는 아래 한 줄로 판단 - 2026-06-18
+      if (gridTopHitsQuestionLine) {
+        const y = clampGeneratedRatio(top + height * 0.700, top + height * 0.55, bottom - 0.006);
+        const xs = [0.095, 0.310, 0.522, 0.734].map((ratio) => clampGeneratedRatio(left + width * ratio, left + width * 0.040, right - width * 0.040));
+        out[String(q)] = xs.map((xRatio, index) => ({
+          choice: index + 1,
+          page,
+          xRatio,
+          yRatio: y,
+          wRatio: Math.max(0.010, Math.min(0.020, width * 0.014)),
+          hRatio: 0.012,
+          source: "segment-choice-anchor-text-horizontal",
+          anchorMode: "center",
+          layout: "horizontal",
+          confidence: 0.55,
+          inferred: true,
+        }));
+        continue;
+      }
+      out[String(q)] = [
+        { choice: 1, page, xRatio: xLeft, yRatio: yTop },
+        { choice: 2, page, xRatio: xRight, yRatio: yTop },
+        { choice: 3, page, xRatio: xLeft, yRatio: yBottom },
+        { choice: 4, page, xRatio: xRight, yRatio: yBottom },
+      ].map((item) => ({
+        ...item,
+        wRatio: Math.max(0.010, Math.min(0.022, width * 0.018)),
+        hRatio: 0.012,
+        source: "segment-choice-anchor-text-grid",
+        anchorMode: "center",
+        layout: "grid",
+        confidence: 0.55,
+        inferred: true,
+      }));
+      continue;
+    }
+    if (width >= 0.70 && height >= 0.140 && bottom >= 0.900 && choiceCount === 4 && (!existing.length || isVerticalSegmentFallback)) { // SOFTM-문항앵커: q33처럼 하단 segment가 짧아도 한 줄 보기 page-tail은 가로형으로 유지 - 2026-06-18
+      // SOFTM-문항앵커: 문제~다음 문제 segment가 길어도 하단에 ①②③④ 한 줄 보기만 있는 전폭 page-tail은 세로 추정 대신 가로행으로 보수 생성 - 2026-06-17
+      const yOffset = Math.min(0.048, Math.max(0.038, height * 0.085)); // SOFTM-문항앵커: 긴 page-tail 한 줄 보기는 segment 하단 비율이 아니라 문제 직후 보기 원형 행에 맞춤 - 2026-06-18
+      const y = clampGeneratedRatio(top + yOffset, top + 0.034, bottom - 0.020);
+      const xs = [0.095, 0.310, 0.522, 0.734].map((ratio) => clampGeneratedRatio(left + width * ratio, left + width * 0.040, right - width * 0.040));
+      out[String(q)] = xs.map((xRatio, index) => ({
+        choice: index + 1,
+        page,
+        xRatio,
+        yRatio: y,
+        wRatio: Math.max(0.010, Math.min(0.020, width * 0.014)),
+        hRatio: 0.012,
+        source: "segment-choice-anchor-text-horizontal",
+        anchorMode: "center",
+        layout: "horizontal",
+        confidence: 0.54,
+        inferred: true,
+      }));
+      continue;
+    }
+    if (hasCompleteExisting) {
+      out[String(q)] = existing;
+      continue;
+    }
+    if (hasPartialExisting) {
+      out[String(q)] = existing;
+      continue;
+    }
+    if (width < 0.70 && height >= 0.055 && height <= 0.110 && choiceCount === 4) {
+      // SOFTM-문항앵커: 2단 짧은 2행 보기에서 이미지 불렛이 모두 누락되면 문제~다음 문제 segment 안의 grid 위치로 보수 생성 - 2026-06-17
+      const xLeft = clampGeneratedRatio(left + width * 0.112, left + width * 0.050, right - width * 0.58);
+      const xRight = clampGeneratedRatio(left + width * 0.525, left + width * 0.36, right - width * 0.080);
+      const yTop = clampGeneratedRatio(top + height * 0.640, top + height * 0.42, bottom - height * 0.22);
+      const yBottom = clampGeneratedRatio(top + height * 0.825, yTop + Math.max(0.014, height * 0.14), bottom - 0.004);
+      out[String(q)] = [
+        { choice: 1, page, xRatio: xLeft, yRatio: yTop },
+        { choice: 2, page, xRatio: xRight, yRatio: yTop },
+        { choice: 3, page, xRatio: xLeft, yRatio: yBottom },
+        { choice: 4, page, xRatio: xRight, yRatio: yBottom },
+      ].map((item) => ({
+        ...item,
+        wRatio: Math.max(0.010, Math.min(0.020, width * 0.024)),
+        hRatio: 0.012,
+        source: "segment-choice-anchor",
+        anchorMode: "center",
+        layout: "grid",
+        confidence: 0.55,
+        inferred: true,
+      }));
+      continue;
+    }
+    if (width >= 0.70 && height >= 0.070 && height <= 0.104 && choiceCount === 4) {
+      // SOFTM-문항앵커: 촘촘한 전폭 초단문 한 줄 보기는 이미지 원형이 전부 약하면 segment 하단의 ①②③④ 가로행으로 보수 생성 - 2026-06-17
+      const y = clampGeneratedRatio(top + height * 0.550, top + height * 0.42, bottom - 0.006); // SOFTM-문항앵커: 전폭 초단문 한 줄 fallback이 실제 ①②③④ 행보다 아래로 밀리지 않게 보정 - 2026-06-18
+      const xs = [0.095, 0.310, 0.522, 0.734].map((ratio) => clampGeneratedRatio(left + width * ratio, left + width * 0.040, right - width * 0.040));
+      out[String(q)] = xs.map((xRatio, index) => ({
+        choice: index + 1,
+        page,
+        xRatio,
+        yRatio: y,
+        wRatio: Math.max(0.010, Math.min(0.020, width * 0.014)),
+        hRatio: 0.012,
+        source: "segment-choice-anchor-text-horizontal",
+        anchorMode: "center",
+        layout: "horizontal",
+        confidence: 0.54,
+        inferred: true,
+      }));
+      continue;
+    }
+    if (width >= 0.70 && height > 0.104 && height < 0.110 && choiceCount === 4) {
+      // SOFTM-문항앵커: 전폭 짧은 2행 보기는 기존 0.110 하한보다 살짝 낮아도 ①②/③④ grid로 보수 생성 - 2026-06-17
+      const xLeft = clampGeneratedRatio(left + width * 0.095, left + width * 0.055, right - width * 0.58);
+      const xRight = clampGeneratedRatio(left + width * 0.522, left + width * 0.36, right - width * 0.10);
+      const yTop = clampGeneratedRatio(top + height * 0.430, top + height * 0.34, bottom - height * 0.34); // SOFTM-문항앵커: 전폭 짧은 grid fallback의 첫 행 위치를 실제 ①② 행 쪽으로 보정 - 2026-06-17
+      const yBottom = clampGeneratedRatio(top + height * 0.780, yTop + Math.max(0.018, height * 0.16), bottom - 0.006);
+      out[String(q)] = [
+        { choice: 1, page, xRatio: xLeft, yRatio: yTop },
+        { choice: 2, page, xRatio: xRight, yRatio: yTop },
+        { choice: 3, page, xRatio: xLeft, yRatio: yBottom },
+        { choice: 4, page, xRatio: xRight, yRatio: yBottom },
+      ].map((item) => ({
+        ...item,
+        wRatio: Math.max(0.010, Math.min(0.022, width * 0.018)),
+        hRatio: 0.012,
+        source: "segment-choice-anchor-text-grid",
+        anchorMode: "center",
+        layout: "grid",
+        confidence: 0.54,
+        inferred: true,
+      }));
+      continue;
+    }
+    if (width < 0.70 && height >= 0.145 && height <= 0.245 && choiceCount === 4) {
+      // SOFTM-문항앵커: 2단 중간의 이미지 2x2 보기는 이미지 불렛 후보가 비어도 문제 segment 안에서 grid 기준점을 보수 생성 - 2026-06-17
+      const xLeft = clampGeneratedRatio(left + width * 0.152, left + width * 0.045, right - width * 0.58);
+      const xRight = clampGeneratedRatio(left + width * 0.535, left + width * 0.36, right - width * 0.080);
+      const yTop = clampGeneratedRatio(top + height * 0.105, top + height * 0.06, bottom - height * 0.44);
+      const yBottom = clampGeneratedRatio(top + height * 0.545, yTop + Math.max(0.050, height * 0.28), bottom - 0.010);
+      out[String(q)] = [
+        { choice: 1, page, xRatio: xLeft, yRatio: yTop },
+        { choice: 2, page, xRatio: xRight, yRatio: yTop },
+        { choice: 3, page, xRatio: xLeft, yRatio: yBottom },
+        { choice: 4, page, xRatio: xRight, yRatio: yBottom },
+      ].map((item) => ({
+        ...item,
+        wRatio: Math.max(0.010, Math.min(0.020, width * 0.024)),
+        hRatio: 0.012,
+        source: "segment-choice-anchor",
+        anchorMode: "center",
+        layout: "grid",
+        confidence: 0.55,
+        inferred: true,
+      }));
+      continue;
+    }
+    if (fallbackSegment.continuation === true && width < 0.70 && height >= 0.260 && choiceCount === 4) {
+      const xLeft = clampGeneratedRatio(left + width * 0.110, left + width * 0.040, right - width * 0.58);
+      const xRight = clampGeneratedRatio(left + width * 0.530, left + width * 0.36, right - width * 0.080);
+      const yTop = clampGeneratedRatio(top + height * 0.620, top + height * 0.36, bottom - height * 0.18);
+      const yBottom = clampGeneratedRatio(top + height * 0.865, yTop + 0.045, bottom - 0.012);
+      out[String(q)] = [
+        { choice: 1, page, xRatio: xLeft, yRatio: yTop },
+        { choice: 2, page, xRatio: xRight, yRatio: yTop },
+        { choice: 3, page, xRatio: xLeft, yRatio: yBottom },
+        { choice: 4, page, xRatio: xRight, yRatio: yBottom },
+      ].map((item) => ({
+        ...item,
+        wRatio: Math.max(0.010, Math.min(0.020, width * 0.024)),
+        hRatio: 0.012,
+        source: "segment-choice-anchor",
+        anchorMode: "center",
+        layout: "grid",
+        confidence: 0.56,
+        inferred: true,
+      }));
+      continue;
+    } // SOFTM-문항앵커: continuation 안의 2x2 이미지 선택지는 grid fallback으로 문항영역 생성 기준점을 제공 - 2026-06-17
+    let gap = NaN;
+    let firstY = NaN;
+    let x = NaN;
+    let confidence = 0.58;
+    if (fallbackSegment.continuation === true && width < 0.70 && height >= 0.105 && height <= 0.220 && bottom >= 0.850) {
+      // SOFTM-문항앵커: 현재 단 하단 코드블록을 1~4 세로 보기로 오인하지 않도록 불렛 없는 세로 fallback은 continuation에만 허용 - 2026-06-18
+      gap = clampGeneratedRatio(height * 0.12, 0.014, 0.022);
+      const firstYMin = top + height * 0.52;
+      const firstYMax = bottom - (gap * Math.max(1, choiceCount - 1)) - 0.006;
+      firstY = clampGeneratedRatio(bottom - (gap * (choiceCount - 0.45)), firstYMin, Math.max(firstYMin, firstYMax));
+      x = clampGeneratedRatio(left + width * 0.087, left + width * 0.045, right - width * 0.10);
+    } else if (width >= 0.70 && height >= 0.110 && height <= 0.155 && choiceCount === 4) {
+      const xLeft = clampGeneratedRatio(left + width * 0.095, left + width * 0.055, right - width * 0.58);
+      const xRight = clampGeneratedRatio(left + width * 0.522, left + width * 0.36, right - width * 0.10);
+      const yTop = clampGeneratedRatio(top + height * 0.430, top + height * 0.34, bottom - height * 0.34); // SOFTM-문항앵커: 전폭 2행 선택지 fallback이 아래 행으로 한 줄 밀리는 현상 보정 - 2026-06-17
+      const yBottom = clampGeneratedRatio(top + height * 0.780, yTop + Math.max(0.020, height * 0.16), bottom - 0.008);
+      out[String(q)] = [
+        { choice: 1, page, xRatio: xLeft, yRatio: yTop },
+        { choice: 2, page, xRatio: xRight, yRatio: yTop },
+        { choice: 3, page, xRatio: xLeft, yRatio: yBottom },
+        { choice: 4, page, xRatio: xRight, yRatio: yBottom },
+      ].map((item) => ({
+        ...item,
+        wRatio: Math.max(0.010, Math.min(0.022, width * 0.018)),
+        hRatio: 0.012,
+        source: "segment-choice-anchor-text-grid",
+        anchorMode: "center",
+        layout: "grid",
+        confidence: 0.55,
+        inferred: true,
+      }));
+      continue;
+      // SOFTM-문항앵커: 전폭 짧은 2행 선택지는 세로 4행 추정 전에 2x2 grid fallback으로 배치 - 2026-06-17
+    } else if (width >= 0.70 && height >= 0.110 && height <= 0.260) {
+      gap = clampGeneratedRatio(height * 0.205, 0.020, 0.042);
+      const firstYMin = top + height * 0.30;
+      const firstYMax = bottom - (gap * Math.max(1, choiceCount - 1)) - 0.012;
+      firstY = clampGeneratedRatio(top + height * 0.36, firstYMin, Math.max(firstYMin, firstYMax));
+      x = clampGeneratedRatio(left + width * 0.064, left + width * 0.040, right - width * 0.18);
+      confidence = 0.54;
+    } else {
+      continue;
+    }
+    const anchors = [];
+    for (let choice = 1; choice <= choiceCount; choice += 1){
+      const y = clampGeneratedRatio(firstY + (choice - 1) * gap, top + 0.020, bottom - 0.006);
+      anchors.push({
+        choice,
+        page,
+        xRatio: x,
+        yRatio: y,
+        wRatio: Math.max(0.010, Math.min(0.020, width * 0.020)),
+        hRatio: 0.012,
+        source: "segment-choice-anchor",
+        anchorMode: "center",
+        layout: "vertical",
+        confidence,
+        inferred: true,
+      });
+    }
+    if (anchors.length) out[String(q)] = anchors;
+  }
+  return out;
+}
+/* SOFTM-문항앵커: 2단 하단/1단 세로형 문항에서 이미지/OCR 선택지 앵커가 비면 segment 내부 기준 앵커를 보수 생성 - 2026-06-17 */
+
+function snapFallbackChoiceAnchorsToRawCandidates(choiceMap, rawChoiceCandidates, questionSegments, questionColumnBoundsMap, questionCount, choiceCount){
+  const out = {};
+  const candidatesByPageChoice = new Map();
+  for (const item of Array.isArray(rawChoiceCandidates) ? rawChoiceCandidates : []) {
+    const page = Number(item?.page);
+    const choice = Number(item?.choice);
+    const x = Number(item?.xRatio);
+    const y = Number(item?.yRatio);
+    if (!Number.isFinite(page) || !Number.isInteger(choice) || choice < 1 || choice > choiceCount || !Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const key = `${page}:${choice}`;
+    if (!candidatesByPageChoice.has(key)) candidatesByPageChoice.set(key, []);
+    candidatesByPageChoice.get(key).push(item);
+  }
+  const segmentFor = (q, page, anchor = null) => {
+    const segments = Array.isArray(questionSegments?.[String(q)]) ? questionSegments[String(q)] : [];
+    const samePage = segments.filter((segment) => Number(segment?.page) === Number(page));
+    const ax = Number(anchor?.xRatio);
+    const ay = Number(anchor?.yRatio);
+    const picked = samePage.find((segment) => {
+      const left = Number.isFinite(Number(segment?.left)) ? Number(segment.left) : 0;
+      const right = Number.isFinite(Number(segment?.right)) ? Number(segment.right) : 1;
+      const top = Number.isFinite(Number(segment?.top)) ? Number(segment.top) : 0;
+      const bottom = Number.isFinite(Number(segment?.bottom)) ? Number(segment.bottom) : 1;
+      return (!Number.isFinite(ax) || (ax >= left - 0.025 && ax <= right + 0.025))
+        && (!Number.isFinite(ay) || (ay >= top - 0.030 && ay <= bottom + 0.040));
+    }) || samePage[0] || segments[0] || {};
+    const bounds = questionColumnBoundsMap?.[String(q)] || {};
+    return {
+      left: clampGeneratedRatio(picked.left ?? bounds.left ?? 0, 0, 1),
+      right: clampGeneratedRatio(picked.right ?? bounds.right ?? 1, 0, 1),
+      top: clampGeneratedRatio(picked.top ?? 0, 0, 1),
+      bottom: clampGeneratedRatio(picked.bottom ?? 1, 0, 1),
+    };
+  };
+  for (let q = 1; q <= questionCount; q += 1){
+    const anchors = Array.isArray(choiceMap?.[String(q)]) ? choiceMap[String(q)].map((item) => ({ ...item })) : [];
+    if (!anchors.length) continue;
+    out[String(q)] = anchors.map((anchor) => {
+      const source = String(anchor?.source || "");
+      if (source.includes("collapsed-column")) return anchor; // SOFTM-문항앵커: column grid 재배치 앵커는 코드블록 내부 raw 후보로 다시 끌려가지 않게 고정 - 2026-06-18
+      if (!source.startsWith("segment-choice-anchor") || anchor?.inferred !== true) return anchor;
+      const page = Number(anchor.page);
+      const choice = Number(anchor.choice);
+      const ax = Number(anchor.xRatio);
+      const ay = Number(anchor.yRatio);
+      if (!Number.isFinite(page) || !Number.isInteger(choice) || !Number.isFinite(ax) || !Number.isFinite(ay)) return anchor;
+      const segment = segmentFor(q, page, anchor);
+      const candidates = candidatesByPageChoice.get(`${page}:${choice}`) || [];
+      let best = null;
+      let bestScore = Infinity;
+      for (const candidate of candidates) {
+        const x = Number(candidate.xRatio);
+        const y = Number(candidate.yRatio);
+        if (x < segment.left - 0.010 || x > segment.right + 0.010 || y < segment.top - 0.006 || y > segment.bottom + 0.006) continue;
+        const dx = Math.abs(x - ax);
+        const dy = Math.abs(y - ay);
+        const isTextGridFallback = source.includes("text-grid"); // SOFTM-문항앵커: text-grid 보수 앵커는 본문 글자 raw 후보로 멀리 끌려가지 않도록 snap 허용폭 축소 - 2026-06-18
+        if (dx > (isTextGridFallback ? 0.030 : 0.060) || dy > (isTextGridFallback ? 0.030 : 0.045)) continue;
+        const score = dx * 1.8 + dy;
+        if (score < bestScore) {
+          best = candidate;
+          bestScore = score;
+        }
+      }
+      if (!best) return anchor;
+      return {
+        ...anchor,
+        xRatio: clampGeneratedRatio(best.xRatio),
+        yRatio: clampGeneratedRatio(best.yRatio),
+        wRatio: Math.max(0.008, Math.min(0.026, Number(best.wRatio) || Number(anchor.wRatio) || 0.012)),
+        hRatio: Math.max(0.008, Math.min(0.026, Number(best.hRatio) || Number(anchor.hRatio) || 0.012)),
+        source: `${source}-raw-snap`,
+        confidence: Math.max(Number(anchor.confidence) || 0.54, 0.68),
+      };
+    });
+  }
+  return out;
+}
+// SOFTM-문항앵커: segment 비율 fallback 앵커는 같은 문제 범위 안의 OCR 보기 후보가 있으면 실제 원형 후보 좌표로 보정 - 2026-06-18
+
+async function snapFallbackChoiceAnchorsToRenderedMarks(pageDir, choiceMap, questionSegments, questionCount, choiceCount){
+  const mapPath = path.join(pageDir, "choice-anchor-snap-input.json");
+  await fsp.writeFile(mapPath, JSON.stringify({ choiceMap, questionSegments, questionCount, choiceCount }), "utf8");
+  const script = `
+import json, math, os, re, sys
+from collections import deque
+from PIL import Image
+import numpy as np
+
+page_dir, map_path = sys.argv[1], sys.argv[2]
+meta = json.load(open(map_path, "r", encoding="utf-8"))
+choice_map = meta.get("choiceMap") or {}
+segments_map = meta.get("questionSegments") or {}
+question_count = int(meta.get("questionCount") or 0)
+choice_count = max(1, min(5, int(meta.get("choiceCount") or 4)))
+
+def page_no_from_name(name, fallback=0):
+    matches = re.findall(r'(\\d+)', str(name))
+    return int(matches[-1]) if matches else fallback
+
+page_files = {}
+for fallback_page_no, name in enumerate(sorted([n for n in os.listdir(page_dir) if n.lower().endswith(".png")]), start=1):
+    page_files[page_no_from_name(name, fallback_page_no)] = os.path.join(page_dir, name)
+
+def clamp(value, lo, hi):
+    try:
+        value = float(value)
+    except Exception:
+        return lo
+    return max(lo, min(hi, value))
+
+def segment_for(q, page, anchor=None):
+    segments = segments_map.get(str(q)) or []
+    same_page = []
+    for item in segments if isinstance(segments, list) else []:
+        try:
+            if int(item.get("page") or 0) == int(page):
+                same_page.append(item)
+        except Exception:
+            continue
+    ax = None
+    ay = None
+    try:
+        ax = float(anchor.get("xRatio")) if anchor else None
+        ay = float(anchor.get("yRatio")) if anchor else None
+    except Exception:
+        ax = ay = None
+    def contains(item):
+        try:
+            left = float(item.get("left", 0.0))
+            right = float(item.get("right", 1.0))
+            top = float(item.get("top", 0.0))
+            bottom = float(item.get("bottom", 1.0))
+        except Exception:
+            return False
+        return (ax is None or left - 0.035 <= ax <= right + 0.035) and (ay is None or top - 0.040 <= ay <= bottom + 0.060)
+    picked = next((item for item in same_page if contains(item)), None) or (same_page[0] if same_page else {})
+    return {
+        "left": clamp(picked.get("left", 0.0), 0.0, 1.0),
+        "right": clamp(picked.get("right", 1.0), 0.0, 1.0),
+        "top": clamp(picked.get("top", 0.0), 0.0, 1.0),
+        "bottom": clamp(picked.get("bottom", 1.0), 0.0, 1.0),
+    }
+
+def should_snap(anchor):
+    source = str(anchor.get("source") or "").lower()
+    layout = str(anchor.get("layout") or "").lower()
+    if not (source.startswith("segment-choice-anchor") or source.startswith("anchor-image")):
+        return False
+    if "pixel-snap" in source or "collapsed-column" in source:
+        return False
+    if layout == "vertical":
+        return False
+    # SOFTM-문항앵커: 텍스트 시작점 보정은 가로/그리드형 전용이며 세로형 보기는 원래 x축을 보존 - 2026-06-18
+    return bool(anchor.get("inferred") is True or "text-" in source or source.startswith("anchor-image"))
+
+def expected_anchor_xs(anchor, segment):
+    try:
+        choice = int(anchor.get("choice") or 0)
+    except Exception:
+        return []
+    if choice < 1 or choice > choice_count:
+        return []
+    left = float(segment["left"])
+    right = float(segment["right"])
+    width = max(0.05, right - left)
+    layout = str(anchor.get("layout") or "").lower()
+    if layout == "vertical":
+        return []
+    horizontal_slots = [0.0965, 0.3095, 0.5225, 0.7340]
+    grid_slots = [0.0965, 0.5225, 0.0965, 0.5225]
+    xs = []
+    if layout == "grid":
+        xs.append(left + width * grid_slots[choice - 1])
+    else:
+        xs.append(left + width * horizontal_slots[choice - 1])
+    try:
+        current_x = float(anchor.get("xRatio") or 0)
+        xs.append(current_x)
+    except Exception:
+        pass
+    out = []
+    for x in xs:
+        x = clamp(x, left + 0.015, right - 0.015)
+        if not any(abs(x - old) < 0.004 for old in out):
+            out.append(x)
+    return out
+
+def grid_slot_ratio(segment, slot):
+    left = float(segment["left"])
+    right = float(segment["right"])
+    width = max(0.05, right - left)
+    return clamp(left + width * slot, left + 0.015, right - 0.015)
+
+def connected_components(mask):
+    h, w = mask.shape
+    visited = np.zeros((h, w), dtype=bool)
+    comps = []
+    for y0 in range(h):
+        for x0 in range(w):
+            if visited[y0, x0] or not mask[y0, x0]:
+                continue
+            q = deque([(x0, y0)])
+            visited[y0, x0] = True
+            xs = []
+            ys = []
+            while q:
+                x, y = q.popleft()
+                xs.append(x)
+                ys.append(y)
+                for ny in (y - 1, y, y + 1):
+                    for nx in (x - 1, x, x + 1):
+                        if nx == x and ny == y:
+                            continue
+                        if nx < 0 or ny < 0 or nx >= w or ny >= h or visited[ny, nx] or not mask[ny, nx]:
+                            continue
+                        visited[ny, nx] = True
+                        q.append((nx, ny))
+            comps.append((min(xs), min(ys), max(xs) + 1, max(ys) + 1, len(xs)))
+    return comps
+
+def find_mark_center(arr, anchor, segment):
+    h, w = arr.shape
+    ax = float(anchor.get("xRatio") or 0) * w
+    ay = float(anchor.get("yRatio") or 0) * h
+    seg_left = float(segment["left"]) * w
+    seg_right = float(segment["right"]) * w
+    seg_top = float(segment["top"]) * h
+    seg_bottom = float(segment["bottom"]) * h
+    layout = str(anchor.get("layout") or "").lower()
+    x_radius = max(34, min(72, w * (0.035 if layout == "grid" else 0.030)))
+    y_radius = max(26, min(58, h * (0.020 if layout == "grid" else 0.016)))
+    x0 = int(max(seg_left, ax - x_radius))
+    x1 = int(min(seg_right, ax + x_radius))
+    y0 = int(max(seg_top, ay - y_radius))
+    y1 = int(min(seg_bottom, ay + y_radius))
+    if x1 - x0 < 18 or y1 - y0 < 14:
+        return None
+    local = arr[y0:y1, x0:x1]
+    dark = local < 138
+    # 작은 노이즈를 줄이되, 원형 숫자 획은 보존한다.
+    comps = connected_components(dark)
+    candidates = []
+    for lx0, ly0, lx1, ly1, area in comps:
+        bw = lx1 - lx0
+        bh = ly1 - ly0
+        if bw < 5 or bh < 6 or bw > 34 or bh > 34:
+            continue
+        density = area / max(1, bw * bh)
+        if density < 0.08 or density > 0.72:
+            continue
+        aspect = bw / max(1, bh)
+        if aspect < 0.48 or aspect > 1.85:
+            continue
+        cx = x0 + (lx0 + lx1) * 0.5
+        cy = y0 + (ly0 + ly1) * 0.5
+        if cx < seg_left - 1 or cx > seg_right + 1 or cy < seg_top - 1 or cy > seg_bottom + 1:
+            continue
+        dx = abs(cx - ax)
+        dy = abs(cy - ay)
+        if dx > x_radius * 0.90 or dy > y_radius * 0.90:
+            continue
+        candidates.append({
+            "lx0": lx0, "ly0": ly0, "lx1": lx1, "ly1": ly1,
+            "cx": cx, "cy": cy, "bw": bw, "bh": bh, "dx": dx, "dy": dy, "aspect": aspect
+        })
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: item["cx"])
+    leftmost = candidates[0]
+    # SOFTM-문항앵커: 가로형 fallback이 보기 텍스트 숫자로 붙지 않도록 같은 행의 왼쪽 원형 번호 후보 묶음만 허용 - 2026-06-18
+    mark_cluster_right = leftmost["cx"] + max(18, x_radius * 0.34)
+    text_start_x = None
+    for item in candidates[1:]:
+        if item["cx"] > mark_cluster_right:
+            text_start_x = item["lx0"] + x0
+            break
+    best = None
+    best_score = 1e9
+    for item in candidates:
+        cx = item["cx"]
+        cy = item["cy"]
+        bw = item["bw"]
+        bh = item["bh"]
+        aspect = item["aspect"]
+        dx = item["dx"]
+        dy = item["dy"]
+        if text_start_x is not None and cx >= text_start_x - 2:
+            continue
+        circular_bonus = 0 if 0.70 <= aspect <= 1.35 else 8
+        size_bonus = 0 if 8 <= bw <= 26 and 8 <= bh <= 28 else 6
+        left_order_bonus = max(0, cx - leftmost["cx"]) * 0.35
+        # 원형 번호는 같은 행 보기 텍스트보다 왼쪽에 있으므로 텍스트 시작점 오른쪽 후보는 제외한다.
+        score = dx * 1.30 + dy * 1.10 + circular_bonus + size_bonus + left_order_bonus
+        if score < best_score:
+            best_score = score
+            best = (cx, cy, bw, bh)
+    if not best:
+        return None
+    cx, cy, bw, bh = best
+    # 과도한 이동은 본문 숫자나 선택지 텍스트 조각으로 스냅된 것으로 본다.
+    if abs(cx - ax) > x_radius * 0.78 or abs(cy - ay) > y_radius * 0.78:
+        return None
+    return {
+        "xRatio": clamp(cx / max(1, w), 0.0, 1.0),
+        "yRatio": clamp(cy / max(1, h), 0.0, 1.0),
+        "wRatio": clamp(max(8, bw) / max(1, w), 0.006, 0.035),
+        "hRatio": clamp(max(8, bh) / max(1, h), 0.006, 0.035),
+    }
+
+def repair_false_horizontal_grid(arr, anchors, segment):
+    if choice_count != 4 or len(anchors) != 4:
+        return None
+    by_choice = {}
+    for anchor in anchors:
+        try:
+            by_choice[int(anchor.get("choice") or 0)] = anchor
+        except Exception:
+            pass
+    if any(choice not in by_choice for choice in (1, 2, 3, 4)):
+        return None
+    layouts = [str(by_choice[choice].get("layout") or "").lower() for choice in (1, 2, 3, 4)]
+    if any(layout not in ("horizontal", "") for layout in layouts):
+        return None
+    try:
+        y_values = [float(by_choice[choice].get("yRatio") or 0) for choice in (1, 2, 3, 4)]
+        if max(y_values) - min(y_values) > 0.026:
+            return None
+        left_slot = grid_slot_ratio(segment, 0.0965)
+        right_slot = grid_slot_ratio(segment, 0.5225)
+        h_slots = [grid_slot_ratio(segment, value) for value in (0.0965, 0.3095, 0.5225, 0.7340)]
+        if abs(float(by_choice[1].get("xRatio") or 0) - left_slot) > 0.045:
+            return None
+        if abs(float(by_choice[3].get("xRatio") or 0) - right_slot) > 0.055:
+            return None
+        if abs(float(by_choice[2].get("xRatio") or 0) - h_slots[1]) > 0.065:
+            return None
+        if abs(float(by_choice[4].get("xRatio") or 0) - h_slots[3]) > 0.075:
+            return None
+        top_y = (float(by_choice[1].get("yRatio") or 0) + float(by_choice[3].get("yRatio") or 0)) * 0.5
+        seg_top = float(segment["top"])
+        seg_bottom = float(segment["bottom"])
+        seg_height = max(0.0, seg_bottom - seg_top)
+        w1 = float(by_choice[1].get("wRatio") or 0.012)
+        w2 = float(by_choice[2].get("wRatio") or 0.012)
+        w3 = float(by_choice[3].get("wRatio") or 0.012)
+        w4 = float(by_choice[4].get("wRatio") or 0.012)
+        s2 = str(by_choice[2].get("source") or "")
+        s4 = str(by_choice[4].get("source") or "")
+        small_middle = w2 < max(0.0105, w1 * 0.78) or (w2 < 0.0155 and "pixel-snap" not in s2)
+        small_tail = w4 < max(0.0105, w3 * 0.78) or (w4 < 0.0155 and "pixel-snap" not in s4)
+        lower_row_candidate = seg_height <= 0.165 and top_y - seg_top >= max(0.050, seg_height * 0.45) and small_middle
+        if seg_bottom <= top_y + 0.040 and not lower_row_candidate:
+            return None
+    except Exception:
+        return None
+
+    def snapped_at(choice, x_ratio, y_ratio, base=None):
+        probe = dict(base or by_choice.get(choice) or {})
+        probe["choice"] = choice
+        probe["layout"] = "grid"
+        probe["xRatio"] = x_ratio
+        probe["yRatio"] = y_ratio
+        return find_mark_center(arr, probe, segment)
+
+    def loose_grid_mark(x_ratio, y_min_ratio, y_max_ratio):
+        h, w = arr.shape
+        tx = float(x_ratio) * w
+        x_radius = max(34, min(76, w * 0.038))
+        x0 = int(max(float(segment["left"]) * w, tx - x_radius))
+        x1 = int(min(float(segment["right"]) * w, tx + x_radius))
+        y0 = int(max(float(segment["top"]) * h, float(y_min_ratio) * h))
+        y1 = int(min(float(segment["bottom"]) * h, float(y_max_ratio) * h))
+        if x1 - x0 < 18 or y1 - y0 < 16:
+            return None
+        comps = connected_components(arr[y0:y1, x0:x1] < 138)
+        best = None
+        best_score = 1e9
+        for lx0, ly0, lx1, ly1, area in comps:
+            bw = lx1 - lx0
+            bh = ly1 - ly0
+            if bw < 6 or bh < 7 or bw > 35 or bh > 35:
+                continue
+            density = area / max(1, bw * bh)
+            if density < 0.055 or density > 0.62:
+                continue
+            aspect = bw / max(1, bh)
+            if aspect < 0.50 or aspect > 1.72:
+                continue
+            cx = x0 + (lx0 + lx1) * 0.5
+            cy = y0 + (ly0 + ly1) * 0.5
+            dx = abs(cx - tx)
+            if dx > x_radius * 0.74:
+                continue
+            score = dx + abs(aspect - 1.0) * 7.0 + max(0, bw - 26) * 0.7 + max(0, bh - 28) * 0.7
+            if score < best_score:
+                best_score = score
+                best = (cx, cy, bw, bh)
+        if not best:
+            return None
+        cx, cy, bw, bh = best
+        return {
+            "xRatio": clamp(cx / max(1, w), 0.0, 1.0),
+            "yRatio": clamp(cy / max(1, h), 0.0, 1.0),
+            "wRatio": clamp(max(8, bw) / max(1, w), 0.006, 0.035),
+            "hRatio": clamp(max(8, bh) / max(1, h), 0.006, 0.035),
+        }
+        # SOFTM-문항앵커: 2행 grid 아래 행은 기존 anchor y 추정이 없으므로 segment 내부 원형 후보를 행 범위로 재탐색 - 2026-06-18
+
+    top_left = snapped_at(1, left_slot, top_y, by_choice[1]) or {
+        "xRatio": float(by_choice[1].get("xRatio") or left_slot),
+        "yRatio": float(by_choice[1].get("yRatio") or top_y),
+        "wRatio": float(by_choice[1].get("wRatio") or 0.012),
+        "hRatio": float(by_choice[1].get("hRatio") or 0.012),
+    }
+    top_right = snapped_at(2, right_slot, top_y, by_choice[3]) or {
+        "xRatio": float(by_choice[3].get("xRatio") or right_slot),
+        "yRatio": float(by_choice[3].get("yRatio") or top_y),
+        "wRatio": float(by_choice[3].get("wRatio") or 0.012),
+        "hRatio": float(by_choice[3].get("hRatio") or 0.012),
+    }
+
+    best_pair = None
+    upper_pair = None
+    best_score = 1e9
+    max_bottom_y = min(seg_bottom - 0.006, top_y + 0.135)
+    probe_y = top_y + 0.026
+    while probe_y <= max_bottom_y:
+        bottom_left = snapped_at(3, left_slot, probe_y, by_choice[1])
+        bottom_right = snapped_at(4, right_slot, probe_y, by_choice[3])
+        if bottom_left and bottom_right:
+            try:
+                left_y = float(bottom_left["yRatio"])
+                right_y = float(bottom_right["yRatio"])
+                row_y = (left_y + right_y) * 0.5
+                gap = row_y - top_y
+                if gap >= 0.022 and abs(left_y - right_y) <= 0.018:
+                    score = abs(left_y - right_y) * 5.0 + abs(gap - 0.055)
+                    if score < best_score:
+                        best_score = score
+                        best_pair = (bottom_left, bottom_right, row_y)
+            except Exception:
+                pass
+        probe_y += 0.006
+    if not best_pair:
+        y_min = top_y + 0.018
+        y_max = min(seg_bottom + 0.008, top_y + 0.145)
+        bottom_left = loose_grid_mark(left_slot, y_min, y_max)
+        bottom_right = loose_grid_mark(right_slot, y_min, y_max)
+        if bottom_left and bottom_right:
+            try:
+                left_y = float(bottom_left["yRatio"])
+                right_y = float(bottom_right["yRatio"])
+                row_y = (left_y + right_y) * 0.5
+                if row_y - top_y >= 0.020 and abs(left_y - right_y) <= 0.022:
+                    best_pair = (bottom_left, bottom_right, row_y)
+            except Exception:
+                best_pair = None
+    if not best_pair and (seg_bottom - float(segment["top"])) <= 0.165:
+        y_min = max(float(segment["top"]), top_y - 0.145)
+        y_max = top_y - 0.018
+        upper_left = loose_grid_mark(left_slot, y_min, y_max)
+        upper_right = loose_grid_mark(right_slot, y_min, y_max)
+        if upper_left and upper_right:
+            try:
+                left_y = float(upper_left["yRatio"])
+                right_y = float(upper_right["yRatio"])
+                row_y = (left_y + right_y) * 0.5
+                if top_y - row_y >= 0.020 and abs(left_y - right_y) <= 0.022:
+                    upper_pair = (upper_left, upper_right, row_y)
+            except Exception:
+                upper_pair = None
+        # SOFTM-문항앵커: 아래 행 ③④를 ①③으로 잡은 짧은 2행 문제는 위 행 ①②를 역방향으로 찾아 grid를 복구 - 2026-06-18
+    if not best_pair and not upper_pair:
+        try:
+            suspicious_middle_text = lower_row_candidate and (small_middle or small_tail)
+            inferred_gap = clamp((top_y - float(segment["top"])) * 0.42, 0.026, 0.045)
+            inferred_y = top_y - inferred_gap
+            if suspicious_middle_text and inferred_y > float(segment["top"]) + 0.020:
+                upper_pair = (
+                    {"xRatio": left_slot, "yRatio": inferred_y, "wRatio": max(0.010, w1), "hRatio": max(0.010, float(by_choice[1].get("hRatio") or 0.012))},
+                    {"xRatio": right_slot, "yRatio": inferred_y, "wRatio": max(0.010, w3), "hRatio": max(0.010, float(by_choice[3].get("hRatio") or 0.012))},
+                    inferred_y,
+                )
+        except Exception:
+            upper_pair = None
+        # SOFTM-문항앵커: 짧은 2행 선택지에서 2번 위치가 본문 조각이면 현재 행을 아래 행으로 보고 위 행을 보간 - 2026-06-18
+    if not best_pair:
+        if not upper_pair:
+            return None
+        upper_left, upper_right, _ = upper_pair
+        bottom_left = top_left
+        bottom_right = top_right
+        top_left = upper_left
+        top_right = upper_right
+    else:
+        bottom_left, bottom_right, _ = best_pair
+
+    source = f"{by_choice[1].get('source') or 'anchor-image'}-grid-row-repair"
+    repaired = []
+    for choice, base_anchor, snap in [
+        (1, by_choice[1], top_left),
+        (2, by_choice[3], top_right),
+        (3, by_choice[1], bottom_left),
+        (4, by_choice[3], bottom_right),
+    ]:
+        item = dict(base_anchor)
+        item.update(snap)
+        item["choice"] = choice
+        item["layout"] = "grid"
+        item["source"] = source
+        item["confidence"] = max(float(base_anchor.get("confidence") or 0.54), 0.70)
+        repaired.append(item)
+    return repaired
+    # SOFTM-문항앵커: 2행 선택지를 한 줄 horizontal로 오판하고 2/4번을 본문 글자로 스냅한 경우 실제 아래 행 원형을 찾아 grid로 복구 - 2026-06-18
+
+out = {}
+image_cache = {}
+for q in range(1, question_count + 1):
+    anchors = [dict(item) for item in (choice_map.get(str(q)) or []) if isinstance(item, dict)]
+    if not anchors:
+        continue
+    next_anchors = []
+    for anchor in anchors:
+        if not should_snap(anchor):
+            next_anchors.append(anchor)
+            continue
+        try:
+            page = int(anchor.get("page") or 0)
+            choice = int(anchor.get("choice") or 0)
+        except Exception:
+            next_anchors.append(anchor)
+            continue
+        if page <= 0 or choice < 1 or choice > choice_count or page not in page_files:
+            next_anchors.append(anchor)
+            continue
+        if page not in image_cache:
+            image_cache[page] = np.array(Image.open(page_files[page]).convert("L"))
+        segment = segment_for(q, page, anchor)
+        snap = None
+        for expected_x in expected_anchor_xs(anchor, segment):
+            probe = dict(anchor)
+            probe["xRatio"] = expected_x
+            candidate = find_mark_center(image_cache[page], probe, segment)
+            if candidate:
+                snap = candidate
+                break
+        # SOFTM-문항앵커: 현재 위치가 텍스트 쪽이어도 choice 기대 위치 주변의 원형 번호 후보를 먼저 탐색 - 2026-06-18
+        if not snap:
+            next_anchors.append(anchor)
+            continue
+        moved = dict(anchor)
+        moved.update(snap)
+        moved["source"] = f"{anchor.get('source') or 'segment-choice-anchor'}-pixel-snap"
+        moved["confidence"] = max(float(anchor.get("confidence") or 0.54), 0.66)
+        next_anchors.append(moved)
+    if next_anchors:
+        try:
+            page = int(next_anchors[0].get("page") or 0)
+            if page > 0 and page in page_files:
+                if page not in image_cache:
+                    image_cache[page] = np.array(Image.open(page_files[page]).convert("L"))
+                segment = segment_for(q, page, next_anchors[0])
+                repaired_grid = repair_false_horizontal_grid(image_cache[page], next_anchors, segment)
+                if repaired_grid:
+                    next_anchors = repaired_grid
+        except Exception:
+            pass
+    if next_anchors:
+        out[str(q)] = sorted(next_anchors, key=lambda item: int(item.get("choice") or 0))
+
+print(json.dumps(out, ensure_ascii=False))
+`;
+  const result = await run("python3", ["-c", script, pageDir, mapPath], { maxBuffer: 40 * 1024 * 1024 });
+  return JSON.parse(result.stdout || "{}");
+}
+// SOFTM-문항앵커: segment fallback 앵커는 렌더 PNG 주변의 실제 원형/숫자 픽셀 후보로 한 번 더 스냅 - 2026-06-18
+
+function repairBoxOptionUpperGridChoiceMap(choiceMap, questionSegments, questionCount, choiceCount){
+  const out = {};
+  const slotX = [0.0965, 0.3095, 0.5225, 0.7340];
+  for (let q = 1; q <= questionCount; q += 1){
+    const anchors = Array.isArray(choiceMap?.[String(q)]) ? choiceMap[String(q)].map((item) => ({ ...item })) : [];
+    if (choiceCount !== 4 || anchors.length !== 4) {
+      if (anchors.length) out[String(q)] = anchors;
+      continue;
+    }
+    const ordered = anchors
+      .filter((item) => Number.isInteger(Number(item.choice)) && Number(item.choice) >= 1 && Number(item.choice) <= 4)
+      .sort((a, b) => Number(a.choice) - Number(b.choice));
+    if (ordered.length !== 4) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const sources = ordered.map((item) => String(item.source || ""));
+    if (!sources.slice(0, 2).every((source) => source.includes("inferred-upper-grid"))) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const page = Number(ordered[0].page);
+    const lower = ordered.slice(2);
+    const lowerY = lower.map((item) => Number(item.yRatio));
+    const upperY = ordered.slice(0, 2).map((item) => Number(item.yRatio));
+    if (
+      !Number.isFinite(page)
+      || lowerY.some((value) => !Number.isFinite(value))
+      || upperY.some((value) => !Number.isFinite(value))
+      || Math.max(...lowerY) - Math.min(...lowerY) > 0.018
+      || Math.min(...lowerY) - Math.max(...upperY) < 0.024
+    ) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const lowerXs = lower.map((item) => Number(item.xRatio));
+    if (Math.abs(lowerXs[0] - slotX[0]) > 0.045 || Math.abs(lowerXs[1] - slotX[2]) > 0.055) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const segments = Array.isArray(questionSegments?.[String(q)]) ? questionSegments[String(q)] : [];
+    const segment = segments.find((item) => Number(item.page) === page) || segments[0] || null;
+    const segmentTop = Number(segment?.top);
+    const segmentBottom = Number(segment?.bottom);
+    const rowY = lowerY.reduce((sum, value) => sum + value, 0) / lowerY.length;
+    if (Number.isFinite(segmentTop) && Number.isFinite(segmentBottom) && segmentBottom - segmentTop < 0.145) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    // SOFTM-문항앵커: 짧은 일반 2행 선택지는 박스형 선택지 행으로 오판해 한 줄로 펴지 않도록 제외 - 2026-06-18
+    if (!Number.isFinite(segmentTop) || !Number.isFinite(segmentBottom) || rowY < segmentTop || rowY > segmentBottom + 0.012) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    out[String(q)] = slotX.map((xRatio, index) => ({
+      ...(index === 0 ? lower[0] : index === 2 ? lower[1] : lower[index > 1 ? 1 : 0]),
+      choice: index + 1,
+      xRatio,
+      yRatio: rowY,
+      wRatio: index === 0 ? Number(lower[0].wRatio || 0.012) : index === 2 ? Number(lower[1].wRatio || 0.012) : 0.012,
+      hRatio: index === 0 ? Number(lower[0].hRatio || 0.012) : index === 2 ? Number(lower[1].hRatio || 0.012) : 0.012,
+      layout: "horizontal",
+      source: "segment-choice-anchor-text-horizontal-box-row",
+      inferred: index === 1 || index === 3,
+      confidence: index === 1 || index === 3 ? 0.60 : Math.max(Number(lower[index === 0 ? 0 : 1].confidence) || 0.62, 0.66),
+    }));
+    // SOFTM-문항앵커: 박스 안 ㄱ/ㄴ/ㄷ/ㄹ 설명 후보를 ①②로 오인한 경우 아래 실제 선택지 행으로 재구성 - 2026-06-18
+  }
+  return out;
+}
+
+/* SOFTM-문항영역 시작: 위치맵 생성 단계에서 렌더 PNG 픽셀 기반 정밀 문항영역을 생성 - 2026-06-16 */
+async function buildPreciseChoiceClickAreaMapFromRenderedPages(pageDir, choiceAnchorMap, questionSegments, questionColumnBoundsMap, questionLabelMap, questionCount, choiceCount){
+  const mapPath = path.join(pageDir, "choice-area-input.json");
+  await fsp.writeFile(mapPath, JSON.stringify({ choiceAnchorMap, questionSegments, questionColumnBoundsMap, questionLabelMap, questionCount, choiceCount }), "utf8");
+  const script = `
+import json, math, os, re, sys
+from PIL import Image
+import numpy as np
+
+page_dir, map_path = sys.argv[1], sys.argv[2]
+meta = json.load(open(map_path, "r", encoding="utf-8"))
+choice_map = meta.get("choiceAnchorMap") or {}
+segments_map = meta.get("questionSegments") or {}
+column_bounds_map = meta.get("questionColumnBoundsMap") or {}
+question_label_map = meta.get("questionLabelMap") or {}
+question_count = int(meta.get("questionCount") or 0)
+choice_count = max(1, min(5, int(meta.get("choiceCount") or 4)))
+
+def clamp(value, lo, hi):
+    try:
+        value = float(value)
+    except Exception:
+        return lo
+    return max(lo, min(hi, value))
+
+def median(values, fallback):
+    values = sorted([float(v) for v in values if isinstance(v, (int, float)) and math.isfinite(float(v))])
+    return values[len(values) // 2] if values else fallback
+
+def page_no_from_name(name, fallback=0):
+    matches = re.findall(r'(\\d+)', str(name))
+    return int(matches[-1]) if matches else fallback
+
+page_files = {}
+for fallback_page_no, name in enumerate(sorted([n for n in os.listdir(page_dir) if n.lower().endswith(".png")]), start=1):
+    page_files[page_no_from_name(name, fallback_page_no)] = os.path.join(page_dir, name)
+
+def segment_for(q, page, anchor=None):
+    segments = segments_map.get(str(q)) or []
+    same_page = []
+    for item in segments if isinstance(segments, list) else []:
+        try:
+            if int(item.get("page") or 0) == int(page):
+                same_page.append(item)
+        except Exception:
+            continue
+    ax = None
+    ay = None
+    try:
+        ax = float(anchor.get("xRatio")) if anchor else None
+        ay = float(anchor.get("yRatio")) if anchor else None
+    except Exception:
+        ax = ay = None
+    def contains(item, check_y=True):
+        try:
+            left = float(item.get("left", 0.0))
+            right = float(item.get("right", 1.0))
+            top = float(item.get("top", 0.0))
+            bottom = float(item.get("bottom", 1.0))
+        except Exception:
+            return False
+        return (ax is None or (left - 0.030 <= ax <= right + 0.030)) and (not check_y or ay is None or (top - 0.035 <= ay <= bottom + 0.055))
+    picked = next((item for item in same_page if contains(item, True)), None) or next((item for item in same_page if contains(item, False)), None) or (same_page[0] if same_page else None)
+    bounds = column_bounds_map.get(str(q)) or {}
+    base = picked or {}
+    left = clamp(base.get("left", bounds.get("left", 0.0)), 0.0, 1.0)
+    right = clamp(base.get("right", bounds.get("right", 1.0)), 0.0, 1.0)
+    top = clamp(base.get("top", 0.035), 0.0, 1.0)
+    bottom = clamp(base.get("bottom", 0.965), 0.0, 1.0)
+    # SOFTM-문항영역: 저장 segment 하단은 다음 문제 hard boundary이므로 픽셀 영역 생성 중 문항앵커나 다음 라벨로 다시 확장하지 않음 - 2026-06-17
+    return {
+        "top": top,
+        "bottom": bottom, # SOFTM-문항영역: 클릭 영역은 segment 패딩 하단이 아니라 다음 문제 라벨 직전까지 마지막 보기를 허용 - 2026-06-17
+        "left": left,
+        "right": right,
+    }
+
+def layout_for(anchors):
+    counts = {}
+    for anchor in anchors:
+        layout = str(anchor.get("layout") or "")
+        if layout:
+            counts[layout] = counts.get(layout, 0) + 1
+    return sorted(counts.items(), key=lambda item: item[1], reverse=True)[0][0] if counts else ""
+
+def rows_for(anchors):
+    layout = layout_for(anchors)
+    ordered = sorted(anchors, key=lambda item: (float(item.get("yRatio") or 0), float(item.get("xRatio") or 0)))
+    if layout == "vertical":
+        return [[item] for item in ordered]
+    if layout == "horizontal":
+        return [sorted(ordered, key=lambda item: float(item.get("xRatio") or 0))]
+    if layout == "grid" and choice_count == 4:
+        top = sorted([item for item in ordered if int(item.get("choice") or 0) in (1, 2)], key=lambda item: float(item.get("xRatio") or 0))
+        bottom = sorted([item for item in ordered if int(item.get("choice") or 0) in (3, 4)], key=lambda item: float(item.get("xRatio") or 0))
+        return [row for row in (top, bottom) if row]
+    rows = []
+    for anchor in ordered:
+        y = float(anchor.get("yRatio") or 0)
+        target = None
+        for row in rows:
+            row_y = median([float(item.get("yRatio") or 0) for item in row], y)
+            if abs(row_y - y) <= 0.010:
+                target = row
+                break
+        if target is None:
+            target = []
+            rows.append(target)
+        target.append(anchor)
+    return [sorted(row, key=lambda item: float(item.get("xRatio") or 0)) for row in rows]
+
+def is_dark_array(arr):
+    return arr < 185
+
+def longest_run(values):
+    best = 0
+    current = 0
+    for value in values:
+        if value:
+            current += 1
+            best = max(best, current)
+        else:
+            current = 0
+    return best
+
+def find_text_bounds(arr, x0, y0, x1, y1):
+    h, w = arr.shape
+    x0 = max(0, min(w, int(math.floor(x0))))
+    x1 = max(0, min(w, int(math.ceil(x1))))
+    y0 = max(0, min(h, int(math.floor(y0))))
+    y1 = max(0, min(h, int(math.ceil(y1))))
+    if x1 - x0 < 16 or y1 - y0 < 10:
+        return None
+    dark = is_dark_array(arr[y0:y1, x0:x1])
+    total = int(np.sum(dark))
+    local_h, local_w = dark.shape
+    if total < max(8, min(64, int(local_w * local_h * 0.0015))):
+        return None
+    row_counts = np.sum(dark, axis=1)
+    col_counts = np.sum(dark, axis=0)
+    row_line_limit = max(24, local_w * 0.72)
+    col_line_limit = max(24, local_h * 0.72)
+    row_is_line = np.zeros(local_h, dtype=bool)
+    col_is_line = np.zeros(local_w, dtype=bool)
+    for y in range(local_h):
+        if row_counts[y] >= row_line_limit and longest_run(dark[y, :]) >= row_line_limit:
+            row_is_line[y] = True
+    for x in range(local_w):
+        if col_counts[x] >= col_line_limit and longest_run(dark[:, x]) >= col_line_limit:
+            col_is_line[x] = True
+    kept = dark.copy()
+    if local_h:
+        kept[row_is_line, :] = False
+    if local_w:
+        kept[:, col_is_line] = False
+    ys, xs = np.where(kept)
+    if len(xs) < max(8, total * 0.12):
+        return None
+    row_has_text = np.zeros(local_h, dtype=bool)
+    row_has_text[ys] = True
+    line_count = 0
+    last_row = -999
+    merge_gap = max(8, int(local_h * 0.120))
+    for row_idx in np.where(row_has_text)[0]:
+        if row_idx - last_row > merge_gap:
+            line_count += 1
+        last_row = int(row_idx)
+    return {
+        "x": x0 + int(xs.min()),
+        "y": y0 + int(ys.min()),
+        "w": int(xs.max() - xs.min() + 1),
+        "h": int(ys.max() - ys.min() + 1),
+        "lineCount": max(1, int(line_count)),
+    }
+
+def make_area(q, choice, page, rect, source, confidence):
+    image_path = page_files.get(int(page))
+    if not image_path:
+        return None
+    with Image.open(image_path) as im:
+        w, h = im.size
+    x = clamp(rect["x"] / max(1, w), 0.0, 1.0)
+    y = clamp(rect["y"] / max(1, h), 0.0, 1.0)
+    ww = clamp(rect["w"] / max(1, w), 0.001, 1.0 - x)
+    hh = clamp(rect["h"] / max(1, h), 0.001, 1.0 - y)
+    if ww <= 0 or hh <= 0:
+        return None
+    return {
+        "q": q,
+        "choice": choice,
+        "page": int(page),
+        "xRatio": x,
+        "yRatio": y,
+        "wRatio": ww,
+        "hRatio": hh,
+        "source": source,
+        "confidence": min(0.92, max(0.55, float(confidence or 0.72))),
+    }
+
+out = {}
+for q in range(1, question_count + 1):
+    anchors = [dict(item) for item in (choice_map.get(str(q)) or []) if isinstance(item, dict)]
+    anchors = [item for item in anchors if 1 <= int(item.get("choice") or 0) <= choice_count]
+    if not anchors:
+        continue
+    page = int(anchors[0].get("page") or 0)
+    image_path = page_files.get(page)
+    if not image_path:
+        continue
+    im = Image.open(image_path).convert("L")
+    arr = np.array(im)
+    h, w = arr.shape
+    segment = segment_for(q, page, anchors[0])
+    if segment["right"] <= segment["left"] or segment["bottom"] <= segment["top"]:
+        continue
+    anchors = [
+        item for item in anchors
+        if segment["left"] - 0.002 <= float(item.get("xRatio") or -1) <= segment["right"] + 0.002
+        and segment["top"] - 0.001 <= float(item.get("yRatio") or -1) <= segment["bottom"] + 0.0005
+    ]
+    if not anchors:
+        continue
+    # SOFTM-문항영역: 위치맵 저장 영역도 문제~다음 문제 hard boundary 안의 문항앵커로만 생성 - 2026-06-17
+    rows = rows_for(anchors)
+    row_ys = [median([float(anchor.get("yRatio") or 0) for anchor in row], 0.0) for row in rows]
+    row_pad = max(0.012, min(0.026, median([float(anchor.get("hRatio") or 0.012) for anchor in anchors], 0.012) * 1.55))
+    row_gaps = [row_ys[idx + 1] - row_ys[idx] for idx in range(len(row_ys) - 1) if row_ys[idx + 1] > row_ys[idx]]
+    row_gap = median(row_gaps, row_pad * 3.2)
+    layout = layout_for(anchors)
+    segment_fallback_layout = any(str(anchor.get("source") or "").lower().startswith("segment-choice-anchor") for anchor in anchors)
+    segment_bullet_layout = any("segment-bullet" in str(anchor.get("source") or "").lower() for anchor in anchors)
+    expanded = layout in ("vertical", "grid") or len(rows) > 1
+    vertical_text_layout = layout == "vertical"
+    if segment_fallback_layout:
+        # SOFTM-문항영역: segment 기반 보수 앵커는 실제 텍스트 후보가 약하므로 grid 행끼리 겹치지 않게 행 경계를 보수적으로 제한 - 2026-06-17
+        separator_pad = max(0.004, min(0.008, row_gap * 0.18)) if layout == "grid" else max(0.005, min(0.010, row_gap * 0.34))
+        tail_reach = max(0.010, min(0.018, row_gap * 0.56)) if layout == "grid" else max(0.016, min(0.040, row_gap * 1.18))
+    elif segment_bullet_layout and vertical_text_layout:
+        # SOFTM-문항영역: 57번 같은 촘촘한 특수 불렛 세로 보기는 마지막 행이 다음 문제 문장까지 확장되지 않게 짧은 행 높이로 제한 - 2026-06-17
+        separator_pad = max(0.003, min(0.008, row_gap * 0.24))
+        tail_reach = max(0.018, min(0.026, row_gap * 1.40))
+    elif vertical_text_layout:
+        # SOFTM-문항영역: 세로형 긴 선택지는 다음 보기 직전까지 픽셀 탐색해 2줄 이상 텍스트를 포함 - 2026-06-17
+        separator_pad = max(0.004, min(0.010, row_gap * 0.22))
+        tail_reach = max(row_pad * 2.8, min(0.130, max(0.060, row_gap * 1.85)))
+    else:
+        separator_pad = max(row_pad, min(0.030, row_gap * 0.36))
+        tail_reach = max(row_pad * 2.4, min(0.085, row_gap * 0.82))
+    areas = []
+    for row_index, row in enumerate(rows):
+        row_y = row_ys[row_index]
+        next_y = row_ys[row_index + 1] if row_index + 1 < len(row_ys) else None
+        prev_y = row_ys[row_index - 1] if row_index > 0 else None
+        if expanded:
+            row_top_ratio = row_y - separator_pad
+            row_bottom_ratio = min(segment["bottom"], row_y + tail_reach) if next_y is None else next_y - separator_pad
+            if layout == "grid":
+                # SOFTM-문항영역: 촘촘한 2행 grid는 위/아래 행 중간선을 넘지 않아 sibling 영역과 겹치지 않게 자른다 - 2026-06-17
+                if prev_y is not None:
+                    row_top_ratio = max(row_top_ratio, (prev_y + row_y) * 0.5 + separator_pad * 0.25)
+                if next_y is not None:
+                    row_bottom_ratio = min(row_bottom_ratio, (row_y + next_y) * 0.5 - separator_pad * 0.25)
+        else:
+            row_top_ratio = row_y - row_pad if prev_y is None else (prev_y + row_y) * 0.5
+            row_bottom_ratio = row_y + row_pad if next_y is None else (row_y + next_y) * 0.5
+        row_top_ratio = clamp(row_top_ratio, segment["top"], segment["bottom"])
+        min_row_bottom = row_y + (min(row_pad, row_gap * 0.40) if layout == "grid" else row_pad) # SOFTM-문항영역: grid 최소 높이가 행 중간선을 넘겨 sibling과 겹치지 않게 제한 - 2026-06-17
+        if next_y is not None and (segment_fallback_layout or segment_bullet_layout or vertical_text_layout):
+            min_row_bottom = min(min_row_bottom, next_y - max(0.002, separator_pad * 0.50)) # SOFTM-문항영역: 세로형/특수 불렛 영역 최소 높이 보정이 다음 보기 경계를 넘지 않게 제한 - 2026-06-17
+        row_bottom_ratio = clamp(max(row_bottom_ratio, min_row_bottom), segment["top"], segment["bottom"])
+        if row_bottom_ratio <= row_top_ratio + 0.004:
+            continue
+        row_top = row_top_ratio * h
+        row_bottom = row_bottom_ratio * h
+        column_left = segment["left"] * w
+        column_right = segment["right"] * w
+        gutter = max(18, w * 0.018) if (segment["right"] - segment["left"]) < 0.86 else 0
+        row_right_limit = max(column_left + 24, column_right - gutter)
+        for idx, anchor in enumerate(row):
+            choice = int(anchor.get("choice") or 0)
+            if choice < 1 or choice > choice_count:
+                continue
+            ax = float(anchor.get("xRatio") or 0) * w
+            ay = float(anchor.get("yRatio") or 0) * h
+            aw = max(10.0, min(42.0, float(anchor.get("wRatio") or 0.012) * w))
+            ah = max(10.0, min(42.0, float(anchor.get("hRatio") or 0.012) * h))
+            r = max(6.0, min(32.0, max(aw, ah) * 0.56))
+            anchor_source = str(anchor.get("source") or "").lower()
+            is_segment_fallback_anchor = anchor_source.startswith("segment-choice-anchor") # SOFTM-문항영역: segment 기반 보수 앵커 source는 suffix가 붙어도 같은 스캔 보정으로 처리 - 2026-06-17
+            start_x = clamp(ax + r * (0.58 if is_segment_fallback_anchor else 1.08), column_left, row_right_limit)
+            prev_anchor = row[idx - 1] if idx > 0 else None
+            next_anchor = row[idx + 1] if idx + 1 < len(row) else None
+            if next_anchor is not None:
+                next_x = float(next_anchor.get("xRatio") or 0) * w
+                next_w = max(10.0, min(42.0, float(next_anchor.get("wRatio") or 0.012) * w))
+                fallback_right = min(row_right_limit, next_x - max(r * 1.18, next_w * 1.05))
+            else:
+                fallback_right = row_right_limit
+            if fallback_right <= start_x + 18:
+                continue
+            base_top = max(row_top, ay - r * 0.9)
+            base_bottom = min(row_bottom, ay + r * 0.9)
+            scan_top = base_top
+            if expanded and layout == "vertical" and len(row) == 1:
+                scan_bottom = row_bottom  # SOFTM-문항영역: 세로형 2줄 이상 선택지는 행 하단 전체를 스캔 - 2026-06-17
+            else:
+                scan_bottom = min(row_bottom, ay + (r * (3.1 if expanded and len(row) == 1 else 4.8 if expanded and len(row) > 1 else 1.9 if expanded else 0.9))) # SOFTM-문항영역: 2열/그리드 선택지의 두 줄 텍스트도 행 경계 안에서 픽셀 탐색 - 2026-06-17
+            text = find_text_bounds(arr, start_x, scan_top, fallback_right, scan_bottom)
+            confidence = float(anchor.get("confidence") or 0.72)
+            structural_grid_area = None
+            if is_segment_fallback_anchor and layout == "grid":
+                # SOFTM-문항영역: continuation 이미지 보기 grid는 텍스트 조각 대신 cell 구조로 전체 이미지 클릭 영역을 만든다 - 2026-06-17
+                neighbor_gap = None
+                if next_anchor is not None:
+                    neighbor_gap = (float(next_anchor.get("xRatio") or 0) * w) - ax
+                elif prev_anchor is not None:
+                    neighbor_gap = ax - (float(prev_anchor.get("xRatio") or 0) * w)
+                if neighbor_gap is not None and math.isfinite(neighbor_gap) and neighbor_gap > r * 4:
+                    structural_right = min(fallback_right, start_x + max(r * 6.0, neighbor_gap * 0.62))
+                else:
+                    structural_right = min(fallback_right, start_x + max(r * 8.0, (column_right - column_left) * 0.34))
+                structural_top = row_top
+                structural_bottom = row_bottom
+                if structural_right > start_x + 16 and structural_bottom > structural_top + 10:
+                    if is_segment_fallback_anchor and layout == "grid":
+                        structural_top = max(segment["top"] * h, ay - max(8.0, r * 1.10))
+                        if next_y is not None:
+                            structural_bottom = min(segment["bottom"] * h, (next_y * h) - max(8.0, r * 1.00))
+                        else:
+                            structural_bottom = segment["bottom"] * h
+                        # SOFTM-문항영역: continuation 이미지 보기 grid는 행 중간선이 아니라 다음 행 직전/segment 하단까지 클릭 영역을 확장 - 2026-06-18
+                    structural_grid_area = (start_x, structural_top, structural_right, structural_bottom)
+            max_text_gap = max(18.0, r * 2.25) if len(row) > 1 else max(24.0, r * 3.4)
+            if is_segment_fallback_anchor:
+                max_text_gap = max(max_text_gap, min(max(80.0, r * 12.0), (fallback_right - start_x) * 0.46))
+            if text and text["x"] - start_x > max_text_gap:
+                text = None
+            prefer_structural_grid_area = False
+            if structural_grid_area and is_segment_fallback_anchor and layout == "grid" and anchor_source == "segment-choice-anchor":
+                prefer_structural_grid_area = True
+                # SOFTM-문항영역: 순수 segment grid fallback은 이미지/구조형 선택지로 보고 내부 텍스트 조각보다 cell 구조 영역을 우선 - 2026-06-18
+            if prefer_structural_grid_area:
+                left, top, right, bottom = structural_grid_area
+                source = "generated-click-area-anchor-text" # SOFTM-문항영역: grid cell fallback은 텍스트 픽셀을 못 찾은 이미지형 선택지에만 적용 - 2026-06-18
+            elif text:
+                margin_x = max(9.0, min(26.0, r * 0.68))
+                margin_y = max(6.0, min(18.0, r * 0.42))
+                height_expands_for_text = expanded and (layout == "vertical" or len(row) > 1) and int(text.get("lineCount") or 1) >= 2
+                # SOFTM-문항영역: 세로형/그리드 모두 단일 줄이면 앵커 원 높이를 유지하고 실제 텍스트 행이 2개 이상일 때만 높이 확장 - 2026-06-17
+                bottom_margin = max(margin_y, min(22.0, r * 0.56)) if height_expands_for_text else margin_y
+                left = start_x # SOFTM-문항영역: 영역 왼쪽은 텍스트 픽셀이 아니라 문항 앵커 원 오른쪽에 바짝 붙여 시작 - 2026-06-17
+                right = min(fallback_right, text["x"] + text["w"] + margin_x)
+                if structural_grid_area and is_segment_fallback_anchor and layout == "grid":
+                    right = min(right, structural_grid_area[2]) # SOFTM-문항영역: grid 텍스트 탐색이 워터마크를 포함해도 같은 cell 폭 상한을 넘지 않게 제한 - 2026-06-18
+                if height_expands_for_text:
+                    top = max(row_top, min(base_top, text["y"] - margin_y))
+                    bottom = min(row_bottom, max(base_bottom, text["y"] + text["h"] + bottom_margin))
+                else:
+                    top = base_top
+                    bottom = base_bottom
+                min_width = max(28.0, r * 3.2)
+                right = min(fallback_right, max(right, left + min_width))
+                source = "generated-click-area-anchor-text"
+            else:
+                continue
+            if right - left < 16 or bottom - top < 10:
+                continue
+            area = make_area(q, choice, page, {"x": left, "y": top, "w": right - left, "h": bottom - top}, source, confidence)
+            if area:
+                areas.append(area)
+    if not areas and segment_fallback_layout and layout == "horizontal" and len(anchors) >= choice_count:
+        # SOFTM-문항영역: 워터마크/저품질로 짧은 한 줄 보기 텍스트 픽셀이 모두 실패하면 앵커 원 기준 높이와 다음 앵커 전 폭으로 보수 영역 생성 - 2026-06-17
+        ordered_anchors = sorted(anchors, key=lambda item: float(item.get("xRatio") or 0))
+        for idx, anchor in enumerate(ordered_anchors):
+            choice = int(anchor.get("choice") or 0)
+            if choice < 1 or choice > choice_count:
+                continue
+            ax = float(anchor.get("xRatio") or 0)
+            ay = float(anchor.get("yRatio") or 0)
+            aw = max(0.010, min(0.040, float(anchor.get("wRatio") or 0.012)))
+            ah = max(0.010, min(0.040, float(anchor.get("hRatio") or 0.012)))
+            r_ratio = max(aw, ah) * 0.56
+            left = clamp(ax + r_ratio * 1.02, segment["left"], segment["right"])
+            next_anchor = ordered_anchors[idx + 1] if idx + 1 < len(ordered_anchors) else None
+            next_x = float(next_anchor.get("xRatio") or 0) if next_anchor is not None else segment["right"]
+            cell_width = max(0.001, next_x - left - max(0.016, r_ratio * 2.2))
+            width_ratio = min(max(0.055, r_ratio * 8.0), 0.155, cell_width, max(0.001, segment["right"] - left))
+            top = clamp(ay - r_ratio * 0.9, segment["top"], segment["bottom"])
+            height_ratio = min(max(0.010, r_ratio * 1.8), max(0.001, segment["bottom"] - top))
+            area = make_area(q, choice, page, {
+                "x": left * w,
+                "y": top * h,
+                "w": width_ratio * w,
+                "h": height_ratio * h,
+            }, "generated-click-area-anchor-text", float(anchor.get("confidence") or 0.60) * 0.90)
+            if area:
+                areas.append(area)
+    if areas:
+        unique = {}
+        for area in areas:
+            unique[int(area["choice"])] = area
+        # SOFTM-문항영역 시작: 일부 보기의 텍스트 픽셀 탐색이 워터마크/저품질로 실패하면 같은 문항의 기존 영역 폭으로 보수 보완 - 2026-06-17
+        if layout in ("vertical", "horizontal", "grid") and len(anchors) >= choice_count and 0 < len(unique) < choice_count:
+            existing_widths = [float(area.get("wRatio") or 0) for area in unique.values() if float(area.get("wRatio") or 0) > 0]
+            existing_heights = [float(area.get("hRatio") or 0) for area in unique.values() if float(area.get("hRatio") or 0) > 0]
+            fallback_width = median(existing_widths, 0.42)
+            fallback_height = median(existing_heights, 0.018)
+            for anchor in anchors:
+                choice = int(anchor.get("choice") or 0)
+                if choice < 1 or choice > choice_count or choice in unique:
+                    continue
+                ax = float(anchor.get("xRatio") or 0)
+                ay = float(anchor.get("yRatio") or 0)
+                aw = max(0.010, min(0.040, float(anchor.get("wRatio") or 0.012)))
+                ah = max(0.010, min(0.040, float(anchor.get("hRatio") or 0.012)))
+                r_ratio = max(aw, ah) * 0.56
+                left = clamp(ax + r_ratio * 1.08, segment["left"], segment["right"])
+                width_ratio = min(max(0.030, fallback_width), max(0.001, segment["right"] - left))
+                top = clamp(ay - fallback_height * 0.5, segment["top"], segment["bottom"])
+                height_ratio = min(max(0.010, fallback_height), max(0.001, segment["bottom"] - top))
+                fallback_area = make_area(q, choice, page, {
+                    "x": left * w,
+                    "y": top * h,
+                    "w": width_ratio * w,
+                    "h": height_ratio * h,
+                }, "generated-click-area-anchor-text", float(anchor.get("confidence") or 0.60) * 0.92)
+                if fallback_area:
+                    unique[choice] = fallback_area
+        # SOFTM-문항영역 끝
+        # SOFTM-문항영역 시작: 한 줄 보기에서 한 선택지만 다음 보기 직전까지 과확장되면 형제 보기 폭 기준으로 줄임 - 2026-06-17
+        if layout == "horizontal" and len(unique) >= 3:
+            widths = sorted([float(area.get("wRatio") or 0) for area in unique.values() if float(area.get("wRatio") or 0) > 0])
+            width_mid = widths[len(widths) // 2] if widths else 0
+            if segment_fallback_layout and width_mid > 0.130:
+                cap_width = 0.135 # SOFTM-문항영역: segment 기반 한 줄 fallback은 워터마크가 텍스트처럼 잡혀도 다음 앵커 직전까지 과확장하지 않도록 제한 - 2026-06-17
+                for area in unique.values():
+                    if float(area.get("wRatio") or 0) > cap_width:
+                        area["wRatio"] = max(0.001, min(cap_width, 1.0 - float(area.get("xRatio") or 0)))
+            elif 0.010 <= width_mid <= 0.120:
+                cap_width = min(0.180, width_mid * 1.38)
+                for area in unique.values():
+                    if float(area.get("wRatio") or 0) > max(cap_width, width_mid * 2.20):
+                        area["wRatio"] = max(0.001, min(cap_width, 1.0 - float(area.get("xRatio") or 0)))
+        # SOFTM-문항영역 끝
+        out[str(q)] = [unique[key] for key in sorted(unique)]
+
+print(json.dumps(out, ensure_ascii=False))
+`;
+  const result = await run("python3", ["-c", script, pageDir, mapPath], { maxBuffer: 40 * 1024 * 1024 });
+  return JSON.parse(result.stdout || "{}");
+}
+/* SOFTM-문항영역 끝 */
 
 function completeTrailingChoiceMap(choiceMap, questionSegments, questionCount, choiceCount){
   const out = {};
@@ -2022,20 +4147,52 @@ function completeTrailingChoiceMap(choiceMap, questionSegments, questionCount, c
       const inferredY = ys.at(-1) + medianGap;
       const segment = Array.isArray(questionSegments?.[String(q)]) ? questionSegments[String(q)][0] : null;
       const segmentBottom = Number(segment?.bottom);
+      const segmentLeft = Number.isFinite(Number(segment?.left)) ? Number(segment.left) : 0;
+      const segmentRight = Number.isFinite(Number(segment?.right)) ? Number(segment.right) : 1;
+      const segmentTop = Number(segment?.top);
+      const segmentHeight = Number.isFinite(segmentBottom) && Number.isFinite(segmentTop) ? segmentBottom - segmentTop : NaN;
+      const segmentWidth = segmentRight - segmentLeft;
+      const shouldSkipVerticalTrailing = Number.isFinite(segmentHeight) && Number.isFinite(segmentWidth) && segmentWidth < 0.70 && segmentHeight <= 0.105; // SOFTM-문항앵커: 짧은 2열 문항은 세로 ④ 추정 대신 grid fallback으로 처리 - 2026-06-17
+      if (shouldSkipVerticalTrailing) {
+        const page = Number(anchors[0]?.page);
+        const xLeft = clampGeneratedRatio(segmentLeft + segmentWidth * 0.095, segmentLeft + segmentWidth * 0.055, segmentRight - segmentWidth * 0.58);
+        const xRight = clampGeneratedRatio(segmentLeft + segmentWidth * 0.522, segmentLeft + segmentWidth * 0.36, segmentRight - segmentWidth * 0.10);
+        const yTop = clampGeneratedRatio(segmentTop + segmentHeight * 0.620, segmentTop + segmentHeight * 0.50, segmentBottom - segmentHeight * 0.24);
+        const yBottom = clampGeneratedRatio(segmentTop + segmentHeight * 0.835, yTop + Math.max(0.018, segmentHeight * 0.16), segmentBottom - 0.006);
+        anchors.splice(0, anchors.length, ...[
+          { choice: 1, page, xRatio: xLeft, yRatio: yTop },
+          { choice: 2, page, xRatio: xRight, yRatio: yTop },
+          { choice: 3, page, xRatio: xLeft, yRatio: yBottom },
+          { choice: 4, page, xRatio: xRight, yRatio: yBottom },
+        ].map((item) => ({
+          ...anchors[0],
+          ...item,
+          wRatio: Math.max(0.010, Math.min(0.022, segmentWidth * 0.018)),
+          hRatio: 0.012,
+          source: "segment-choice-anchor-text-grid",
+          anchorMode: "center",
+          layout: "grid",
+          confidence: 0.55,
+          inferred: true,
+        })));
+      }
+      const tailBottom = Number.isFinite(segmentBottom) ? segmentBottom : 0.965;
+      const bottomTolerance = tailBottom >= 0.940 ? 0.014 : 0; // SOFTM-문항앵커: 페이지/단 하단에서 ④만 빠진 세로 보기는 segment 끝 근처까지 복원 허용 - 2026-06-17
       if (
-        gaps.length >= 2
+        !shouldSkipVerticalTrailing
+        && gaps.length >= 2
         && medianGap >= 0.010
         && medianGap <= 0.060
         && Number.isFinite(inferredY)
         && inferredY > ys.at(-1) + 0.008
-        && inferredY <= Math.min(0.965, (Number.isFinite(segmentBottom) ? segmentBottom + 0.030 : 0.965))
+        && inferredY <= Math.min(0.972, tailBottom + bottomTolerance)
       ) {
         const base = anchors.at(-1);
         anchors.push({
           ...base,
           choice: 4,
           xRatio: xs.length ? xs.reduce((sum, value) => sum + value, 0) / xs.length : base.xRatio,
-          yRatio: inferredY,
+          yRatio: Math.min(inferredY, Math.max(ys.at(-1) + 0.008, tailBottom + Math.min(0.004, bottomTolerance * 0.35))),
           source: `${base.source || "anchor-image"}-post-inferred-trailing`,
           inferred: true,
           confidence: Math.min(0.62, Number(base.confidence || 0.62)),
@@ -2046,7 +4203,258 @@ function completeTrailingChoiceMap(choiceMap, questionSegments, questionCount, c
   }
   return out;
 }
-// SOFTM-위치맵: 세로형 ①②③이 확실하고 ④만 약하게 빠진 경우 JS 후처리에서 마지막 보기를 보수적으로 복원 - 2026-06-01
+// SOFTM-위치맵: 세로형 ①②③이 확실하고 ④만 약하게 빠진 경우에도 현재 문제 segment 안에서만 마지막 보기를 복원 - 2026-06-17
+
+function repairLeadingVerticalChoiceMap(choiceMap, questionSegments, questionLabelMap, questionCount, choiceCount){
+  const out = {};
+  for (let q = 1; q <= questionCount; q += 1){
+    const anchors = Array.isArray(choiceMap?.[String(q)]) ? choiceMap[String(q)].map((item) => ({ ...item })) : [];
+    if (!anchors.length) continue;
+    if (choiceCount !== 4 || anchors.length < 3) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const ordered = anchors
+      .filter((item) => Number.isInteger(Number(item.choice)) && Number(item.choice) >= 1 && Number(item.choice) <= choiceCount)
+      .sort((a, b) => Number(a.choice) - Number(b.choice));
+    const vertical = ordered.length >= 3 && ordered.every((item) => String(item.layout || "") === "vertical");
+    const hasTrailingSignal = ordered.length < choiceCount || ordered.some((item) => String(item.source || "").includes("post-inferred-trailing"));
+    if (!vertical || !hasTrailingSignal) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const page = Number(ordered[0]?.page);
+    if (!Number.isFinite(page) || ordered.some((item) => Number(item.page) !== page)) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const ys = ordered.map((item) => Number(item.yRatio)).filter(Number.isFinite);
+    const xs = ordered.map((item) => Number(item.xRatio)).filter(Number.isFinite);
+    if (ys.length !== ordered.length || xs.length !== ordered.length || Math.max(...xs) - Math.min(...xs) > 0.060) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const gaps = ys.slice(1).map((value, idx) => value - ys[idx]).filter((value) => Number.isFinite(value) && value > 0);
+    if (gaps.length < 2) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const sortedGaps = gaps.slice().sort((a, b) => a - b);
+    const gap = ordered.length < choiceCount && gaps.length === 2 ? Math.max(...gaps) : sortedGaps[Math.floor(sortedGaps.length / 2)];
+    const relaxedMissingTail = ordered.length < choiceCount && gaps.length === 2; // SOFTM-위치맵: ①/②가 여러 줄인 3개 감지 세로형은 행 간격이 불균일해도 큰 간격으로 선두 누락을 복원 - 2026-06-17
+    if (
+      !Number.isFinite(gap)
+      || gap < 0.018
+      || gap > 0.075
+      || (!relaxedMissingTail && gaps.some((value) => Math.abs(value - gap) > Math.max(0.012, gap * 0.42)))
+    ) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const label = questionLabelMap?.[String(q)] || {};
+    const labelY = Number(label.yRatio);
+    if (Number(label.page) !== page || !Number.isFinite(labelY)) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const inferredY = ys[0] - gap;
+    const segments = Array.isArray(questionSegments?.[String(q)]) ? questionSegments[String(q)] : [];
+    const segment = segments.find((item) => Number(item.page) === page) || segments[0] || null;
+    const segmentTop = Number.isFinite(Number(segment?.top)) ? Number(segment.top) : 0;
+    const segmentBottom = Number.isFinite(Number(segment?.bottom)) ? Number(segment.bottom) : 1;
+    if (
+      inferredY <= labelY + 0.018
+      || ys[0] - labelY < gap * 1.30 + 0.012
+      || inferredY < segmentTop - 0.006
+      || inferredY > segmentBottom + 0.006
+    ) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const base = ordered[0];
+    const leading = {
+      ...base,
+      choice: 1,
+      yRatio: Math.max(segmentTop, inferredY),
+      source: `${base.source || "anchor-image"}-post-inferred-leading`,
+      inferred: true,
+      confidence: Math.min(0.62, Number(base.confidence || 0.62)),
+    };
+    const repaired = [leading];
+    for (let idx = 0; idx < Math.min(choiceCount - 1, ordered.length); idx += 1){
+      const shifted = {
+        ...ordered[idx],
+        choice: idx + 2,
+        source: `${ordered[idx].source || "anchor-image"}-post-shifted-leading`,
+      };
+      repaired.push(shifted);
+    }
+    out[String(q)] = repaired.sort((a, b) => Number(a.choice) - Number(b.choice));
+  }
+  return out;
+}
+// SOFTM-위치맵: 세로형 보기에서 ① 행이 빠지고 ②~④가 ①~③으로 밀린 경우 문제 라벨과 행 간격으로 선두 보기를 복원 - 2026-06-17
+
+function repairCollapsedLowerGridChoiceMap(choiceMap, questionSegments, questionCount, choiceCount){
+  const out = {};
+  for (let q = 1; q <= questionCount; q += 1){
+    const anchors = Array.isArray(choiceMap?.[String(q)]) ? choiceMap[String(q)].map((item) => ({ ...item })) : [];
+    if (choiceCount !== 4 || anchors.length !== 4) {
+      if (anchors.length) out[String(q)] = anchors;
+      continue;
+    }
+    const ordered = anchors
+      .filter((item) => Number.isInteger(Number(item.choice)) && Number(item.choice) >= 1 && Number(item.choice) <= 4)
+      .sort((a, b) => Number(a.choice) - Number(b.choice));
+    if (ordered.length !== 4 || !ordered.every((item) => String(item.layout || "") === "horizontal")) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const page = Number(ordered[0].page);
+    const ys = ordered.map((item) => Number(item.yRatio));
+    const xs = ordered.map((item) => Number(item.xRatio));
+    if (!Number.isFinite(page) || ys.some((value) => !Number.isFinite(value)) || xs.some((value) => !Number.isFinite(value))) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    if (Math.max(...ys) - Math.min(...ys) > 0.018 || Math.abs(xs[0] - 0.095) > 0.035 || Math.abs(xs[2] - 0.522) > 0.050) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const segments = Array.isArray(questionSegments?.[String(q)]) ? questionSegments[String(q)] : [];
+    const segment = segments.find((item) => Number(item.page) === page) || segments[0] || null;
+    const top = Number(segment?.top);
+    const bottom = Number(segment?.bottom);
+    if (!Number.isFinite(top) || !Number.isFinite(bottom) || bottom <= top) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const height = bottom - top;
+    const rowY = ys.reduce((sum, value) => sum + value, 0) / ys.length;
+    const sourceText = ordered.map((item) => String(item.source || "")).join(" ");
+    const looksLikeRescue = sourceText.includes("short-rescue") || sourceText.includes("expected-x");
+    if (!looksLikeRescue || height < 0.085 || height > 0.170 || rowY - top < Math.max(0.052, height * 0.44)) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const gap = Math.max(0.028, Math.min(0.045, (rowY - top) * 0.46));
+    const topY = Math.max(top + 0.028, rowY - gap);
+    if (topY >= rowY - 0.014) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const bottomLeft = { ...ordered[0], choice: 3, layout: "grid", source: `${ordered[0].source || "anchor-image"}-lower-grid` };
+    const bottomRight = { ...ordered[2], choice: 4, layout: "grid", source: `${ordered[2].source || "anchor-image"}-lower-grid` };
+    const topLeft = {
+      ...ordered[0],
+      choice: 1,
+      yRatio: topY,
+      layout: "grid",
+      source: `${ordered[0].source || "anchor-image"}-inferred-upper-grid`,
+      inferred: true,
+      confidence: Math.min(0.68, Number(ordered[0].confidence) || 0.62),
+    };
+    const topRight = {
+      ...ordered[2],
+      choice: 2,
+      yRatio: topY,
+      layout: "grid",
+      source: `${ordered[2].source || "anchor-image"}-inferred-upper-grid`,
+      inferred: true,
+      confidence: Math.min(0.68, Number(ordered[2].confidence) || 0.62),
+    };
+    out[String(q)] = [topLeft, topRight, bottomLeft, bottomRight].sort((a, b) => Number(a.choice) - Number(b.choice));
+  }
+  return out;
+}
+// SOFTM-문항앵커: 짧은 segment의 2행 grid 아래 행을 한 줄 horizontal로 접은 결과를 최종 저장 전 grid로 복원 - 2026-06-18
+
+function repairQuestionLineGridChoiceMap(choiceMap, questionSegments, questionLabelMap, questionCount, choiceCount){
+  const out = {};
+  for (let q = 1; q <= questionCount; q += 1){
+    const anchors = Array.isArray(choiceMap?.[String(q)]) ? choiceMap[String(q)].map((item) => ({ ...item })) : [];
+    if (choiceCount !== 4 || anchors.length !== 4 || !anchors.every((item) => String(item.layout || "") === "grid")) {
+      if (anchors.length) out[String(q)] = anchors;
+      continue;
+    }
+    const page = Number(anchors[0]?.page);
+    if (!Number.isFinite(page) || anchors.some((item) => Number(item.page) !== page)) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const segment = (Array.isArray(questionSegments?.[String(q)]) ? questionSegments[String(q)] : []).find((item) => Number(item.page) === page) || null;
+    const label = questionLabelMap?.[String(q)] || {};
+    const top = Number(segment?.top);
+    const bottom = Number(segment?.bottom);
+    const left = Number.isFinite(Number(segment?.left)) ? Number(segment.left) : 0;
+    const right = Number.isFinite(Number(segment?.right)) ? Number(segment.right) : 1;
+    const labelY = Number(label.yRatio);
+    if (!Number.isFinite(top) || !Number.isFinite(bottom) || !Number.isFinite(labelY) || bottom <= top || right - left < 0.70) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const height = bottom - top;
+    const ordered = anchors.slice().sort((a, b) => Number(a.choice) - Number(b.choice));
+    const byChoice = new Map(ordered.map((item) => [Number(item.choice), item]));
+    const upper = [byChoice.get(1), byChoice.get(2)];
+    const lower = [byChoice.get(3), byChoice.get(4)];
+    const upperSources = upper.map((item) => String(item?.source || "").toLowerCase());
+    const lowerSources = lower.map((item) => String(item?.source || "").toLowerCase());
+    const upperY = upper.map((item) => Number(item?.yRatio)).filter(Number.isFinite);
+    const lowerY = lower.map((item) => Number(item?.yRatio)).filter(Number.isFinite);
+    const inferredUpperGrid = upperY.length === 2
+      && lowerY.length === 2
+      && upperSources.every((source) => source.includes("inferred-upper-grid"))
+      && lowerSources.every((source) => source.includes("short-rescue") || source.includes("lower-grid"));
+    if (inferredUpperGrid) {
+      const y = clampGeneratedRatio(lowerY.reduce((sum, value) => sum + value, 0) / lowerY.length, top + height * 0.45, bottom - 0.006);
+      const xs = [0.095, 0.310, 0.522, 0.734].map((ratio) => clampGeneratedRatio(left + (right - left) * ratio, left + (right - left) * 0.040, right - (right - left) * 0.040));
+      out[String(q)] = xs.map((xRatio, index) => ({
+        ...ordered[Math.min(index, ordered.length - 1)],
+        choice: index + 1,
+        xRatio,
+        yRatio: y,
+        wRatio: Math.max(0.010, Math.min(0.020, (right - left) * 0.014)),
+        hRatio: 0.012,
+        source: "segment-choice-anchor-text-horizontal",
+        layout: "horizontal",
+        anchorMode: "center",
+        confidence: Math.max(0.55, Math.min(0.70, Number(lower[index % lower.length]?.confidence) || 0.62)),
+        inferred: true,
+      }));
+      continue;
+    }
+    // SOFTM-문항앵커: short-rescue가 만든 가짜 upper grid는 실제 lower 보기 행을 한 줄 보기로 복구 - 2026-06-18
+    const topRowY = Math.min(...ordered.map((item) => Number(item.yRatio)).filter(Number.isFinite));
+    const lowerYs = ordered.map((item) => Number(item.yRatio)).filter((value) => Number.isFinite(value) && value > labelY + Math.max(0.018, height * 0.18));
+    const firstRowIsQuestionLine = height >= 0.110
+      && height <= 0.155
+      && Number.isFinite(topRowY)
+      && Math.abs(topRowY - labelY) <= Math.max(0.012, height * 0.14)
+      && lowerYs.length >= 2; // SOFTM-문항앵커: grid 첫 행이 문제번호 줄이면 보기 행이 아니라 문제문이므로 한 줄 보기로 복구 - 2026-06-18
+    if (!firstRowIsQuestionLine) {
+      out[String(q)] = anchors;
+      continue;
+    }
+    const y = clampGeneratedRatio(top + height * 0.700, top + height * 0.55, bottom - 0.006);
+    const xs = [0.095, 0.310, 0.522, 0.734].map((ratio) => clampGeneratedRatio(left + (right - left) * ratio, left + (right - left) * 0.040, right - (right - left) * 0.040));
+    out[String(q)] = xs.map((xRatio, index) => ({
+      ...ordered[Math.min(index, ordered.length - 1)],
+      choice: index + 1,
+      xRatio,
+      yRatio: y,
+      wRatio: Math.max(0.010, Math.min(0.020, (right - left) * 0.014)),
+      hRatio: 0.012,
+      source: "segment-choice-anchor-text-horizontal",
+      layout: "horizontal",
+      anchorMode: "center",
+      confidence: Math.max(0.55, Math.min(0.70, Number(ordered[index]?.confidence) || 0.55)),
+      inferred: true,
+    }));
+  }
+  return out;
+}
+// SOFTM-문항앵커: 문제문 줄을 grid 첫 행으로 착각한 전폭 짧은 문항은 실제 하단 한 줄 보기로 복구 - 2026-06-18
 
 function summarizeChoiceAnchorMap(choiceMap, questionCount, choiceCount){
   let detected = 0;
@@ -2077,14 +4485,14 @@ function validateAnchorConsistency(pageMap, questionSegments, choiceMap, questio
     partialChoiceQuestions: [],
     suspiciousChoiceOrder: [],
   };
-  const segmentFor = (q, page) => {
+  const segmentsFor = (q, page) => {
     const segments = questionSegments && Array.isArray(questionSegments[String(q)]) ? questionSegments[String(q)] : [];
-    return segments.find((segment) => Number(segment.page) === Number(page)) || null;
+    return segments.filter((segment) => Number(segment.page) === Number(page));
   };
   for (let q = 1; q <= questionCount; q += 1){
     const page = Number(pageMap[q]);
-    const segment = segmentFor(q, page);
-    if (!segment) {
+    const segments = segmentsFor(q, page);
+    if (!segments.length) {
       diagnostics.missingSegments.push(q);
       continue;
     }
@@ -2095,19 +4503,21 @@ function validateAnchorConsistency(pageMap, questionSegments, choiceMap, questio
     for (const item of sorted){
       const x = Number(item.xRatio);
       const y = Number(item.yRatio);
-      const top = Number(segment.top);
-      const bottom = Number(segment.bottom);
-      const left = Number(segment.left ?? 0);
-      const right = Number(segment.right ?? 1);
       const inSegment = Number(item.page) === page
         && Number.isFinite(x)
         && Number.isFinite(y)
-        && Number.isFinite(top)
-        && Number.isFinite(bottom)
-        && y >= top - 0.018
-        && y <= bottom + 0.030
-        && x >= left - 0.030
-        && x <= right + 0.030;
+        && segments.some((segment) => {
+          const top = Number(segment.top);
+          const bottom = Number(segment.bottom);
+          const left = Number(segment.left ?? 0);
+          const right = Number(segment.right ?? 1);
+          return Number.isFinite(top)
+            && Number.isFinite(bottom)
+            && y >= top - 0.018
+            && y <= bottom + 0.030
+            && x >= left - 0.030
+            && x <= right + 0.030;
+        }); // SOFTM-연속문항: 선택지 검증도 primary/continuation 모든 segment를 유효 영역으로 인정 - 2026-06-17
       if (!inSegment) {
         diagnostics.outOfSegmentChoices.push({ q, choice: Number(item.choice), page: Number(item.page), xRatio: x, yRatio: y });
       }
@@ -2162,6 +4572,68 @@ function adjustTopMapByChoiceAnchors(pageMap, topMap, choiceMap, questionCount, 
 // SOFTM-위치맵: 선택지 좌표는 실제 이미지에서 검출된 값만 저장하고 기하 추정/채움 좌표는 신뢰 앵커에서 제외 - 2026-05-30
 // SOFTM-위치맵: 그리드 실패 시 세로형을 가로형보다 먼저 적용해 문장 내부 원형 후보를 선택지로 오판하지 않도록 보정 - 2026-05-30
 // SOFTM-위치맵: 다음 문제 시작선이 이전 선택지와 실제로 겹칠 때만 작게 밀어 제목이 잘리지 않도록 보정 - 2026-05-30
+
+function adjustQuestionLabelsByChoiceSpacing(pageMap, topMap, questionLabelMap, choiceMap, questionCount, choiceCount, questionColumnBoundsMap = {}){
+  const nextTopMap = Array.isArray(topMap) ? topMap.slice() : [];
+  const nextLabelMap = { ...(questionLabelMap || {}) };
+  const firstChoiceY = (q) => {
+    const anchors = Array.isArray(choiceMap?.[String(q)]) ? choiceMap[String(q)] : [];
+    const valid = anchors
+      .filter((item) => isReliableChoiceAnchor(item, choiceCount))
+      .map((item) => Number(item.yRatio))
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b);
+    return valid.length ? valid[0] : null;
+  };
+  const gaps = [];
+  for (let q = 1; q <= questionCount; q += 1){
+    const label = nextLabelMap[String(q)];
+    const firstY = firstChoiceY(q);
+    if (!label || !Number.isFinite(firstY) || Number(label.page) !== Number(pageMap[q])) continue;
+    const gap = firstY - Number(label.yRatio);
+    if (gap >= 0.035 && gap <= 0.120) gaps.push(gap);
+  }
+  gaps.sort((a, b) => a - b);
+  const normalGap = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 0.070;
+  let changed = false;
+  for (let q = 2; q <= questionCount; q += 1){
+    const currentBounds = questionColumnBoundsMap[String(q)] || {};
+    const previousBounds = questionColumnBoundsMap[String(q - 1)] || {};
+    if (Number.isFinite(Number(currentBounds.column)) || Number.isFinite(Number(previousBounds.column))) continue;
+    if (Number(pageMap[q]) !== Number(pageMap[q - 1])) continue;
+    const label = nextLabelMap[String(q)];
+    const prevLabel = nextLabelMap[String(q - 1)];
+    const firstY = firstChoiceY(q);
+    if (!label || !prevLabel || !Number.isFinite(firstY) || Number(label.page) !== Number(pageMap[q])) continue;
+    const currentGap = firstY - Number(label.yRatio);
+    const prevAnchors = Array.isArray(choiceMap?.[String(q - 1)]) ? choiceMap[String(q - 1)] : [];
+    const prevReliableCount = prevAnchors.filter((item) => isReliableChoiceAnchor(item, choiceCount)).length;
+    const prevChoiceYs = prevAnchors
+      .filter((item) => isReliableChoiceAnchor(item, choiceCount))
+      .map((item) => Number(item.yRatio))
+      .filter(Number.isFinite);
+    const prevMaxChoiceY = prevChoiceYs.length ? Math.max(...prevChoiceYs) : null;
+    const labelText = String(label.markerText || label.text || "");
+    const labelMarkerSuspicious = new RegExp(`^\\s*${q}\\)`).test(labelText);
+    const labelOverlapsPreviousChoices = Number.isFinite(prevMaxChoiceY) && Number(label.yRatio) <= prevMaxChoiceY + 0.030;
+    if (prevReliableCount >= Math.max(2, Math.min(choiceCount, 3)) && !labelOverlapsPreviousChoices && !labelMarkerSuspicious) continue;
+    const suspiciousGap = (labelOverlapsPreviousChoices || labelMarkerSuspicious) ? Math.max(0.105, normalGap * 1.40) : Math.max(0.125, normalGap * 1.85);
+    if (currentGap < suspiciousGap) continue;
+    const previousY = Number(prevLabel.yRatio);
+    const adjustedY = Math.max(previousY + 0.105, Math.min(firstY - 0.038, firstY - normalGap));
+    if (!Number.isFinite(adjustedY) || adjustedY <= Number(label.yRatio) + 0.025) continue;
+    nextLabelMap[String(q)] = {
+      ...label,
+      yRatio: Math.max(0.040, Math.min(0.965, adjustedY)),
+      adjustedByChoiceSpacing: true,
+      source: "adjusted-choice-spacing",
+    };
+    nextTopMap[q] = Math.max(0.035, Math.min(0.92, Number(nextLabelMap[String(q)].yRatio) - 0.020));
+    changed = true;
+  }
+  return { changed, topMap: nextTopMap, questionLabelMap: nextLabelMap };
+}
+// SOFTM-위치맵: 다음 문제번호가 이전 보기 불렛으로 오인되면 다음 문제 첫 보기와의 과도한 간격으로 라벨/segment 시작을 보정 - 2026-06-17
 
 async function cropQuestionAreas(inputDir, outputDir, options = {}){
   const script = `
@@ -2404,8 +4876,8 @@ async function main(){
     const pageColumnLayoutMap = buildQuestionColumnLayoutMap(cropMeta);
     const questionColumnBoundsMap = buildQuestionColumnBoundsMap(anchorByLocal, pageMap, questionCount, pageColumnLayoutMap);
     let questionSegments = {};
-    const questionLabelMap = completeQuestionLabelMap(anchorByLocal, pageMap, topMap, questionColumnBoundsMap, questionCount);
-    let baseQuestionSegments = buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questionCount, {}, questionLabelMap);
+    let questionLabelMap = completeQuestionLabelMap(anchorByLocal, pageMap, topMap, questionColumnBoundsMap, questionCount);
+    let baseQuestionSegments = buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questionCount, {}, questionLabelMap, choiceCount);
     // SOFTM-위치맵: 보기 탐색 시 문제번호 라벨 자체를 선택지로 착각하지 않도록 원본 라벨 좌표를 전달 - 2026-05-30
     const printedQuestionNoMap = Array(questionCount + 1).fill(null);
     for (let q = 1; q <= questionCount; q += 1){
@@ -2417,20 +4889,55 @@ async function main(){
       const adjusted = adjustTopMapByChoiceAnchors(pageMap, topMap, imageChoiceMap, questionCount, choiceCount, questionLabelMap);
       if (adjusted.changed) {
         topMap = adjusted.topMap;
-        baseQuestionSegments = buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questionCount, {}, questionLabelMap);
+        baseQuestionSegments = buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questionCount, {}, questionLabelMap, choiceCount);
+        imageChoiceMap = await detectChoiceAnchorsFromImages(workDir, pageMap, topMap, questionCount, choiceCount, questionLabelMap, questionColumnBoundsMap, baseQuestionSegments, rawChoiceCandidates);
+      }
+      const labelAdjusted = adjustQuestionLabelsByChoiceSpacing(pageMap, topMap, questionLabelMap, imageChoiceMap, questionCount, choiceCount, questionColumnBoundsMap);
+      if (labelAdjusted.changed) {
+        topMap = labelAdjusted.topMap;
+        questionLabelMap = labelAdjusted.questionLabelMap;
+        baseQuestionSegments = buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questionCount, {}, questionLabelMap, choiceCount);
         imageChoiceMap = await detectChoiceAnchorsFromImages(workDir, pageMap, topMap, questionCount, choiceCount, questionLabelMap, questionColumnBoundsMap, baseQuestionSegments, rawChoiceCandidates);
       }
     }catch(err){
       console.error(`ANCHOR choice image detect skipped: ${err?.message || err}`);
     }
     // SOFTM-위치맵: 선택지와 겹친 다음 문제 시작선을 보정한 뒤 선택지 위치를 재탐지 - 2026-05-30
-    const choiceAnchorMap = completeTrailingChoiceMap(
-      normalizeReliableChoiceMap(imageChoiceMap, questionCount, choiceCount),
+	    const reliableChoiceMap = repairGridChoiceMap(
+	      normalizeReliableChoiceMap(imageChoiceMap, questionCount, choiceCount, baseQuestionSegments),
+	      baseQuestionSegments,
+	      questionCount,
+      choiceCount,
+    ); // SOFTM-문항영역: OCR 오탐 제거 뒤 2행 선택지의 한 칸 누락은 기하 관계로 보수 복구 - 2026-06-16
+    const choiceAnchorMapBeforePixelSnap = repairQuestionLineGridChoiceMap(repairCollapsedLowerGridChoiceMap(snapFallbackChoiceAnchorsToRawCandidates(buildSegmentChoiceAnchorFallbackMap(
+      repairLeadingVerticalChoiceMap(
+        completeTrailingChoiceMap(
+          reliableChoiceMap,
+          baseQuestionSegments,
+          questionCount,
+          choiceCount,
+        ),
+        baseQuestionSegments,
+        questionLabelMap,
+        questionCount,
+        choiceCount,
+      ),
       baseQuestionSegments,
+      questionColumnBoundsMap,
+      pageMap,
       questionCount,
       choiceCount,
-    );
-    questionSegments = buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questionCount, choiceAnchorMap, questionLabelMap);
+      questionLabelMap,
+    ), rawChoiceCandidates, baseQuestionSegments, questionColumnBoundsMap, questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount), baseQuestionSegments, questionLabelMap, questionCount, choiceCount); // SOFTM-문항앵커: segment fallback과 OCR 후보 보정 뒤 grid/horizontal 최종 형태를 복원 - 2026-06-18
+    const choiceAnchorMap = repairBoxOptionUpperGridChoiceMap(await snapFallbackChoiceAnchorsToRenderedMarks(workDir, choiceAnchorMapBeforePixelSnap, baseQuestionSegments, questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount); // SOFTM-문항앵커: 최종 fallback 앵커를 렌더 픽셀 후보와 박스형 선택지 행 기준으로 보정 - 2026-06-18
+    questionSegments = buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questionCount, choiceAnchorMap, questionLabelMap, choiceCount);
+    let choiceClickAreaMap = {};
+    try{
+      choiceClickAreaMap = await buildPreciseChoiceClickAreaMapFromRenderedPages(workDir, choiceAnchorMap, questionSegments, questionColumnBoundsMap, questionLabelMap, questionCount, choiceCount);
+    }catch(err){
+      console.error(`ANCHOR choice click area detect skipped: ${err?.message || err}`);
+      choiceClickAreaMap = {};
+    } // SOFTM-문항영역: 위치맵 생성도 렌더 PNG 픽셀 기반 정밀 문항영역을 저장 - 2026-06-16
     const choiceStats = summarizeChoiceAnchorMap(choiceAnchorMap, questionCount, choiceCount);
     const parserDiagnostics = validateAnchorConsistency(pageMap, questionSegments, choiceAnchorMap, questionCount, choiceCount);
     const detectedRatio = anchors.length / Math.max(1, questionCount);
@@ -2462,6 +4969,7 @@ async function main(){
       questionPageMap: pageMap,
       questionTopRatioMap: topMap,
       choiceAnchorMap,
+      choiceClickAreaMap,
       anchors,
       rawAnchorCount: rawAnchors.length,
       sourceStats: {
@@ -2471,6 +4979,7 @@ async function main(){
         choiceDetected: choiceStats.detected,
         choiceExpected: choiceStats.expected,
         choiceCoverage: choiceStats.coverage,
+        choiceClickAreaDetected: Object.values(choiceClickAreaMap).reduce((sum, value) => sum + (Array.isArray(value) ? value.length : 0), 0),
         choiceMissingQuestions: choiceStats.missingQuestions,
         parserDiagnostics,
       },
