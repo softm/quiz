@@ -266,6 +266,11 @@
     "questionEndNo": 100,
     "ocrStatus": "정상",
     "ocrPublished": true,
-    "choiceCount": 4
+    "choiceCount": 4,
+    "anchorMap": "quiz/pdf/농산물품질관리사/2025년 제22회 농산물품질관리사 1차_anchor.json",
+    "anchorStatus": "위치맵 생성",
+    "anchorConfidence": 1,
+    "anchorWarnings": [],
+    "anchorGeneratedAt": "2026-06-19T07:00:10.662Z"
   }
 ]

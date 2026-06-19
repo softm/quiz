@@ -297,7 +297,12 @@
     "anchorIssueCount": 0,
     "anchorPartialChoiceCount": 0,
     "anchorOutOfSegmentChoiceCount": 0,
-    "anchorGeneratorVersion": 1
+    "anchorGeneratorVersion": 1,
+    "anchorMap": "quiz/pdf/농산물품질관리사/2025년 제22회 농산물품질관리사 1차_anchor.json",
+    "anchorStatus": "위치맵 생성",
+    "anchorConfidence": 1,
+    "anchorWarnings": [],
+    "anchorGeneratedAt": "2026-06-19T07:00:10.662Z"
   },
   {
     "gNo": "02",
@@ -854,7 +859,7 @@
     "anchorStatus": "위치맵 생성",
     "anchorConfidence": 0.8599999999999999,
     "anchorWarnings": [],
-    "anchorGeneratedAt": "2026-06-19T05:04:58.200Z"
+    "anchorGeneratedAt": "2026-06-19T05:35:00.553Z"
   },
   {
     "gNo": "03",

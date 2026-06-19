@@ -2,7 +2,7 @@
   "version": 1,
   "kind": "question-anchor-map",
   "questionNo": "0024",
-  "questionPdf": "pdf/방통대/모바일앱프로그래밍/[기출문제] [2014.1학기 기말시험] 모바일앱프로그래밍.pdf",
+  "questionPdf": "pdf/방통대/모바일앱프로그래밍/[기출문제] [2014.1학기 기말시험] 모바일앱프로그래밍.pdf",
   "pageCount": 2,
   "questionCount": 25,
   "choiceCount": 4,
@@ -128,8 +128,9 @@
       "page": 1,
       "xRatio": 0.5098743267504489,
       "yRatio": 0.05294863665187064,
-      "label": 11,
       "anchorColumn": 1,
+      "text": "46.77(2)",
+      "markerText": "46.77(2)",
       "source": "ocr-number-layer"
     },
     "12": {
@@ -2119,7 +2120,7 @@
         "xRatio": 0.08769769766606822,
         "yRatio": 0.15073703487634746,
         "wRatio": 0.0727208473967684,
-        "hRatio": 0.012096000000000015,
+        "hRatio": 0.012096000000000023,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2129,8 +2130,8 @@
         "page": 1,
         "xRatio": 0.2840621500897666,
         "yRatio": 0.15121262143310082,
-        "wRatio": 0.05229894434470374,
-        "hRatio": 0.011818450221940415,
+        "wRatio": 0.052298944344703724,
+        "hRatio": 0.011761062777425502,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2140,8 +2141,8 @@
         "page": 1,
         "xRatio": 0.08312423698384201,
         "yRatio": 0.16912368421052631,
-        "wRatio": 0.07576265709156194,
-        "hRatio": 0.005918801521876955,
+        "wRatio": 0.07576265709156195,
+        "hRatio": 0.00591880152187696,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2152,7 +2153,7 @@
         "xRatio": 0.28016193895870733,
         "yRatio": 0.16912368421052631,
         "wRatio": 0.05376983842010774,
-        "hRatio": 0.005918801521876955,
+        "hRatio": 0.00591880152187696,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       }
@@ -2163,9 +2164,9 @@
         "choice": 1,
         "page": 1,
         "xRatio": 0.07681620969479354,
-        "yRatio": 0.2289156626506024,
+        "yRatio": 0.23045111477488903,
         "wRatio": 0.10630161579892279,
-        "hRatio": 0.018629860494610035,
+        "hRatio": 0.028920430178428908,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -2175,8 +2176,8 @@
         "page": 1,
         "xRatio": 0.24827042872531416,
         "yRatio": 0.2288466455294864,
-        "wRatio": 0.10630161579892282,
-        "hRatio": 0.01869887761572607,
+        "wRatio": 0.1063016157989228,
+        "hRatio": 0.018698877615726056,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -2187,7 +2188,7 @@
         "xRatio": 0.054424609694793534,
         "yRatio": 0.2582936968928345,
         "wRatio": 0.1263472621184919,
-        "hRatio": 0.011348469245402644,
+        "hRatio": 0.01134846924540267,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.55
       },
@@ -2196,9 +2197,9 @@
         "choice": 4,
         "page": 1,
         "xRatio": 0.2602937163375224,
-        "yRatio": 0.25146503170577045,
-        "wRatio": 0.10630161579892282,
-        "hRatio": 0.018629860494610035,
+        "yRatio": 0.2514305231452124,
+        "wRatio": 0.10630161579892283,
+        "hRatio": 0.018698877615726084,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.6072000000000001
       }
@@ -2211,7 +2212,7 @@
         "xRatio": 0.0888197802513465,
         "yRatio": 0.331712111604312,
         "wRatio": 0.17213736445242367,
-        "hRatio": 0.009624410906785015,
+        "hRatio": 0.009448002536461608,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.8999999999999999
       },
@@ -2222,7 +2223,7 @@
         "xRatio": 0.0888197802513465,
         "yRatio": 0.3464552948636652,
         "wRatio": 0.1739326965888689,
-        "hRatio": 0.009624410906785015,
+        "hRatio": 0.009527266962587155,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.8999999999999999
       },
@@ -2233,7 +2234,7 @@
         "xRatio": 0.08769769766606822,
         "yRatio": 0.3613570069752695,
         "wRatio": 0.1301714757630162,
-        "hRatio": 0.009624410906785015,
+        "hRatio": 0.009527266962587155,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.8999999999999999
       },
@@ -2244,7 +2245,7 @@
         "xRatio": 0.08769769766606822,
         "yRatio": 0.3762587190868739,
         "wRatio": 0.1301714757630162,
-        "hRatio": 0.009624410906784944,
+        "hRatio": 0.009624410906784953,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.8999999999999999
       }
@@ -2257,7 +2258,7 @@
         "xRatio": 0.054424609694793534,
         "yRatio": 0.4308277133798351,
         "wRatio": 0.13629119389587074,
-        "hRatio": 0.021713906785034893,
+        "hRatio": 0.021713906785034875,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.55
       },
@@ -2268,7 +2269,7 @@
         "xRatio": 0.274249115978456,
         "yRatio": 0.4308277133798351,
         "wRatio": 0.13629119389587074,
-        "hRatio": 0.021713906785034893,
+        "hRatio": 0.021713906785034875,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.55
       },
@@ -2278,8 +2279,8 @@
         "page": 1,
         "xRatio": 0.07614296014362658,
         "yRatio": 0.4674896334812936,
-        "wRatio": 0.08229510089766606,
-        "hRatio": 0.006048000000000061,
+        "wRatio": 0.08229510089766608,
+        "hRatio": 0.006048000000000053,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -2289,8 +2290,8 @@
         "page": 1,
         "xRatio": 0.2740783281867145,
         "yRatio": 0.4682822777425491,
-        "wRatio": 0.09620892495511672,
-        "hRatio": 0.006048000000000061,
+        "wRatio": 0.09620892495511674,
+        "hRatio": 0.006048000000000053,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       }
@@ -2303,7 +2304,7 @@
         "xRatio": 0.054424609694793534,
         "yRatio": 0.5162580152187698,
         "wRatio": 0.13010399461400357,
-        "hRatio": 0.022474449904882687,
+        "hRatio": 0.022474449904882676,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.55
       },
@@ -2312,9 +2313,9 @@
         "choice": 2,
         "page": 1,
         "xRatio": 0.26480024416517056,
-        "yRatio": 0.5098008877615726,
+        "yRatio": 0.5126287254280278,
         "wRatio": 0.13010399461400357,
-        "hRatio": 0.01,
+        "hRatio": 0.007172162333544785,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.6072000000000001
       },
@@ -2325,7 +2326,7 @@
         "xRatio": 0.054424609694793534,
         "yRatio": 0.5516508497146481,
         "wRatio": 0.1397045332136445,
-        "hRatio": 0.005489731135066477,
+        "hRatio": 0.005489731135066456,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.55
       },
@@ -2336,7 +2337,7 @@
         "xRatio": 0.27744416517055653,
         "yRatio": 0.5545060240963856,
         "wRatio": 0.05558994614003593,
-        "hRatio": 0.007031071655041196,
+        "hRatio": 0.007031071655041243,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       }
@@ -2347,9 +2348,9 @@
         "choice": 1,
         "page": 1,
         "xRatio": 0.054424609694793534,
-        "yRatio": 0.5990956816740647,
-        "wRatio": 0.1315774183123878,
-        "hRatio": 0.017139161382371558,
+        "yRatio": 0.5965620266328471,
+        "wRatio": 0.13629119389587074,
+        "hRatio": 0.027326805326569614,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.55
       },
@@ -2359,8 +2360,8 @@
         "page": 1,
         "xRatio": 0.274249115978456,
         "yRatio": 0.5990956816740647,
-        "wRatio": 0.09667212208258523,
-        "hRatio": 0.010906344958782413,
+        "wRatio": 0.09667212208258524,
+        "hRatio": 0.010906344958782399,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.55
       },
@@ -2370,8 +2371,8 @@
         "page": 1,
         "xRatio": 0.07614296014362658,
         "yRatio": 0.6279208319594166,
-        "wRatio": 0.07601143842010771,
-        "hRatio": 0.006048000000000061,
+        "wRatio": 0.07601143842010773,
+        "hRatio": 0.006048000000000053,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -2381,8 +2382,8 @@
         "page": 1,
         "xRatio": 0.2740783281867145,
         "yRatio": 0.627128187698161,
-        "wRatio": 0.07556260538599643,
-        "hRatio": 0.006048000000000061,
+        "wRatio": 0.07556260538599646,
+        "hRatio": 0.006048000000000053,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       }
@@ -2395,7 +2396,7 @@
         "xRatio": 0.07874561723518851,
         "yRatio": 0.6903811997463539,
         "wRatio": 0.06981811705565528,
-        "hRatio": 0.006047999999999917,
+        "hRatio": 0.006047999999999942,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2405,8 +2406,8 @@
         "page": 1,
         "xRatio": 0.2764565687612208,
         "yRatio": 0.6911738440076094,
-        "wRatio": 0.09024002010771995,
-        "hRatio": 0.006047999999999917,
+        "wRatio": 0.09024002010771992,
+        "hRatio": 0.006047999999999942,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2416,8 +2417,8 @@
         "page": 1,
         "xRatio": 0.07919445026929983,
         "yRatio": 0.7067096715282182,
-        "wRatio": 0.06936928402154398,
-        "hRatio": 0.006047999999999917,
+        "wRatio": 0.06936928402154396,
+        "hRatio": 0.006047999999999942,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2426,9 +2427,9 @@
         "choice": 4,
         "page": 1,
         "xRatio": 0.27781640215439857,
-        "yRatio": 0.7013196905516806,
-        "wRatio": 0.06981811705565528,
-        "hRatio": 0.01,
+        "yRatio": 0.7034657577679136,
+        "wRatio": 0.06981811705565527,
+        "hRatio": 0.007853932783767004,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.8648
       }
@@ -2441,7 +2442,7 @@
         "xRatio": 0.08529587073608617,
         "yRatio": 0.7615358275206088,
         "wRatio": 0.08483123877917416,
-        "hRatio": 0.009268230818008868,
+        "hRatio": 0.009268230818008871,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2451,8 +2452,8 @@
         "page": 1,
         "xRatio": 0.28105960502692995,
         "yRatio": 0.7628142041851618,
-        "wRatio": 0.11525996409335729,
-        "hRatio": 0.006711477488902874,
+        "wRatio": 0.11525996409335726,
+        "hRatio": 0.006711477488902884,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2462,8 +2463,8 @@
         "page": 1,
         "xRatio": 0.08529587073608617,
         "yRatio": 0.7783727013316424,
-        "wRatio": 0.13914003590664273,
-        "hRatio": 0.007333069118579519,
+        "wRatio": 0.1391400359066427,
+        "hRatio": 0.0073330691185795605,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2473,8 +2474,8 @@
         "page": 1,
         "xRatio": 0.27780306786355474,
         "yRatio": 0.7804255878249842,
-        "wRatio": 0.09517718348294436,
-        "hRatio": 0.006047999999999917,
+        "wRatio": 0.09517718348294435,
+        "hRatio": 0.006047999999999942,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       }
@@ -2485,9 +2486,9 @@
         "choice": 1,
         "page": 1,
         "xRatio": 0.07704062621184919,
-        "yRatio": 0.8344839264426126,
+        "yRatio": 0.8338119264426125,
         "wRatio": 0.11520646319569121,
-        "hRatio": 0.006047999999999917,
+        "hRatio": 0.020018130627774355,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -2495,12 +2496,12 @@
         "q": 9,
         "choice": 2,
         "page": 1,
-        "xRatio": 0.2661467432675045,
-        "yRatio": 0.8206919162967661,
-        "wRatio": 0.11879676840215442,
-        "hRatio": 0.01,
+        "xRatio": 0.2652507432675045,
+        "yRatio": 0.818675916296766,
+        "wRatio": 0.052,
+        "hRatio": 0.010080000000000002,
         "source": "generated-click-area-anchor-text",
-        "confidence": 0.6072000000000001
+        "confidence": 0.5544
       },
       {
         "q": 9,
@@ -2520,7 +2521,7 @@
         "xRatio": 0.27752280071813284,
         "yRatio": 0.8538300570703868,
         "wRatio": 0.11879676840215442,
-        "hRatio": 0.004788839568801463,
+        "hRatio": 0.004788839568801495,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       }
@@ -2530,10 +2531,10 @@
         "q": 10,
         "choice": 1,
         "page": 1,
-        "xRatio": 0.05616469156193896,
-        "yRatio": 0.8995137978440076,
-        "wRatio": 0.11507427648114897,
-        "hRatio": 0.014505898287888496,
+        "xRatio": 0.054424609694793534,
+        "yRatio": 0.9045529486366518,
+        "wRatio": 0.1266255385996409,
+        "hRatio": 0.02170453265694361,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.55
       },
@@ -2542,9 +2543,9 @@
         "choice": 2,
         "page": 1,
         "xRatio": 0.2562032315978455,
-        "yRatio": 0.9111972098922004,
-        "wRatio": 0.05708222621184926,
-        "hRatio": 0.006711477488902874,
+        "yRatio": 0.9104514901712111,
+        "wRatio": 0.12662553859964087,
+        "hRatio": 0.015805991122384344,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -2553,9 +2554,9 @@
         "choice": 3,
         "page": 1,
         "xRatio": 0.07750053859964093,
-        "yRatio": 0.9293134812935954,
-        "wRatio": 0.12028055655296231,
-        "hRatio": 0.014505898287888496,
+        "yRatio": 0.9276461636017754,
+        "wRatio": 0.1202805565529623,
+        "hRatio": 0.04235383639822454,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -2564,9 +2565,9 @@
         "choice": 4,
         "page": 1,
         "xRatio": 0.274249115978456,
-        "yRatio": 0.9293134812935954,
-        "wRatio": 0.11507427648114897,
-        "hRatio": 0.014505898287888496,
+        "yRatio": 0.9262852149651236,
+        "wRatio": 0.12028055655296233,
+        "hRatio": 0.04371478503487636,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.55
       }
@@ -2578,8 +2579,8 @@
         "page": 1,
         "xRatio": 0.5466962298025134,
         "yRatio": 0.068998097653773,
-        "wRatio": 0.3949087971274687,
-        "hRatio": 0.04312492073557384,
+        "wRatio": 0.3949087971274686,
+        "hRatio": 0.02477774254914393,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -2590,7 +2591,7 @@
         "xRatio": 0.5688467102333932,
         "yRatio": 0.11402029169308814,
         "wRatio": 0.2877118707360862,
-        "hRatio": 0.009814645529486372,
+        "hRatio": 0.00947970830691186,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.8999999999999999
       },
@@ -2600,8 +2601,8 @@
         "page": 1,
         "xRatio": 0.5634852940754039,
         "yRatio": 0.12844641724793915,
-        "wRatio": 0.37811973285457817,
-        "hRatio": 0.015697801902346212,
+        "wRatio": 0.3781197328545781,
+        "hRatio": 0.010113823715916292,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.8999999999999999
       },
@@ -2612,7 +2613,7 @@
         "xRatio": 0.5436269299820468,
         "yRatio": 0.14455168040583385,
         "wRatio": 0.3979780969479354,
-        "hRatio": 0.006711477488902983,
+        "hRatio": 0.006711477488902995,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.8999999999999999
       }
@@ -2624,8 +2625,8 @@
         "page": 1,
         "xRatio": 0.5466962298025134,
         "yRatio": 0.22079391249207356,
-        "wRatio": 0.10278456014362664,
-        "hRatio": 0.009268230818008868,
+        "wRatio": 0.10278456014362669,
+        "hRatio": 0.009268230818008871,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2635,8 +2636,8 @@
         "page": 1,
         "xRatio": 0.7446315978456014,
         "yRatio": 0.21873303741280914,
-        "wRatio": 0.07944524236983848,
-        "hRatio": 0.009268230818008868,
+        "wRatio": 0.07944524236983852,
+        "hRatio": 0.009268230818008871,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2646,8 +2647,8 @@
         "page": 1,
         "xRatio": 0.53992155978456,
         "yRatio": 0.23484844641724795,
-        "wRatio": 0.10235851202872538,
-        "hRatio": 0.004225014584654405,
+        "wRatio": 0.10235851202872537,
+        "hRatio": 0.004225014584654407,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2657,8 +2658,8 @@
         "page": 1,
         "xRatio": 0.7415622980251347,
         "yRatio": 0.2349131261889664,
-        "wRatio": 0.07217199281867143,
-        "hRatio": 0.006711477488902946,
+        "wRatio": 0.07217199281867137,
+        "hRatio": 0.006711477488902939,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       }
@@ -2670,8 +2671,8 @@
         "page": 1,
         "xRatio": 0.5412680588868941,
         "yRatio": 0.293107896005073,
-        "wRatio": 0.04445905062836621,
-        "hRatio": 0.006047999999999989,
+        "wRatio": 0.04445905062836619,
+        "hRatio": 0.006047999999999998,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2681,8 +2682,8 @@
         "page": 1,
         "xRatio": 0.7446315978456014,
         "yRatio": 0.29403424223208624,
-        "wRatio": 0.04308976660682232,
-        "hRatio": 0.009268230818008868,
+        "wRatio": 0.04308976660682229,
+        "hRatio": 0.009268230818008871,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2692,8 +2693,8 @@
         "page": 1,
         "xRatio": 0.544075763016158,
         "yRatio": 0.3103728598604947,
-        "wRatio": 0.04613967684021541,
-        "hRatio": 0.006711477488902946,
+        "wRatio": 0.04613967684021536,
+        "hRatio": 0.006711477488902939,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2703,8 +2704,8 @@
         "page": 1,
         "xRatio": 0.7418337522441651,
         "yRatio": 0.31005453392517435,
-        "wRatio": 0.06965637342908441,
-        "hRatio": 0.007031071655041196,
+        "wRatio": 0.06965637342908437,
+        "hRatio": 0.007031071655041188,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       }
@@ -2716,8 +2717,8 @@
         "page": 1,
         "xRatio": 0.5462588868940754,
         "yRatio": 0.3694702939130613,
-        "wRatio": 0.05831238779174148,
-        "hRatio": 0.013120287253141833,
+        "wRatio": 0.05831238779174153,
+        "hRatio": 0.013120287253141849,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.5940000000000001
       },
@@ -2727,8 +2728,8 @@
         "page": 1,
         "xRatio": 0.7415737594254938,
         "yRatio": 0.3838312745719722,
-        "wRatio": 0.055,
-        "hRatio": 0.010080000000000002,
+        "wRatio": 0.05500000000000005,
+        "hRatio": 0.007906473737717468,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.5940000000000001
       },
@@ -2736,23 +2737,23 @@
         "q": 14,
         "choice": 3,
         "page": 1,
-        "xRatio": 0.5440872244165171,
-        "yRatio": 0.3838312745719722,
-        "wRatio": 0.055,
-        "hRatio": 0.010080000000000002,
+        "xRatio": 0.5435272244165171,
+        "yRatio": 0.39435124920735576,
+        "wRatio": 0.052000000000000046,
+        "hRatio": 0.010079999999999978,
         "source": "generated-click-area-anchor-text",
-        "confidence": 0.5940000000000001
+        "confidence": 0.5808
       },
       {
         "q": 14,
         "choice": 4,
         "page": 1,
-        "xRatio": 0.7415737594254938,
-        "yRatio": 0.3838312745719722,
-        "wRatio": 0.055,
-        "hRatio": 0.010080000000000002,
+        "xRatio": 0.7410137594254937,
+        "yRatio": 0.39435124920735576,
+        "wRatio": 0.052000000000000046,
+        "hRatio": 0.010079999999999978,
         "source": "generated-click-area-anchor-text",
-        "confidence": 0.6120000000000001
+        "confidence": 0.5984
       }
     ],
     "15": [
@@ -2763,7 +2764,7 @@
         "xRatio": 0.5549328861759425,
         "yRatio": 0.426473731896005,
         "wRatio": 0.168698173070018,
-        "hRatio": 0.025460320101458527,
+        "hRatio": 0.025460320101458545,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2773,8 +2774,8 @@
         "page": 1,
         "xRatio": 0.7456869256732495,
         "yRatio": 0.42768693975903616,
-        "wRatio": 0.19591810125673262,
-        "hRatio": 0.012095999999999978,
+        "wRatio": 0.1959181012567326,
+        "hRatio": 0.012095999999999996,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.62
       },
@@ -2784,8 +2785,8 @@
         "page": 1,
         "xRatio": 0.544075763016158,
         "yRatio": 0.4758769816106531,
-        "wRatio": 0.08473931777378813,
-        "hRatio": 0.006711477488903018,
+        "wRatio": 0.08473931777378818,
+        "hRatio": 0.006711477488902995,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2795,8 +2796,8 @@
         "page": 1,
         "xRatio": 0.7418337522441651,
         "yRatio": 0.4755586556753329,
-        "wRatio": 0.07997953321364457,
-        "hRatio": 0.007031071655041196,
+        "wRatio": 0.0799795332136446,
+        "hRatio": 0.007031071655041188,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       }
@@ -2808,8 +2809,8 @@
         "page": 1,
         "xRatio": 0.5401459763016159,
         "yRatio": 0.5516804058338618,
-        "wRatio": 0.17228669874326746,
-        "hRatio": 0.023462270133164237,
+        "wRatio": 0.1722866987432674,
+        "hRatio": 0.023462270133164265,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2819,8 +2820,8 @@
         "page": 1,
         "xRatio": 0.7241675202872532,
         "yRatio": 0.5513513963221306,
-        "wRatio": 0.21743750664272896,
-        "hRatio": 0.006048000000000061,
+        "wRatio": 0.21743750664272898,
+        "hRatio": 0.006048000000000053,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2829,9 +2830,9 @@
         "choice": 3,
         "page": 1,
         "xRatio": 0.5436269299820468,
-        "yRatio": 0.6090678503487634,
-        "wRatio": 0.1552061041292639,
-        "hRatio": 0.0249131261889664,
+        "yRatio": 0.6105149017121116,
+        "wRatio": 0.10797127468581691,
+        "hRatio": 0.015298945000449593,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2841,8 +2842,8 @@
         "page": 1,
         "xRatio": 0.7194028725314183,
         "yRatio": 0.608716550412175,
-        "wRatio": 0.2222021543985638,
-        "hRatio": 0.00862904248573237,
+        "wRatio": 0.22220215439856383,
+        "hRatio": 0.008629042485732374,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       }
@@ -2853,9 +2854,9 @@
         "choice": 1,
         "page": 1,
         "xRatio": 0.5403703928186715,
-        "yRatio": 0.6721623335447051,
-        "wRatio": 0.16450554973070017,
-        "hRatio": 0.023462270133164237,
+        "yRatio": 0.682136968928345,
+        "wRatio": 0.1645055497307002,
+        "hRatio": 0.013487634749524413,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2866,7 +2867,7 @@
         "xRatio": 0.7163129421903053,
         "yRatio": 0.6870640456563094,
         "wRatio": 0.22529208473967688,
-        "hRatio": 0.023145212428662017,
+        "hRatio": 0.023145212428661965,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2876,8 +2877,8 @@
         "page": 1,
         "xRatio": 0.53992155978456,
         "yRatio": 0.7495124616360178,
-        "wRatio": 0.15576964308797134,
-        "hRatio": 0.006047999999999917,
+        "wRatio": 0.15576964308797137,
+        "hRatio": 0.006047999999999942,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       },
@@ -2887,8 +2888,8 @@
         "page": 1,
         "xRatio": 0.7109946140035907,
         "yRatio": 0.7469625871908687,
-        "wRatio": 0.23061041292639145,
-        "hRatio": 0.006391883322764697,
+        "wRatio": 0.2306104129263914,
+        "hRatio": 0.0063918833227647465,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.92
       }
@@ -2900,8 +2901,8 @@
         "page": 1,
         "xRatio": 0.570193209335727,
         "yRatio": 0.8067850348763475,
-        "wRatio": 0.31464185278276485,
-        "hRatio": 0.009662457831325392,
+        "wRatio": 0.3146418527827649,
+        "hRatio": 0.009662457831325355,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.8999999999999999
       },
@@ -2912,7 +2913,7 @@
         "xRatio": 0.5670513780969479,
         "yRatio": 0.8221623335447051,
         "wRatio": 0.32047668222621184,
-        "hRatio": 0.009662457831325392,
+        "hRatio": 0.009248256182625259,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.8999999999999999
       },
@@ -2923,7 +2924,7 @@
         "xRatio": 0.5502201393177738,
         "yRatio": 0.8364299302473052,
         "wRatio": 0.39138488761220835,
-        "hRatio": 0.009662457831325248,
+        "hRatio": 0.009644578313252938,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.8999999999999999
       },
@@ -2934,7 +2935,7 @@
         "xRatio": 0.5504445558348294,
         "yRatio": 0.8514901712111604,
         "wRatio": 0.39116047109515273,
-        "hRatio": 0.024698795180722922,
+        "hRatio": 0.024698795180722932,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.8999999999999999
       }
@@ -2945,9 +2946,9 @@
         "choice": 1,
         "page": 1,
         "xRatio": 0.5379921522441652,
-        "yRatio": 0.9254794876347495,
-        "wRatio": 0.07825560359066425,
-        "hRatio": 0.006047999999999917,
+        "yRatio": 0.9248074876347495,
+        "wRatio": 0.12383303411131064,
+        "hRatio": 0.011226120481927726,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -2956,9 +2957,9 @@
         "choice": 2,
         "page": 1,
         "xRatio": 0.7377228524236984,
-        "yRatio": 0.9256380164870007,
-        "wRatio": 0.06748361077199279,
-        "hRatio": 0.006047999999999917,
+        "yRatio": 0.9249660164870006,
+        "wRatio": 0.12383303411131064,
+        "hRatio": 0.016975644895370956,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -2967,9 +2968,9 @@
         "choice": 3,
         "page": 1,
         "xRatio": 0.5388898183123878,
-        "yRatio": 0.9419416613823716,
-        "wRatio": 0.0804997687612208,
-        "hRatio": 0.004646067216233308,
+        "yRatio": 0.9398677285986049,
+        "wRatio": 0.12383303411131064,
+        "hRatio": 0.030132271401395072,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -2978,9 +2979,9 @@
         "choice": 4,
         "page": 1,
         "xRatio": 0.7389231597845601,
-        "yRatio": 0.9425859226379202,
-        "wRatio": 0.08737845601436267,
-        "hRatio": 0.006711477488902874,
+        "yRatio": 0.9418402029169308,
+        "wRatio": 0.12383303411131064,
+        "hRatio": 0.02815979708306915,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       }
@@ -2993,7 +2994,7 @@
         "xRatio": 0.08294121651705565,
         "yRatio": 0.08208116677235257,
         "wRatio": 0.07119366606822262,
-        "hRatio": 0.010048000000000003,
+        "hRatio": 0.010048000000000001,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.56
       },
@@ -3004,7 +3005,7 @@
         "xRatio": 0.2757935504488331,
         "yRatio": 0.08208116677235257,
         "wRatio": 0.06909537163375218,
-        "hRatio": 0.010048000000000003,
+        "hRatio": 0.010048000000000001,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.56
       },
@@ -3014,8 +3015,8 @@
         "page": 2,
         "xRatio": 0.08294121651705565,
         "yRatio": 0.09650729232720355,
-        "wRatio": 0.05952400718132855,
-        "hRatio": 0.010048000000000003,
+        "wRatio": 0.05952400718132857,
+        "hRatio": 0.010048000000000001,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.56
       },
@@ -3025,8 +3026,8 @@
         "page": 2,
         "xRatio": 0.2757935504488331,
         "yRatio": 0.09650729232720355,
-        "wRatio": 0.07178836983842005,
-        "hRatio": 0.010048000000000003,
+        "wRatio": 0.07178836983842002,
+        "hRatio": 0.010048000000000001,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.56
       }
@@ -3037,9 +3038,9 @@
         "choice": 1,
         "page": 2,
         "xRatio": 0.07681620969479354,
-        "yRatio": 0.25903614457831325,
-        "wRatio": 0.08207068438061041,
-        "hRatio": 0.023462270133164237,
+        "yRatio": 0.2605715967025999,
+        "wRatio": 0.12271992818671455,
+        "hRatio": 0.08534977298668356,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -3048,9 +3049,9 @@
         "choice": 2,
         "page": 2,
         "xRatio": 0.2760746858168761,
-        "yRatio": 0.25626759670259985,
-        "wRatio": 0.08104488330341117,
-        "hRatio": 0.03186835764109071,
+        "yRatio": 0.2557869372225745,
+        "wRatio": 0.12271992818671457,
+        "hRatio": 0.09013443246670894,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.68
       },
@@ -3059,9 +3060,9 @@
         "choice": 3,
         "page": 2,
         "xRatio": 0.07614296014362658,
-        "yRatio": 0.3446417247939125,
-        "wRatio": 0.08274393393177737,
-        "hRatio": 0.023145212428662017,
+        "yRatio": 0.346018648065948,
+        "wRatio": 0.12285906642728907,
+        "hRatio": 0.0924962536461636,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -3070,9 +3071,9 @@
         "choice": 4,
         "page": 2,
         "xRatio": 0.2743027447037702,
-        "yRatio": 0.3459099556119214,
-        "wRatio": 0.08207068438061044,
-        "hRatio": 0.02323145212428667,
+        "yRatio": 0.347445407736208,
+        "wRatio": 0.12285906642728905,
+        "hRatio": 0.09106949397590358,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       }
@@ -3085,7 +3086,7 @@
         "xRatio": 0.0883709472172352,
         "yRatio": 0.7537032339885859,
         "wRatio": 0.20400450987432672,
-        "hRatio": 0.009320035510463016,
+        "hRatio": 0.008588776157260725,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.8999999999999999
       },
@@ -3096,7 +3097,7 @@
         "xRatio": 0.08769769766606822,
         "yRatio": 0.7673367152821813,
         "wRatio": 0.20781959066427286,
-        "hRatio": 0.009320035510463016,
+        "hRatio": 0.00932003551046301,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.8999999999999999
       },
@@ -3106,8 +3107,8 @@
         "page": 2,
         "xRatio": 0.08657561508078994,
         "yRatio": 0.7825554850982879,
-        "wRatio": 0.20894167324955112,
-        "hRatio": 0.009320035510463016,
+        "wRatio": 0.20894167324955115,
+        "hRatio": 0.00843024730500963,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.8999999999999999
       },
@@ -3118,7 +3119,7 @@
         "xRatio": 0.08769769766606822,
         "yRatio": 0.795871908687381,
         "wRatio": 0.2015359281867145,
-        "hRatio": 0.009320035510463016,
+        "hRatio": 0.00932003551046301,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.8999999999999999
       }
@@ -3129,9 +3130,9 @@
         "choice": 1,
         "page": 2,
         "xRatio": 0.5366456531418312,
-        "yRatio": 0.33956880152187696,
-        "wRatio": 0.12258078994614009,
-        "hRatio": 0.023145212428662017,
+        "yRatio": 0.3409457247939125,
+        "wRatio": 0.12258078994614008,
+        "hRatio": 0.12604349524413444,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -3140,9 +3141,9 @@
         "choice": 2,
         "page": 2,
         "xRatio": 0.7343566046678636,
-        "yRatio": 0.3392517438173748,
-        "wRatio": 0.12258078994614009,
-        "hRatio": 0.023145212428662017,
+        "yRatio": 0.3406286670894103,
+        "wRatio": 0.12258078994614008,
+        "hRatio": 0.12636055294863663,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -3151,9 +3152,9 @@
         "choice": 3,
         "page": 2,
         "xRatio": 0.5366456531418312,
-        "yRatio": 0.4644895370957514,
-        "wRatio": 0.12466786355475763,
-        "hRatio": 0.02219403931515536,
+        "yRatio": 0.46491528725428033,
+        "wRatio": 0.12466786355475767,
+        "hRatio": 0.08378667850348753,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -3162,9 +3163,9 @@
         "choice": 4,
         "page": 2,
         "xRatio": 0.7380254937163375,
-        "yRatio": 0.4654407102092581,
-        "wRatio": 0.12466786355475763,
-        "hRatio": 0.02354850982878889,
+        "yRatio": 0.46688776157260625,
+        "wRatio": 0.12466786355475767,
+        "hRatio": 0.08181420418516161,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       }
@@ -3175,9 +3176,9 @@
         "choice": 1,
         "page": 2,
         "xRatio": 0.5432194929982046,
-        "yRatio": 0.809570069752695,
-        "wRatio": 0.10508056014362659,
-        "hRatio": 0.010048000000000057,
+        "yRatio": 0.806178069752695,
+        "wRatio": 0.12173204667863557,
+        "hRatio": 0.02222596512365249,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.56
       },
@@ -3186,9 +3187,9 @@
         "choice": 2,
         "page": 2,
         "xRatio": 0.7395615037701975,
-        "yRatio": 0.809570069752695,
-        "wRatio": 0.08109043447037702,
-        "hRatio": 0.010048000000000057,
+        "yRatio": 0.806178069752695,
+        "wRatio": 0.12173204667863557,
+        "hRatio": 0.02222596512365249,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.56
       },
@@ -3209,7 +3210,7 @@
         "page": 2,
         "xRatio": 0.7395615037701975,
         "yRatio": 0.8314600348763476,
-        "wRatio": 0.088271763016158,
+        "wRatio": 0.08827176301615802,
         "hRatio": 0.010048000000000057,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.56
@@ -3223,7 +3224,7 @@
         "xRatio": 0.536870069658887,
         "yRatio": 0.9154921699429297,
         "wRatio": 0.10880610412926395,
-        "hRatio": 0.006047999999999917,
+        "hRatio": 0.006047999999999942,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -3232,9 +3233,9 @@
         "choice": 2,
         "page": 2,
         "xRatio": 0.7123637859964094,
-        "yRatio": 0.9145161699429296,
+        "yRatio": 0.9135519391249207,
         "wRatio": 0.10880610412926395,
-        "hRatio": 0.005755769181991076,
+        "hRatio": 0.015326264040191773,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -3243,9 +3244,9 @@
         "choice": 3,
         "page": 2,
         "xRatio": 0.5366456531418312,
-        "yRatio": 0.9291008243500317,
-        "wRatio": 0.11256283662477556,
-        "hRatio": 0.013999999999999985,
+        "yRatio": 0.9294048243500317,
+        "wRatio": 0.11256283662477562,
+        "hRatio": 0.040595175649968285,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       },
@@ -3254,9 +3255,9 @@
         "choice": 4,
         "page": 2,
         "xRatio": 0.7181986154398564,
-        "yRatio": 0.9291008243500317,
-        "wRatio": 0.11256283662477556,
-        "hRatio": 0.013999999999999985,
+        "yRatio": 0.9281365935320228,
+        "wRatio": 0.11256283662477562,
+        "hRatio": 0.04186340646797715,
         "source": "generated-click-area-anchor-text",
         "confidence": 0.66
       }
@@ -3607,5 +3608,5 @@
   },
   "confidence": 0.8599999999999999,
   "warnings": [],
-  "generatedAt": "2026-06-19T05:04:58.200Z"
+  "generatedAt": "2026-06-19T06:41:08.836Z"
 }

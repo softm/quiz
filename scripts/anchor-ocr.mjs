@@ -3955,6 +3955,37 @@ def find_text_bounds(arr, x0, y0, x1, y1):
         "lineCount": max(1, int(line_count)),
     }
 
+def looks_like_visual_choice_cell(arr, x0, y0, x1, y1):
+    # SOFTM-문항영역 시작: 이미지/코드형 선택지 cell만 구조 영역으로 확장하기 위한 프레임 픽셀 판별 - 2026-06-19
+    h, w = arr.shape
+    x0 = max(0, min(w, int(math.floor(x0))))
+    x1 = max(0, min(w, int(math.ceil(x1))))
+    y0 = max(0, min(h, int(math.floor(y0))))
+    y1 = max(0, min(h, int(math.ceil(y1))))
+    if x1 - x0 < 28 or y1 - y0 < 46:
+        return False
+    dark = is_dark_array(arr[y0:y1, x0:x1])
+    local_h, local_w = dark.shape
+    if local_h < 46 or local_w < 28:
+        return False
+    row_counts = np.sum(dark, axis=1)
+    col_counts = np.sum(dark, axis=0)
+    strong_rows = [idx for idx, count in enumerate(row_counts) if count >= max(16, local_w * 0.42) and longest_run(dark[idx, :]) >= max(16, local_w * 0.34)]
+    strong_cols = [idx for idx, count in enumerate(col_counts) if count >= max(18, local_h * 0.34) and longest_run(dark[:, idx]) >= max(18, local_h * 0.28)]
+    top_h = min(local_h, max(34, int(local_h * 0.34)))
+    top_dark = dark[:top_h, :]
+    top_row_counts = np.sum(top_dark, axis=1)
+    top_col_counts = np.sum(top_dark, axis=0)
+    top_strong_rows = [idx for idx, count in enumerate(top_row_counts) if count >= max(16, local_w * 0.42) and longest_run(top_dark[idx, :]) >= max(16, local_w * 0.34)]
+    top_strong_cols = [idx for idx, count in enumerate(top_col_counts) if count >= max(12, top_h * 0.32) and longest_run(top_dark[:, idx]) >= max(12, top_h * 0.26)]
+    ys, xs = np.where(dark)
+    if len(xs) < max(24, local_w * local_h * 0.006):
+        return False
+    bbox_h = int(ys.max() - ys.min() + 1)
+    has_near_top_frame = len(top_strong_rows) >= 1 or len(top_strong_cols) >= 1
+    return has_near_top_frame and bbox_h >= max(42, local_h * 0.45) and (len(strong_rows) >= 1 or len(strong_cols) >= 2)
+    # SOFTM-문항영역 끝
+
 def make_area(q, choice, page, rect, source, confidence):
     image_path = page_files.get(int(page))
     if not image_path:
@@ -3978,6 +4009,161 @@ def make_area(q, choice, page, rect, source, confidence):
         "source": source,
         "confidence": min(0.92, max(0.55, float(confidence or 0.72))),
     }
+
+def reconcile_sibling_choice_areas(unique, anchors, rows, layout, segment):
+    # SOFTM-문항영역 시작: 문제 단위 문항 배열을 기준으로 저장 영역의 sibling 겹침/침범을 최종 보정 - 2026-06-19
+    if not unique:
+        return {}
+    anchor_by_choice = {}
+    for anchor in anchors:
+        try:
+            choice = int(anchor.get("choice") or 0)
+        except Exception:
+            continue
+        if 1 <= choice <= choice_count:
+            anchor_by_choice[choice] = anchor
+
+    def anchor_radius(anchor):
+        aw = max(0.006, min(0.040, float(anchor.get("wRatio") or 0.012)))
+        ah = max(0.006, min(0.040, float(anchor.get("hRatio") or 0.012)))
+        return max(aw, ah) * 0.56
+
+    if str(layout) == "grid" and len(rows) == 2:
+        raw_row_ys = [median([float(item.get("yRatio") or 0) for item in row], 0.0) for row in rows]
+        if len(raw_row_ys) == 2 and abs(raw_row_ys[1] - raw_row_ys[0]) < 0.012:
+            center_y = median(raw_row_ys, (float(segment["top"]) + float(segment["bottom"])) * 0.5)
+            gap = max(0.018, min(0.040, (float(segment["bottom"]) - float(segment["top"])) * 0.28))
+            for row_index, row in enumerate(rows):
+                for anchor in row:
+                    anchor["_layoutSolvedY"] = clamp(center_y + (-gap * 0.5 if row_index == 0 else gap * 0.5), segment["top"], segment["bottom"])
+            # SOFTM-문항영역: grid 두 행이 같은 픽셀 후보로 붙으면 segment 안에서 위/아래 행을 분리해 중복 영역을 방지 - 2026-06-19
+
+    row_bounds = {}
+    for row_index, row in enumerate(rows):
+        row = sorted(row, key=lambda item: float(item.get("xRatio") or 0))
+        row_y = median([float(item.get("_layoutSolvedY", item.get("yRatio") or 0)) for item in row], 0.0)
+        prev_rows = rows[:row_index]
+        next_rows = rows[row_index + 1:]
+        prev_y = median([float(item.get("_layoutSolvedY", item.get("yRatio") or 0)) for item in prev_rows[-1]], 0.0) if prev_rows else None
+        next_y = median([float(item.get("_layoutSolvedY", item.get("yRatio") or 0)) for item in next_rows[0]], 0.0) if next_rows else None
+        row_r = median([anchor_radius(item) for item in row], 0.008)
+        row_segment_fallback = any(str(item.get("source") or "").lower().startswith("segment-choice-anchor") for item in row)
+        if str(layout) == "grid" and row_segment_fallback:
+            row_pad = max(0.002, row_r * 0.35)
+            top = row_y - max(0.010, row_r * 1.35) if prev_y is None else (prev_y + row_y) * 0.5 + row_pad
+            bottom = float(segment["bottom"]) if next_y is None else next_y - max(0.004, row_r * 1.05)
+            # SOFTM-문항영역: segment fallback grid는 최종 sibling 보정에서도 이미지/코드 cell 높이를 유지 - 2026-06-19
+        else:
+            top = row_y - max(0.010, row_r * 1.35) if prev_y is None else (prev_y + row_y) * 0.5 + max(0.0015, row_r * 0.14)
+            bottom = row_y + max(0.011, row_r * (3.8 if str(layout) == "vertical" else 1.65)) if next_y is None else (row_y + next_y) * 0.5 - max(0.0015, row_r * 0.14)
+        top = clamp(top, segment["top"], segment["bottom"])
+        bottom = clamp(bottom, top + 0.006, segment["bottom"])
+        for idx, anchor in enumerate(row):
+            try:
+                choice = int(anchor.get("choice") or 0)
+                ax = float(anchor.get("xRatio") or 0)
+            except Exception:
+                continue
+            r = anchor_radius(anchor)
+            left_min = clamp(ax + r * 0.62, segment["left"], segment["right"])
+            if idx + 1 < len(row):
+                next_anchor = row[idx + 1]
+                try:
+                    nx = float(next_anchor.get("xRatio") or 0)
+                    nr = anchor_radius(next_anchor)
+                    right_max = min(segment["right"], nx - max(r * 1.10, nr * 0.95))
+                except Exception:
+                    right_max = segment["right"]
+            else:
+                right_max = segment["right"]
+            row_bounds[choice] = {
+                "top": top,
+                "bottom": bottom,
+                "leftMin": left_min,
+                "rightMax": max(left_min + 0.006, right_max),
+                "x": ax,
+                "y": float(anchor.get("_layoutSolvedY", anchor.get("yRatio") or row_y)),
+            }
+
+    repaired = {}
+    for choice, area in unique.items():
+        bounds = row_bounds.get(int(choice))
+        if not bounds:
+            continue
+        x = clamp(float(area.get("xRatio") or 0), bounds["leftMin"], bounds["rightMax"])
+        y = clamp(float(area.get("yRatio") or 0), bounds["top"], bounds["bottom"])
+        right = clamp(float(area.get("xRatio") or 0) + float(area.get("wRatio") or 0), x + 0.001, bounds["rightMax"])
+        bottom = clamp(float(area.get("yRatio") or 0) + float(area.get("hRatio") or 0), y + 0.001, bounds["bottom"])
+        if right - x < 0.004 or bottom - y < 0.004:
+            continue
+        next_area = dict(area)
+        next_area["xRatio"] = x
+        next_area["yRatio"] = y
+        next_area["wRatio"] = right - x
+        next_area["hRatio"] = bottom - y
+        repaired[int(choice)] = next_area
+
+    def box(area):
+        x1 = float(area.get("xRatio") or 0)
+        y1 = float(area.get("yRatio") or 0)
+        return x1, y1, x1 + float(area.get("wRatio") or 0), y1 + float(area.get("hRatio") or 0)
+
+    for _ in range(2):
+        changed = False
+        keys = sorted(repaired)
+        for i, a_key in enumerate(keys):
+            for b_key in keys[i + 1:]:
+                a = repaired.get(a_key)
+                b = repaired.get(b_key)
+                if not a or not b:
+                    continue
+                ax1, ay1, ax2, ay2 = box(a)
+                bx1, by1, bx2, by2 = box(b)
+                iw = max(0.0, min(ax2, bx2) - max(ax1, bx1))
+                ih = max(0.0, min(ay2, by2) - max(ay1, by1))
+                if iw <= 0 or ih <= 0:
+                    continue
+                overlap = iw * ih
+                small_area = max(0.000001, min((ax2 - ax1) * (ay2 - ay1), (bx2 - bx1) * (by2 - by1)))
+                if overlap / small_area < 0.08:
+                    continue
+                a_anchor = row_bounds.get(a_key, {})
+                b_anchor = row_bounds.get(b_key, {})
+                same_grid_row = str(layout) == "grid" and ((a_key in (1, 2) and b_key in (1, 2)) or (a_key in (3, 4) and b_key in (3, 4)))
+                same_row = same_grid_row or (str(layout) != "grid" and abs(float(a_anchor.get("y", 0)) - float(b_anchor.get("y", 0))) <= max(0.010, min(float(a.get("hRatio") or 0.01), float(b.get("hRatio") or 0.01)) * 0.75))
+                if same_row:
+                    split = (float(a_anchor.get("x", ax2)) + float(b_anchor.get("x", bx1))) * 0.5
+                    if float(a_anchor.get("x", 0)) <= float(b_anchor.get("x", 0)):
+                        a["wRatio"] = max(0.001, min(ax2, split) - ax1)
+                        b_x = max(bx1, split)
+                        b["wRatio"] = max(0.001, bx2 - b_x)
+                        b["xRatio"] = b_x
+                    else:
+                        b["wRatio"] = max(0.001, min(bx2, split) - bx1)
+                        a_x = max(ax1, split)
+                        a["wRatio"] = max(0.001, ax2 - a_x)
+                        a["xRatio"] = a_x
+                else:
+                    split = (float(a_anchor.get("y", ay2)) + float(b_anchor.get("y", by1))) * 0.5
+                    if float(a_anchor.get("y", 0)) <= float(b_anchor.get("y", 0)):
+                        a["hRatio"] = max(0.001, min(ay2, split) - ay1)
+                        b_y = max(by1, split)
+                        b["hRatio"] = max(0.001, by2 - b_y)
+                        b["yRatio"] = b_y
+                    else:
+                        b["hRatio"] = max(0.001, min(by2, split) - by1)
+                        a_y = max(ay1, split)
+                        a["hRatio"] = max(0.001, ay2 - a_y)
+                        a["yRatio"] = a_y
+                changed = True
+        if not changed:
+            break
+
+    return {
+        choice: area for choice, area in repaired.items()
+        if float(area.get("wRatio") or 0) >= 0.004 and float(area.get("hRatio") or 0) >= 0.004
+    }
+    # SOFTM-문항영역 끝
 
 out = {}
 for q in range(1, question_count + 1):
@@ -4091,8 +4277,10 @@ for q in range(1, question_count + 1):
             text = find_text_bounds(arr, start_x, scan_top, fallback_right, scan_bottom)
             confidence = float(anchor.get("confidence") or 0.72)
             structural_grid_area = None
-            if is_segment_fallback_anchor and layout == "grid":
-                # SOFTM-문항영역: continuation 이미지 보기 grid는 텍스트 조각 대신 cell 구조로 전체 이미지 클릭 영역을 만든다 - 2026-06-17
+            structural_grid_is_visual = False
+            tall_grid_cell = layout == "grid" and (row_bottom - row_top) > max(70.0, r * 7.2)
+            if layout == "grid" and (is_segment_fallback_anchor or tall_grid_cell):
+                # SOFTM-문항영역: 이미지/코드형 grid는 텍스트 조각 대신 cell 구조로 전체 선택지 클릭 영역을 만든다 - 2026-06-19
                 neighbor_gap = None
                 if next_anchor is not None:
                     neighbor_gap = (float(next_anchor.get("xRatio") or 0) * w) - ax
@@ -4105,23 +4293,24 @@ for q in range(1, question_count + 1):
                 structural_top = row_top
                 structural_bottom = row_bottom
                 if structural_right > start_x + 16 and structural_bottom > structural_top + 10:
-                    if is_segment_fallback_anchor and layout == "grid":
+                    if is_segment_fallback_anchor or tall_grid_cell:
                         structural_top = max(segment["top"] * h, ay - max(8.0, r * 1.10))
                         if next_y is not None:
                             structural_bottom = min(segment["bottom"] * h, (next_y * h) - max(8.0, r * 1.00))
                         else:
                             structural_bottom = segment["bottom"] * h
-                        # SOFTM-문항영역: continuation 이미지 보기 grid는 행 중간선이 아니라 다음 행 직전/segment 하단까지 클릭 영역을 확장 - 2026-06-18
+                        # SOFTM-문항영역: 이미지/코드형 grid는 행 중간선이 아니라 다음 행 직전/segment 하단까지 클릭 영역을 확장 - 2026-06-19
                     structural_grid_area = (start_x, structural_top, structural_right, structural_bottom)
+                    structural_grid_is_visual = looks_like_visual_choice_cell(arr, start_x, structural_top, structural_right, structural_bottom)
             max_text_gap = max(18.0, r * 2.25) if len(row) > 1 else max(24.0, r * 3.4)
             if is_segment_fallback_anchor:
                 max_text_gap = max(max_text_gap, min(max(80.0, r * 12.0), (fallback_right - start_x) * 0.46))
             if text and text["x"] - start_x > max_text_gap:
                 text = None
             prefer_structural_grid_area = False
-            if structural_grid_area and is_segment_fallback_anchor and layout == "grid" and anchor_source == "segment-choice-anchor":
+            if structural_grid_area and layout == "grid" and structural_grid_is_visual:
                 prefer_structural_grid_area = True
-                # SOFTM-문항영역: 순수 segment grid fallback은 이미지/구조형 선택지로 보고 내부 텍스트 조각보다 cell 구조 영역을 우선 - 2026-06-18
+                # SOFTM-문항영역: 프레임이 확인된 이미지/구조형 grid 선택지만 내부 텍스트 조각보다 cell 구조 영역을 우선 - 2026-06-19
             if prefer_structural_grid_area:
                 left, top, right, bottom = structural_grid_area
                 source = "generated-click-area-anchor-text" # SOFTM-문항영역: grid cell fallback은 텍스트 픽셀을 못 찾은 이미지형 선택지에만 적용 - 2026-06-18
@@ -4195,7 +4384,7 @@ for q in range(1, question_count + 1):
                 if area:
                     areas.append(area)
         # SOFTM-문항영역 끝
-    if areas:
+    if areas or anchors:
         unique = {}
         for area in areas:
             unique[int(area["choice"])] = area
@@ -4242,6 +4431,67 @@ for q in range(1, question_count + 1):
                     if float(area.get("wRatio") or 0) > max(cap_width, width_mid * 2.20):
                         area["wRatio"] = max(0.001, min(cap_width, 1.0 - float(area.get("xRatio") or 0)))
         # SOFTM-문항영역 끝
+        unique = reconcile_sibling_choice_areas(unique, anchors, rows, layout, segment) # SOFTM-문항영역: 저장 직전 1~4 문항을 배열 단위로 보정 - 2026-06-19
+        if len(unique) < choice_count and len(anchors) >= choice_count:
+            # SOFTM-문항영역 시작: 텍스트 픽셀 탐색 실패 문항도 sibling 배열 경계 안에서 최소 anchor-band 영역으로 보완 - 2026-06-19
+            for row in rows:
+                ordered_anchors = sorted(row, key=lambda item: float(item.get("xRatio") or 0))
+                for idx, anchor in enumerate(ordered_anchors):
+                    choice = int(anchor.get("choice") or 0)
+                    if choice < 1 or choice > choice_count or choice in unique:
+                        continue
+                    ax = float(anchor.get("xRatio") or 0)
+                    ay = float(anchor.get("_layoutSolvedY", anchor.get("yRatio") or 0))
+                    aw = max(0.010, min(0.040, float(anchor.get("wRatio") or 0.012)))
+                    ah = max(0.010, min(0.040, float(anchor.get("hRatio") or 0.012)))
+                    r_ratio = max(aw, ah) * 0.56
+                    left = clamp(ax + r_ratio * 0.92, segment["left"], segment["right"])
+                    next_anchor = ordered_anchors[idx + 1] if idx + 1 < len(ordered_anchors) else None
+                    next_x = float(next_anchor.get("xRatio") or 0) if next_anchor is not None else segment["right"]
+                    cell_width = max(0.001, next_x - left - max(0.014, r_ratio * 2.0))
+                    width_ratio = min(max(0.052, r_ratio * 7.4), 0.142, cell_width, max(0.001, segment["right"] - left))
+                    top = clamp(ay - r_ratio * 0.9, segment["top"], segment["bottom"])
+                    height_ratio = min(max(0.006, r_ratio * 1.8), max(0.001, segment["bottom"] - top))
+                    fallback_area = make_area(q, choice, page, {
+                        "x": left * w,
+                        "y": top * h,
+                        "w": width_ratio * w,
+                        "h": height_ratio * h,
+                    }, "generated-click-area-anchor-text", float(anchor.get("confidence") or 0.58) * 0.88)
+                    if fallback_area:
+                        unique[choice] = fallback_area
+            unique = reconcile_sibling_choice_areas(unique, anchors, rows, layout, segment)
+            # SOFTM-문항영역 끝
+        if len(unique) < choice_count and len(anchors) >= choice_count:
+            # SOFTM-문항영역 시작: 최종 reconcile 후 삭제된 누락 문항은 앵커 원 높이 기준 최소 영역으로 다시 채움 - 2026-06-19
+            for row in rows:
+                ordered_anchors = sorted(row, key=lambda item: float(item.get("xRatio") or 0))
+                for idx, anchor in enumerate(ordered_anchors):
+                    choice = int(anchor.get("choice") or 0)
+                    if choice < 1 or choice > choice_count or choice in unique:
+                        continue
+                    ax = float(anchor.get("xRatio") or 0)
+                    ay = float(anchor.get("_layoutSolvedY", anchor.get("yRatio") or 0))
+                    aw = max(0.010, min(0.040, float(anchor.get("wRatio") or 0.012)))
+                    ah = max(0.010, min(0.040, float(anchor.get("hRatio") or 0.012)))
+                    r_ratio = max(aw, ah) * 0.56
+                    left = clamp(ax + r_ratio * 0.92, segment["left"], segment["right"])
+                    next_anchor = ordered_anchors[idx + 1] if idx + 1 < len(ordered_anchors) else None
+                    next_x = float(next_anchor.get("xRatio") or 0) if next_anchor is not None else segment["right"]
+                    width_ratio = min(max(0.052, r_ratio * 7.4), 0.142, max(0.001, next_x - left - max(0.014, r_ratio * 2.0)), max(0.001, segment["right"] - left))
+                    top = clamp(ay - r_ratio * 0.9, segment["top"], segment["bottom"])
+                    height_ratio = min(max(0.006, r_ratio * 1.8), max(0.001, segment["bottom"] - top))
+                    fallback_area = make_area(q, choice, page, {
+                        "x": left * w,
+                        "y": top * h,
+                        "w": width_ratio * w,
+                        "h": height_ratio * h,
+                    }, "generated-click-area-anchor-text", float(anchor.get("confidence") or 0.58) * 0.84)
+                    if fallback_area:
+                        unique[choice] = fallback_area
+            # SOFTM-문항영역 끝
+        if not unique:
+            continue
         out[str(q)] = [unique[key] for key in sorted(unique)]
 
 print(json.dumps(out, ensure_ascii=False))

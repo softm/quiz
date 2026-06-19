@@ -6905,13 +6905,23 @@
     syncAnchorEditUi();
     if (state.viewMode === "all" && !areaMode) {
       const totalPages = Math.max(1, (state.allPageCanvases || []).length - 1);
+      const markerQuestions = getAnchorDetailWindowQuestions(totalPages, selectedQ, {
+        visibleOnly: true,
+        maxQuestions: 16,
+      });
       scheduleAnchorDebugViewRefresh(0, {
         quick: true,
-        questions: getAnchorDetailWindowQuestions(totalPages, selectedQ, {
-          visibleOnly: true,
-          maxQuestions: 16,
-        }),
+        questions: markerQuestions,
       });
+      window.setTimeout(() => {
+        if (!anchorEditState.enabled || state.viewMode !== "all" || anchorEditState.choiceAreaEditMode) return;
+        scheduleAnchorDebugViewRefresh(0, {
+          quick: false,
+          questions: markerQuestions,
+          maxQuestions: 24,
+          padPx: 520,
+        });
+      }, 220); // SOFTM-앵커편집: 빠르게 껐다 켠 뒤 quick 렌더만 남지 않도록 상세 앵커 full 갱신을 재예약 - 2026-06-19
     } else {
       scheduleAnchorDebugViewRefresh();
     }
@@ -8332,6 +8342,118 @@
   }
   // SOFTM-문항영역: PDF.js/OCR 런타임 가로형 보기의 text-fit 폭이 너무 좁으면 최종 rect 단계에서 보기 간격 기준으로 보정 - 2026-06-17
 
+  function reconcileChoiceAreaRectsBySiblingAnchors(rects, points, canvas){
+    /* SOFTM-문항영역 시작: 같은 문제의 문항 배열을 기준으로 자동/저장 영역 겹침을 최종 보정 - 2026-06-19 */
+    if (!Array.isArray(rects) || rects.length < 2 || !Array.isArray(points) || points.length < 2 || !canvas) return rects;
+    const safePoints = points
+      .map((p) => ({
+        choice: Number(p?.choice),
+        x: Number(p?.x),
+        y: Number(p?.y),
+        r: Math.max(8, Number(p?.r) || 14),
+      }))
+      .filter((p) => Number.isInteger(p.choice) && Number.isFinite(p.x) && Number.isFinite(p.y));
+    if (safePoints.length < 2) return rects;
+    const pointByChoice = new Map(safePoints.map((point) => [point.choice, point]));
+    const sortedByY = [...safePoints].sort((a, b) => a.y - b.y || a.x - b.x);
+    const avgR = safePoints.reduce((sum, point) => sum + point.r, 0) / safePoints.length;
+    const rows = [];
+    const yClusterGap = Math.max(22, avgR * 2.15);
+    for (const point of sortedByY){
+      const row = rows[rows.length - 1];
+      const rowY = row ? row.reduce((sum, item) => sum + item.y, 0) / row.length : NaN;
+      if (!row || Math.abs(point.y - rowY) > yClusterGap) rows.push([point]);
+      else row.push(point);
+    }
+    rows.forEach((row) => row.sort((a, b) => a.x - b.x));
+    let solvedRows = rows;
+    const allChoices = new Set(safePoints.map((point) => point.choice));
+    if (safePoints.length === 4 && rows.length === 1 && [1, 2, 3, 4].every((choice) => allChoices.has(choice))) {
+      const byChoice = new Map(safePoints.map((point) => [point.choice, point]));
+      const leftGap = Math.abs(Number(byChoice.get(1)?.x) - Number(byChoice.get(3)?.x));
+      const rightGap = Math.abs(Number(byChoice.get(2)?.x) - Number(byChoice.get(4)?.x));
+      const columnGap = Math.min(
+        Math.abs(Number(byChoice.get(2)?.x) - Number(byChoice.get(1)?.x)),
+        Math.abs(Number(byChoice.get(4)?.x) - Number(byChoice.get(3)?.x)),
+      );
+      if (columnGap > Math.max(80, avgR * 6) && Math.max(leftGap, rightGap) < Math.max(44, avgR * 3.2)) {
+        const centerY = safePoints.reduce((sum, point) => sum + point.y, 0) / safePoints.length;
+        const solvedGap = Math.max(24, Math.min(52, avgR * 2.4));
+        solvedRows = [
+          [{ ...byChoice.get(1), _layoutSolvedY: centerY - solvedGap * 0.5 }, { ...byChoice.get(2), _layoutSolvedY: centerY - solvedGap * 0.5 }],
+          [{ ...byChoice.get(3), _layoutSolvedY: centerY + solvedGap * 0.5 }, { ...byChoice.get(4), _layoutSolvedY: centerY + solvedGap * 0.5 }],
+        ];
+      }
+    } // SOFTM-문항영역: grid 두 행 앵커가 같은 y로 붙으면 choice 번호 기준으로 위/아래 행을 분리 - 2026-06-19
+    const rectByChoice = new Map();
+    for (const rect of rects){
+      const choice = Number(rect?.choice);
+      const point = pointByChoice.get(choice);
+      if (!point || ![rect.x, rect.y, rect.w, rect.h].every((value) => Number.isFinite(Number(value)))) {
+        if (Number.isInteger(choice)) rectByChoice.set(choice, rect);
+        continue;
+      }
+      let x = Number(rect.x);
+      let y = Number(rect.y);
+      let right = x + Number(rect.w);
+      let bottom = y + Number(rect.h);
+      const rowIndex = solvedRows.findIndex((row) => row.some((item) => item.choice === choice));
+      const row = rowIndex >= 0 ? solvedRows[rowIndex] : [point];
+      const index = row.findIndex((item) => item.choice === choice);
+      const prevRow = rowIndex > 0 ? solvedRows[rowIndex - 1] : null;
+      const nextRow = rowIndex >= 0 && rowIndex + 1 < solvedRows.length ? solvedRows[rowIndex + 1] : null;
+      const pointY = (item) => Number.isFinite(Number(item?._layoutSolvedY)) ? Number(item._layoutSolvedY) : Number(item.y);
+      const rowY = row.reduce((sum, item) => sum + pointY(item), 0) / row.length;
+      const prevY = prevRow ? prevRow.reduce((sum, item) => sum + pointY(item), 0) / prevRow.length : NaN;
+      const nextY = nextRow ? nextRow.reduce((sum, item) => sum + pointY(item), 0) / nextRow.length : NaN;
+      const topLimit = Number.isFinite(prevY) ? (prevY + rowY) * 0.5 + Math.max(2, avgR * 0.18) : 0;
+      const bottomLimit = Number.isFinite(nextY) ? (rowY + nextY) * 0.5 - Math.max(2, avgR * 0.18) : Number(canvas.height || bottom);
+      const leftMin = Math.max(0, point.x + point.r * 0.62);
+      const nextPoint = index >= 0 ? row[index + 1] : null;
+      const rightMax = nextPoint ? Math.max(leftMin + 4, nextPoint.x - Math.max(point.r * 1.10, nextPoint.r * 0.95)) : Number(canvas.width || right);
+      x = Math.max(x, leftMin);
+      y = Math.max(y, topLimit);
+      right = Math.min(right, rightMax);
+      bottom = Math.min(bottom, bottomLimit);
+      if (right - x >= 4 && bottom - y >= 4) rectByChoice.set(choice, { ...rect, x, y, w: right - x, h: bottom - y });
+    }
+    const nextRects = [...rectByChoice.values()].sort((a, b) => Number(a.choice) - Number(b.choice));
+    for (let pass = 0; pass < 2; pass += 1){
+      let changed = false;
+      for (let i = 0; i < nextRects.length; i += 1){
+        for (let j = i + 1; j < nextRects.length; j += 1){
+          const a = nextRects[i];
+          const b = nextRects[j];
+          const ax2 = Number(a.x) + Number(a.w);
+          const ay2 = Number(a.y) + Number(a.h);
+          const bx2 = Number(b.x) + Number(b.w);
+          const by2 = Number(b.y) + Number(b.h);
+          const iw = Math.max(0, Math.min(ax2, bx2) - Math.max(Number(a.x), Number(b.x)));
+          const ih = Math.max(0, Math.min(ay2, by2) - Math.max(Number(a.y), Number(b.y)));
+          if (iw <= 0 || ih <= 0) continue;
+          const overlapRatio = (iw * ih) / Math.max(1, Math.min(Number(a.w) * Number(a.h), Number(b.w) * Number(b.h)));
+          if (overlapRatio < 0.08) continue;
+          const pa = pointByChoice.get(Number(a.choice));
+          const pb = pointByChoice.get(Number(b.choice));
+          if (!pa || !pb) continue;
+          if (Math.abs(pa.y - pb.y) <= Math.max(14, avgR * 1.6)) {
+            const split = (pa.x + pb.x) * 0.5;
+            if (pa.x <= pb.x) a.w = Math.max(4, Math.min(ax2, split) - Number(a.x));
+            else b.w = Math.max(4, Math.min(bx2, split) - Number(b.x));
+          } else {
+            const split = (pa.y + pb.y) * 0.5;
+            if (pa.y <= pb.y) a.h = Math.max(4, Math.min(ay2, split) - Number(a.y));
+            else b.h = Math.max(4, Math.min(by2, split) - Number(b.y));
+          }
+          changed = true;
+        }
+      }
+      if (!changed) break;
+    }
+    return nextRects;
+    /* SOFTM-문항영역 끝 */
+  }
+
   function getChoiceClickAreaCanvasRects(q, pageNo, canvas, meta, fallbackPoints = []){
     const hiddenChoices = getHiddenChoiceClickAreaChoices(q, pageNo);
     const manualRects = getManualChoiceClickAreas(q)
@@ -8355,6 +8477,8 @@
       .filter(Boolean)
       .map((rect) => ({ ...rect, manual: false, source: rect.source || "generated-click-area-anchor-text" }));
     generatedRects = widenHorizontalChoiceAreaRects(generatedRects, fallbackPoints, canvas); // SOFTM-문항영역: 저장 generated 자동 영역도 가로형 표시 높이 보정 적용 - 2026-06-17
+    autoRects = reconcileChoiceAreaRectsBySiblingAnchors(autoRects, fallbackPoints, canvas);
+    generatedRects = reconcileChoiceAreaRectsBySiblingAnchors(generatedRects, fallbackPoints, canvas); // SOFTM-문항영역: 저장/자동 영역을 문항 배열 경계로 보정해 sibling 중복 클릭을 방지 - 2026-06-19
     /* SOFTM-문항영역 끝 */
     const generatedChoices = new Set(generatedRects.map((rect) => Number(rect.choice)));
     const visibleAutoRects = autoRects.filter((rect) => String(rect?.source || "").includes("text-fit") || !generatedChoices.has(Number(rect.choice)));
@@ -13747,7 +13871,7 @@
         const r = Number(projected?.r) || 0;
         return projected && (projected.x < -r || projected.x > (pdfCanvas.width + r) || projected.y < -r || projected.y > (pdfCanvas.height + r));
       };
-      if (Number.isFinite(selectedChoice)) {
+      if (!shouldHidePdfFeedbackDuringAnchorEdit() && Number.isFinite(selectedChoice)) {
         const selectedInfo = await resolveChoiceFeedbackInfo(selectedChoice);
         if (token !== state.renderToken) return;
         if (!gradeState && selectedInfo?.projected) {
@@ -13776,7 +13900,7 @@
         }
         drawSelectedChoiceBadge(selectedChoice);
       }
-      if (gradeState) {
+      if (!shouldHidePdfFeedbackDuringAnchorEdit() && gradeState) {
         const markerAnchor = await resolveQuestionNumberAnchorForMark(safePage, q);
         if (token !== state.renderToken) return;
         drawQuestionNumberMarker(gradeState, markerAnchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws);
@@ -14198,6 +14322,10 @@
     return answerValueMatches(correct, chosen) ? "ok" : "bad";
   }
 
+  function shouldHidePdfFeedbackDuringAnchorEdit(){
+    return !!anchorEditState.enabled;
+  } // SOFTM-앵커편집: 편집 중 PDF 위 채점 표시와 선택 활성화 선을 숨김 - 2026-06-19
+
   function getCorrectChoiceValues(q){
     const correct = getCorrectAnswer(q);
     if (!isKnownAnswerValue(correct)) return [];
@@ -14296,6 +14424,7 @@
   }
 
   function drawQuestionGradeMarker(gradeState, anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws = null){
+    if (shouldHidePdfFeedbackDuringAnchorEdit()) return;
     if (!gradeState) return;
     const point = projectGradeMarkerPointSingle(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws);
     if (!point) return;
@@ -14308,6 +14437,7 @@
   }
 
   function drawQuestionNumberMarker(gradeState, anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws = null){
+    if (shouldHidePdfFeedbackDuringAnchorEdit()) return;
     if (!gradeState) return;
     const point = projectGradeMarkerPointSingle(anchor, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws);
     if (!point) return;
@@ -15492,6 +15622,7 @@
   /* SOFTM-문항앵커 끝 */
 
   async function drawAllModeSelectedMarker(pageNo, q, options = {}){
+    if (shouldHidePdfFeedbackDuringAnchorEdit()) return false;
     if (!Number.isFinite(pageNo) || !Number.isFinite(q)) return false;
     const expectedMarkerToken = Number(options.markerToken);
     const selected = normalizeChoiceValue(state.answers[q]);
@@ -15772,6 +15903,7 @@
   // SOFTM-위치맵: 전체보기에서도 문제·문항 위치맵 기준선을 페이지별로 표시해 앵커 정상 여부를 확인 - 2026-05-30
 
   async function drawAllModeGradeMarker(pageNo, q, gradeState){
+    if (shouldHidePdfFeedbackDuringAnchorEdit()) return false;
     if (!Number.isFinite(pageNo) || !Number.isFinite(q) || !gradeState) return false;
     const canvas = state.allPageCanvases[pageNo];
     const meta = state.allPageCanvasMeta[pageNo];
@@ -15793,6 +15925,7 @@
   }
 
   async function drawAllModeQuestionNumberMarker(pageNo, q, gradeState){
+    if (shouldHidePdfFeedbackDuringAnchorEdit()) return false;
     if (!Number.isFinite(pageNo) || !Number.isFinite(q) || !gradeState) return false;
     const canvas = state.allPageCanvases[pageNo];
     const meta = state.allPageCanvasMeta[pageNo];
