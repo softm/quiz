@@ -28,11 +28,11 @@
     "questionEndNo": 100,
     "ocrStatus": "정상",
     "ocrPublished": true,
-    "anchorMap": "",
-    "anchorStatus": "",
-    "anchorConfidence": "",
+    "anchorMap": "quiz/pdf/농산물품질관리사/2022년 제19회 농산물품질관리사 1차_anchor.json",
+    "anchorStatus": "위치맵 생성",
+    "anchorConfidence": 1,
     "anchorWarnings": [],
-    "anchorGeneratedAt": ""
+    "anchorGeneratedAt": "2026-06-19T05:19:03.836Z"
   },
   {
     "gNo": "01",
@@ -111,7 +111,7 @@
     "anchorStatus": "위치맵 생성",
     "anchorConfidence": 0.972,
     "anchorWarnings": [],
-    "anchorGeneratedAt": "2026-06-19T04:48:31.388Z",
+    "anchorGeneratedAt": "2026-06-19T05:23:44.674Z",
     "choiceCount": 4
   },
   {
@@ -266,11 +266,6 @@
     "questionEndNo": 100,
     "ocrStatus": "정상",
     "ocrPublished": true,
-    "anchorMap": "",
-    "anchorStatus": "",
-    "anchorConfidence": "",
-    "anchorWarnings": [],
-    "anchorGeneratedAt": "",
     "choiceCount": 4
   }
 ]

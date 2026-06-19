@@ -128,9 +128,8 @@
       "page": 1,
       "xRatio": 0.5098743267504489,
       "yRatio": 0.05294863665187064,
+      "label": 11,
       "anchorColumn": 1,
-      "text": "46.77(2)",
-      "markerText": "46.77(2)",
       "source": "ocr-number-layer"
     },
     "12": {
@@ -3608,5 +3607,5 @@
   },
   "confidence": 0.8599999999999999,
   "warnings": [],
-  "generatedAt": "2026-06-19T04:33:17.469Z"
+  "generatedAt": "2026-06-19T05:04:58.200Z"
 }

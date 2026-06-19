@@ -4743,6 +4743,8 @@
       const normalized = normalizePdfPathInput(existing).replace(/^quiz\//, "");
       if (/^pdf\//.test(normalized) && /_anchor\.json$/i.test(normalized)) return normalized;
     }
+    const expected = getExpectedAnchorMapPathForCurrentPdf();
+    if (/^pdf\//.test(expected) && /_anchor\.json$/i.test(expected)) return expected; // SOFTM-앵커편집: 위치맵 없는 OCR 런타임 문서도 missing 캐시와 무관하게 쓰기 경로 생성 - 2026-06-19
     const candidates = buildQuestionAnchorPathCandidates({
       anchorMap: currentAnchorMapPath || state.pdfNav?.anchorMapPath || "",
       questionPdf: QUESTION_PDF_URL,
@@ -8420,6 +8422,11 @@
     const safeChoice = Math.trunc(Number(choice));
     if (!Number.isFinite(safeQ) || safeQ < 1 || safeQ > QUESTION_COUNT) return false;
     if (!Number.isFinite(safeChoice) || safeChoice < 1 || safeChoice > CHOICE_COUNT) return false;
+    if (anchorEditState.enabled
+      && !anchorEditState.choiceAreaEditMode
+      && anchorEditState.interactionMode !== "drag") {
+      return false;
+    } // SOFTM-앵커편집: 앵커 선택편집 중 PDF 클릭은 문제/문항 앵커 위치 편집으로 처리하고 답안 선택을 차단 - 2026-06-19
     if (state.focusQ !== safeQ) setFocusQuestionSilently(safeQ);
     chooseByKeyboard(safeChoice, { advance: false, scrollPdf: false });
     pdfStatus.textContent = `${formatPrintedQuestionLabel(safeQ)}번 ${safeChoice} 선택`;
@@ -9290,9 +9297,7 @@
       && !wasChoiceAreaEditMode
       && wasInteractionMode !== "drag"
       && dragKind === "question";
-    if (commitStationaryQuestionAnchor && state.viewMode === "all" && point) {
-      if (await selectChoiceFromAnchorEditAllCanvasPoint(point, e)) return; // SOFTM-문항선택: 문제 앵커 정지 클릭이 문항영역이면 앵커 저장 대신 선택 표시 - 2026-06-18
-    }
+    // SOFTM-앵커편집: 문제 앵커 정지 클릭은 문항 선택으로 소비하지 않고 앵커 위치 저장으로 진행 - 2026-06-19
     if (!moved && !commitStationaryQuestionAnchor) return;
     if (dragKind === "choiceArea") {
       if (!areaRatios || !Number.isFinite(dragQ) || dragQ <= 0 || !Number.isFinite(areaPage) || areaPage <= 0) return;
@@ -10945,7 +10950,7 @@
     if (!isSimpleQuestionAnchorEditMode()) return false;
     const editQ = getAnchorEditTargetQuestion(state.focusQ || 1);
     if (!Number.isFinite(editQ) || editQ <= 0) {
-      setAnchorEditStatus("단순 테스트 모드: 편집할 문제를 먼저 선택하세요.");
+      setAnchorEditStatus("편집할 문제를 먼저 선택하세요.");
       return true;
     }
     const point = mode === "all"
@@ -10963,15 +10968,15 @@
     stageManualQuestionAnchor(point);
     const stagedPatch = getAnchorEditPatch();
     if (!anchorEditPatchHasContent(stagedPatch)) {
-      setAnchorEditStatus("단순 테스트 모드: 문제 앵커 위치 패치가 생성되지 않았습니다.");
+      setAnchorEditStatus("문제 앵커 위치 패치가 생성되지 않았습니다.");
       return true;
     }
     const nextPage = mode === "all" ? Number(point.page) : NaN;
     const affectedPages = [prevPage, nextPage].filter((pageNo) => Number.isFinite(pageNo) && pageNo >= 1);
-    const ok = await saveAnchorEditNow({ silent: true, requireAnchorMap: true });
+    const ok = await saveAnchorEditNow({ silent: true });
     if (ok) {
       const savedPath = currentAnchorMapPath || state.pdfNav?.anchorMapPath || "";
-      setAnchorEditStatus(`단순 테스트 모드: ${formatPrintedQuestionLabel(editQ)}번 문제 앵커를 클릭 위치로 저장했습니다.${savedPath ? ` (${savedPath})` : ""}`);
+      setAnchorEditStatus(`${formatPrintedQuestionLabel(editQ)}번 문제 앵커를 클릭 위치로 저장했습니다.${savedPath ? ` (${savedPath})` : ""}`);
       if (mode === "all") {
         state.simpleAnchorEditLastPoint = {
           q: editQ,
@@ -18930,8 +18935,6 @@
       if (anchorEditState.interactionMode === "drag") {
         return;
       }
-      const anchorEditClickPoint = getAllCanvasPointFromEvent(e);
-      if (anchorEditState.kind !== "choice" && await selectChoiceFromAnchorEditAllCanvasPoint(anchorEditClickPoint, e)) return; // SOFTM-문항앵커: 문항 앵커 편집 중에는 답안 선택보다 앵커 위치 배치를 우선 - 2026-06-19
       await handleAnchorEditAllCanvasClick(e);
       return;
     }
