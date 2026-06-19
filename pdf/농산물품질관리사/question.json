@@ -107,11 +107,11 @@
     "questionEndNo": 100,
     "ocrStatus": "OCR 확인 필요",
     "ocrPublished": false,
-    "anchorMap": "quiz/pdf/농산물품질관리사/2023년 제20회 농산물품질관리사 1차_anchor.json",
+    "anchorMap": "quiz/pdf/농산물품질관리사/2023년 제20회 농산물품질관리사 1차_anchor.json",
     "anchorStatus": "위치맵 생성",
     "anchorConfidence": 0.972,
     "anchorWarnings": [],
-    "anchorGeneratedAt": "2026-06-18T14:38:21.810Z",
+    "anchorGeneratedAt": "2026-06-19T04:48:31.388Z",
     "choiceCount": 4
   },
   {

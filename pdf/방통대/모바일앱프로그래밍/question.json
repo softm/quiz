@@ -332,10 +332,10 @@
     "questionEndNo": 60,
     "ocrStatus": "OCR 확인 필요",
     "ocrPublished": false,
-    "anchorMap": "quiz/pdf/방통대/모바일앱프로그래밍/[기출문제] [2014.1학기 기말시험] 모바일앱프로그래밍_anchor.json",
+    "anchorMap": "quiz/pdf/방통대/모바일앱프로그래밍/[기출문제] [2014.1학기 기말시험] 모바일앱프로그래밍_anchor.json",
     "anchorStatus": "위치맵 생성",
     "anchorConfidence": 0.8599999999999999,
     "anchorWarnings": [],
-    "anchorGeneratedAt": "2026-06-18T15:13:41.813Z"
+    "anchorGeneratedAt": "2026-06-19T04:33:17.469Z"
   }
 ]

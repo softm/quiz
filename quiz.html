@@ -2632,6 +2632,7 @@
     pdfScrollSyncRaf: 0,
     pdfScrollSyncLastQ: 0,
     pdfScrollSyncSuppressUntil: 0,
+    pdfScrollSyncSuppressedTimer: 0, // SOFTM-전체보기스크롤: 이동 억제 중 발생한 스크롤도 억제 종료 후 한 번 재판정 - 2026-06-19
     singlePageRenderCache: new Map(),
     pageQuestionRatioCache: {},
     pageQuestionDirectRatioCache: {},
@@ -8788,8 +8789,10 @@
     const canvas = pointOrMeta?.canvas || state.allPageCanvases?.[pageNo];
     const meta = pointOrMeta?.meta || state.allPageCanvasMeta?.[pageNo];
     if (!canvas || !meta || !Number.isFinite(Number(q)) || !Number.isFinite(Number(pageNo))) return [];
+    await ensureAnchorDetailsForQuestions([q]); // SOFTM-문항선택: offscreen 문제도 저장 문항앵커를 로드한 뒤 표시/클릭 포인트를 계산 - 2026-06-19
     const syncPoints = buildAllModeChoiceAreaPoints(q, pageNo, { ...pointOrMeta, canvas, meta });
     const visibleChoiceCount = Math.max(1, Math.min(5, Number(state.pdfNav?.choiceCount) || CHOICE_COUNT));
+    if (syncPoints.length >= visibleChoiceCount) return syncPoints; // SOFTM-문항선택: 화면에 표시되는 신뢰 앵커가 충분하면 OCR/segment fallback으로 클릭 좌표를 덮어쓰지 않음 - 2026-06-19
     const manualPoints = buildAllModeChoicePointsFromAnchors(
       getStoredChoiceAnchorsForQuestionBeforeOcr(q, pageNo),
       q,
@@ -8822,6 +8825,11 @@
       const choice = Number(point.choice);
       if (Number.isInteger(choice) && choice >= 1 && choice <= visibleChoiceCount) byChoice.set(choice, point);
     }
+    for (const point of syncPoints) {
+      const choice = Number(point.choice);
+      if (point?.anchor?.inferred === true) continue; // SOFTM-문항선택: 지연 로딩 전 만든 추정 fallback은 이후 로드된 저장 앵커를 덮지 않음 - 2026-06-19
+      if (Number.isInteger(choice) && choice >= 1 && choice <= visibleChoiceCount) byChoice.set(choice, point);
+    } // SOFTM-문항선택: 일부 보기만 신뢰 앵커가 있을 때 전체를 segment fallback으로 대체하지 않고 부족분만 채움 - 2026-06-19
     for (const point of manualPoints) {
       const choice = Number(point.choice);
       if (Number.isInteger(choice) && choice >= 1 && choice <= visibleChoiceCount) byChoice.set(choice, point);
@@ -14613,12 +14621,21 @@
   }
   // SOFTM-앵커편집: 저장 문제 앵커가 낮게 잡힌 경우 PDF.js 런타임 문제 시작점을 디버그 표시 기준으로 우선 사용 - 2026-06-17
 
-  function getQuestionDebugDisplayRatio(debugAnchor){
+  function getQuestionDebugDisplayRatio(debugAnchor, pageNo = null, q = null){
     const ratio = Number(debugAnchor?.ratio);
     if (!Number.isFinite(ratio)) return null;
     const source = String(debugAnchor?.source || "").toLowerCase();
     if (source.includes("manual")) return Math.max(0, Math.min(1, ratio));
-    return Math.max(0, Math.min(1, ratio - 0.012)); // SOFTM-앵커편집: 자동 문제 앵커선은 문제 텍스트 기준선이 아니라 crop 상단 여백선으로 표시 - 2026-06-17
+    let displayRatio = ratio - 0.012;
+    const label = Number.isFinite(Number(q)) ? anchorEditMapValue(state.pdfNav?.questionLabelMap, q) : null;
+    const labelPage = Number(label?.page);
+    const labelY = Number(label?.yRatio ?? label?.ratio);
+    if (label && Number.isFinite(labelY)
+      && (!Number.isFinite(Number(pageNo)) || labelPage === Number(pageNo))
+      && labelY - ratio > 0.048) {
+      displayRatio = Math.max(displayRatio, labelY - 0.035);
+    } // SOFTM-앵커편집: 자동 문제 crop top이 실제 문제번호 라벨보다 과하게 위면 표시선만 문제 제목 위로 내림 - 2026-06-19
+    return Math.max(0, Math.min(1, displayRatio)); // SOFTM-앵커편집: 자동 문제 앵커선은 문제 텍스트 기준선이 아니라 crop 상단 여백선으로 표시 - 2026-06-17
   }
 
   async function drawAnchorDebugMarkerSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws = null){
@@ -14626,7 +14643,7 @@
     const debugAnchor = await getQuestionDebugAnchorRatioResolved(pageNo, q);
     if (!debugAnchor) return;
     const style = getAnchorDebugStyle(state.pdfNav.patternSource);
-    const displayRatio = getQuestionDebugDisplayRatio(debugAnchor);
+    const displayRatio = getQuestionDebugDisplayRatio(debugAnchor, pageNo, q);
     if (!Number.isFinite(displayRatio)) return;
     const yFull = Math.max(0, Math.min(fullCanvas.height, fullCanvas.height * Number(displayRatio)));
     const anchorEntry = state.pdfNav?.questionAnchorMap && state.pdfNav.questionAnchorMap[String(q)];
@@ -14691,7 +14708,7 @@
     const defaultRadius = Math.max(7, Math.min(16, (canvas.width || 1000) * 0.0072)) * getAnchorChoiceRadiusScale();
     const optionRadius = Number(options.r);
     const r = Math.max(4, Math.min(32, Number.isFinite(optionRadius) ? optionRadius : defaultRadius));
-    const fontSize = Math.max(8, Math.min(14, (canvas.width || 1000) * 0.0082));
+    const fontSize = Math.max(12, Math.min(22, (canvas.width || 1000) * 0.0125));
     ctx.save();
     /* SOFTM-문항앵커 시작: 선택 하이라이트가 실제 문항 원 크기 변경처럼 보이지 않도록 반경을 축소한다 - 2026-06-16 */
     if (options.selected === true) {
@@ -14720,25 +14737,26 @@
     ctx.font = `800 ${fontSize}px sans-serif`;
     ctx.textBaseline = "middle";
     const labelText = String(label || "");
-    /* SOFTM-문항앵커 시작: 디버그 라벨을 문항 원 위가 아니라 왼쪽 옆에 배치해 선택지 텍스트와 겹침을 줄임 - 2026-06-18 */
+    /* SOFTM-문항앵커 시작: 디버그 라벨을 문항 원 왼쪽 옆에 두고 글자 크기/대비를 키워 식별성을 높임 - 2026-06-19 */
     const drawChoiceTag = () => {
       if (!labelText) return;
-      const tagFont = Math.max(7, fontSize * 0.72);
+      const tagFont = Math.max(13, Math.min(24, fontSize));
       ctx.font = `900 ${tagFont}px sans-serif`;
+      ctx.textAlign = "left";
       const tagText = ` ${labelText} `;
-      const tagW = Math.min((canvas.width || 0) - 8, ctx.measureText(tagText).width + 10);
-      const tagH = tagFont + 8;
-      const tagX = Math.max(4, Math.min((canvas.width || 0) - tagW - 4, x - r - tagW - 3));
+      const tagW = Math.min((canvas.width || 0) - 8, ctx.measureText(tagText).width + 14);
+      const tagH = tagFont + 10;
+      const tagX = Math.max(4, Math.min((canvas.width || 0) - tagW - 4, x - r - tagW - 4));
       const tagY = Math.max(4, Math.min((canvas.height || 0) - tagH - 4, y - tagH / 2));
-      ctx.fillStyle = "rgba(255,255,255,.94)";
-      ctx.strokeStyle = "rgba(239,43,43,.78)";
-      ctx.lineWidth = Math.max(1, tagFont * 0.08);
+      ctx.fillStyle = "rgba(255,255,255,.98)";
+      ctx.strokeStyle = "rgba(225,29,72,.92)";
+      ctx.lineWidth = Math.max(1.4, tagFont * 0.1);
       ctx.beginPath();
       ctx.roundRect(tagX, tagY, tagW, tagH, tagH / 2);
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = "#e11d48";
-      ctx.fillText(tagText.trim(), tagX + 6, tagY + tagH / 2);
+      ctx.fillStyle = "#be123c";
+      ctx.fillText(tagText.trim(), tagX + 7, tagY + tagH / 2);
       ctx.font = `800 ${fontSize}px sans-serif`;
       ctx.fillStyle = style.fill;
     };
@@ -15571,7 +15589,7 @@
     const ctx = canvas.getContext("2d");
     const sy = meta.fullHeight / Math.max(1, meta.destHeight);
     const sx = meta.srcWidth / Math.max(1, meta.destWidth);
-    const displayRatio = getQuestionDebugDisplayRatio(debugAnchor);
+    const displayRatio = getQuestionDebugDisplayRatio(debugAnchor, pageNo, q);
     if (!Number.isFinite(displayRatio)) return false;
     const yFull = Math.max(0, Math.min(meta.fullHeight, meta.fullHeight * Number(displayRatio)));
     const y = Math.max(6, Math.min(canvas.height - 6, yFull / sy));
@@ -15599,7 +15617,7 @@
     ctx.lineTo(lineRight, y);
     ctx.stroke();
     ctx.setLineDash([]);
-    const fontSize = Math.max(14, Math.min(24, canvas.width * 0.018));
+    const fontSize = Math.max(12, Math.min(18, canvas.width * 0.012));
     ctx.font = `700 ${fontSize}px sans-serif`;
     const printed = localQuestionNoToPrinted(q);
     const label = Number.isFinite(printed) && printed !== q ? `${printed}(앱${q})` : `${q}`;
@@ -15607,20 +15625,7 @@
     const text = `${label} ${debugLabel}`;
     const textX = Math.max(8, Math.min(canvas.width - fontSize * 4, lineLeft + 8));
     const textY = Math.max(fontSize + 2, y - 6);
-    if (anchorEditState.enabled) {
-      const tagW = Math.min(canvas.width - 8, ctx.measureText(text).width + 16);
-      const tagH = fontSize + 12;
-      const tagX = Math.max(4, Math.min(canvas.width - tagW - 4, textX - 4));
-      const tagY = Math.max(4, Math.min(canvas.height - tagH - 4, textY - tagH + 4));
-      ctx.fillStyle = "rgba(255,255,255,.94)";
-      ctx.strokeStyle = "rgba(239,43,43,.78)";
-      ctx.lineWidth = Math.max(2, fontSize * 0.12);
-      ctx.beginPath();
-      ctx.roundRect(tagX, tagY, tagW, tagH, tagH / 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = style.fill;
-    }
+    // SOFTM-앵커편집: 전체보기 문제 앵커 라벨도 단일보기처럼 사각형 배경 없이 작게 표시 - 2026-06-19
     ctx.fillText(text, textX, textY);
     ctx.restore();
     return true;
@@ -15959,6 +15964,107 @@
     }
   }
 
+  /* SOFTM-전체보기스크롤 시작: 전체보기 스크롤 포커스는 단일 상단 기준선보다 뷰포트 내 문제 가시 면적을 우선한다 - 2026-06-19 */
+  function resolveQuestionByVisibleSegmentsOnPage(pageNo, canvas, rect, viewerRect, targetColumn = 0){
+    if (!canvas || !rect || !viewerRect || !Number.isFinite(Number(pageNo))) return null;
+    const safePage = Math.trunc(Number(pageNo));
+    const viewTop = Math.max(rect.top, viewerRect.top, 0);
+    const viewBottom = Math.min(rect.bottom, viewerRect.bottom, window.innerHeight);
+    if (viewBottom <= viewTop + 2) return null;
+    const bandTop = viewTop + (viewBottom - viewTop) * 0.02;
+    const bandBottom = viewTop + (viewBottom - viewTop) * 0.28; // SOFTM-전체보기스크롤: 짧은 문제를 건너뛰지 않도록 현재 문제 판정 band를 가시 영역 상단으로 제한 - 2026-06-19
+    const pageYToClient = (ratio) => rect.top + (Math.max(0, Math.min(1, Number(ratio))) * rect.height);
+    const filterSegmentsForTargetColumn = (segments) => {
+      if (targetColumn !== 1 && targetColumn !== 2) return Array.isArray(segments) ? segments : [];
+      return (Array.isArray(segments) ? segments : [])
+        .filter((seg) => getQuestionSegmentScrollColumn(seg) === targetColumn);
+    };
+    const pageQuestions = getQuestionsOnPdfPage(safePage)
+      .filter((q) => isQuestionInActiveScrollColumn(q, safePage, targetColumn))
+      .sort((a, b) => a - b);
+    const startByQ = new Map();
+    for (const q of pageQuestions){
+      const segmentTops = filterSegmentsForTargetColumn(getQuestionScrollSegmentsForPage(q, safePage))
+        .map((seg) => Number(seg.top))
+        .filter(Number.isFinite);
+      const mappedTop = Number(state.pdfNav?.questionTopRatioMap?.[q]);
+      const candidates = [...segmentTops, mappedTop].filter(Number.isFinite).map((value) => Math.max(0, Math.min(1, value)));
+      if (candidates.length) startByQ.set(q, Math.min(...candidates));
+    }
+    const getHardBottom = (q) => {
+      const currentStart = Number(startByQ.get(q));
+      let nextStart = Infinity;
+      for (const [candidateQ, start] of startByQ.entries()){
+        if (candidateQ <= q) continue;
+        if (Number.isFinite(currentStart) && start <= currentStart + 0.012) continue;
+        if (start < nextStart) nextStart = start;
+      }
+      return Number.isFinite(nextStart) ? Math.max(0, Math.min(1, nextStart - 0.004)) : 1;
+    };
+    const clampSegmentsToQuestionBoundary = (q, segments) => {
+      const hardBottom = getHardBottom(q);
+      const hardTop = Number(startByQ.get(q));
+      return (Array.isArray(segments) ? segments : [])
+        .map((seg) => {
+          const top = Math.max(0, Math.min(1, Math.max(Number(seg.top), Number.isFinite(hardTop) ? hardTop - 0.006 : 0)));
+          const bottom = Math.max(0, Math.min(1, Math.min(Number(seg.bottom), hardBottom)));
+          if (!Number.isFinite(top) || !Number.isFinite(bottom) || bottom <= top + 0.010) return null;
+          return { ...seg, top, bottom };
+        })
+        .filter(Boolean);
+    };
+    let best = null;
+    for (const q of pageQuestions){
+      let segments = filterSegmentsForTargetColumn(getQuestionScrollSegmentsForPage(q, safePage));
+      if (!segments.length) {
+        const start = Number(state.pdfNav?.questionTopRatioMap?.[q]);
+        if (!Number.isFinite(start)) continue;
+        segments = [{ top: start, bottom: Math.max(start + 0.035, getHardBottom(q)), left: 0, right: 1 }];
+      }
+      segments = clampSegmentsToQuestionBoundary(q, segments);
+      let visibleScore = 0;
+      let bandScore = 0;
+      let bandCoverageScore = 0;
+      let offscreenStartPenalty = Infinity;
+      let nearestDistance = Infinity;
+      for (const seg of segments){
+        const top = pageYToClient(seg.top);
+        const bottom = pageYToClient(seg.bottom);
+        if (bottom <= top + 2) continue;
+        const visible = Math.max(0, Math.min(bottom, viewBottom) - Math.max(top, viewTop));
+        const band = Math.max(0, Math.min(bottom, bandBottom) - Math.max(top, bandTop));
+        const segmentHeight = Math.max(1, bottom - top);
+        const center = (top + bottom) * 0.5;
+        const bandCenter = (bandTop + bandBottom) * 0.5;
+        visibleScore += visible;
+        bandScore += band * 1.20;
+        bandCoverageScore += Math.min(1, band / segmentHeight) * 92;
+        offscreenStartPenalty = Math.min(offscreenStartPenalty, top < viewTop - 40 ? Math.min(160, (viewTop - top - 40) * 0.55) : 0);
+        nearestDistance = Math.min(nearestDistance, Math.abs(center - bandCenter));
+      }
+      if (visibleScore < Math.max(18, rect.height * 0.018) && bandScore <= 0) continue;
+      if (!Number.isFinite(offscreenStartPenalty)) offscreenStartPenalty = 0;
+      const currentBonus = q === state.focusQ ? Math.min(16, Math.max(0, visibleScore * 0.08)) : 0;
+      const score = bandScore + bandCoverageScore + visibleScore * 0.12 + currentBonus - offscreenStartPenalty - Math.min(80, nearestDistance * 0.08);
+      if (!best || score > best.score || (Math.abs(score - best.score) < 0.01 && q < best.q)) best = { q, score, visibleScore, bandScore, bandCoverageScore };
+    }
+    if (!best) return null;
+    const current = Math.trunc(Number(state.focusQ) || 0);
+    if (current >= 1 && current <= QUESTION_COUNT && current !== best.q) {
+      const currentSegments = clampSegmentsToQuestionBoundary(current, getQuestionScrollSegmentsForPage(current, safePage));
+      let currentVisible = 0;
+      for (const seg of currentSegments){
+        const top = pageYToClient(seg.top);
+        const bottom = pageYToClient(seg.bottom);
+        currentVisible += Math.max(0, Math.min(bottom, viewBottom) - Math.max(top, viewTop));
+      }
+      if (currentVisible > best.visibleScore * 0.94 && best.bandScore < Math.max(28, currentVisible * 0.48)) {
+        return current;
+      }
+    }
+    return best.q;
+  }
+
   function getQuestionAtPdfScrollPosition(){
     if (state.viewMode !== "all") return null;
     if (!Array.isArray(state.allPageCanvases) || !state.allPageCanvases.length) return null;
@@ -15991,6 +16097,8 @@
     const clampedY = Math.max(rect.top + 1, Math.min(rect.bottom - 1, targetY));
     const targetX = getScrollSyncTargetX(rect, viewerRect, pageNo);
     const targetColumn = isTwoColumnQuestionPage(pageNo) ? getScrollSyncColumnForPage(pageNo, rect) : 0; // SOFTM-2단스크롤: 포인터가 없을 때도 현재 문제의 기존 단으로 스크롤 포커스 기준을 유지 - 2026-06-16
+    const visibleQ = resolveQuestionByVisibleSegmentsOnPage(pageNo, canvas, rect, viewerRect, targetColumn);
+    if (Number.isFinite(visibleQ) && visibleQ > 0) return Math.max(1, Math.min(QUESTION_COUNT, Math.floor(visibleQ)));
     const point = getAllCanvasPointFromEvent({
       currentTarget: canvas,
       clientX: targetX,
@@ -16018,6 +16126,7 @@
     }
     return Number.isFinite(q) && q > 0 ? Math.max(1, Math.min(QUESTION_COUNT, Math.floor(q))) : null;
   }
+  /* SOFTM-전체보기스크롤 끝 */
 
   function getScrollSyncTargetX(rect, viewerRect, pageNo = null){
     let ratio = 0.5;
@@ -16135,13 +16244,26 @@
   function queuePdfScrollFocusSync(){
     if (state.viewMode !== "all") return;
     if (isAnchorEditQuestionLocked()) return;
-    if (Date.now() < Number(state.pdfScrollSyncSuppressUntil || 0)) return;
+    const suppressUntil = Number(state.pdfScrollSyncSuppressUntil || 0);
+    if (Date.now() < suppressUntil) {
+      if (!state.pdfScrollSyncSuppressedTimer) {
+        state.pdfScrollSyncSuppressedTimer = window.setTimeout(() => {
+          state.pdfScrollSyncSuppressedTimer = 0;
+          queuePdfScrollFocusSync();
+        }, Math.max(24, suppressUntil - Date.now() + 24));
+      }
+      return;
+    } // SOFTM-전체보기스크롤: 렌더 직후 억제 시간에 발생한 실제 스크롤을 놓치지 않음 - 2026-06-19
     if (state.pdfScrollSyncRaf) return;
     state.pdfScrollSyncRaf = requestAnimationFrame(syncAnswerFocusFromPdfScroll);
   }
 
   function suppressPdfScrollFocusSync(ms = 850){
     state.pdfScrollSyncSuppressUntil = Math.max(Number(state.pdfScrollSyncSuppressUntil || 0), Date.now() + Math.max(0, Number(ms) || 0));
+    if (state.pdfScrollSyncSuppressedTimer) {
+      window.clearTimeout(state.pdfScrollSyncSuppressedTimer);
+      state.pdfScrollSyncSuppressedTimer = 0;
+    } // SOFTM-전체보기스크롤: 새 억제 구간 시작 시 이전 재판정 예약을 정리 - 2026-06-19
     if (state.pdfScrollSyncRaf) {
       cancelAnimationFrame(state.pdfScrollSyncRaf);
       state.pdfScrollSyncRaf = 0;
@@ -16831,6 +16953,7 @@
     if (!anchor || typeof anchor !== "object") return true;
     const source = String(anchor.source || "").toLowerCase();
     if (isGeneratedSegmentChoiceAnchorSource(source)) return false; // SOFTM-문항앵커: 위치맵 생성기가 확정한 segment 문항앵커는 화면 표시/클릭에서 런타임 세로 fallback으로 대체하지 않음 - 2026-06-18
+    if (source.startsWith("anchor-image") && source.includes("pixel-snap")) return false; // SOFTM-문항선택: 실제 원형 픽셀로 보정된 저장 앵커는 inferred 문자열이 있어도 클릭/표시 기준으로 신뢰 - 2026-06-19
     if (anchor.inferred === true) return true;
     return source.includes("ocr-token")
       || source.includes("trailing")
@@ -16886,7 +17009,14 @@
   function getRuntimeChoiceAnchorsForQuestion(q, pageNo = null, options = {}){
     const stored = getReliableChoiceAnchorsForQuestion(q, pageNo);
     if (!Array.isArray(stored) || !stored.length) return [];
-    const scoped = stored.filter((item) => isChoiceAnchorInsideQuestionRuntimeScope(item, q, pageNo));
+    let scoped = stored.filter((item) => isChoiceAnchorInsideQuestionRuntimeScope(item, q, pageNo));
+    if (!scoped.length && Number.isFinite(Number(pageNo))) {
+      const segment = getStoredQuestionSegment(Number(q), Number(pageNo));
+      const choiceCount = Math.max(1, Math.min(5, Number(state.pdfNav?.choiceCount) || CHOICE_COUNT));
+      const pageScoped = stored.filter((item) => Number(item?.page || pageNo) === Number(pageNo));
+      const completeChoices = new Set(pageScoped.map((item) => Number(item.choice)).filter((choice) => Number.isInteger(choice) && choice >= 1 && choice <= choiceCount));
+      if (String(segment?.source || "") === "manual-anchor" && completeChoices.size >= choiceCount) scoped = pageScoped;
+    } // SOFTM-문항앵커: 잘못 저장된 manual 문제 시작점이 완결된 문항앵커 세트를 숨기지 않도록 페이지 기준으로 복구 - 2026-06-19
     if (!scoped.length) return [];
     const strict = options.strictSources !== false;
     if (!strict) return scoped;
@@ -18801,7 +18931,7 @@
         return;
       }
       const anchorEditClickPoint = getAllCanvasPointFromEvent(e);
-      if (await selectChoiceFromAnchorEditAllCanvasPoint(anchorEditClickPoint, e)) return; // SOFTM-문항선택: 앵커편집 전체보기에서도 문항 클릭 시 선택/활성화 표시를 갱신 - 2026-06-18
+      if (anchorEditState.kind !== "choice" && await selectChoiceFromAnchorEditAllCanvasPoint(anchorEditClickPoint, e)) return; // SOFTM-문항앵커: 문항 앵커 편집 중에는 답안 선택보다 앵커 위치 배치를 우선 - 2026-06-19
       await handleAnchorEditAllCanvasClick(e);
       return;
     }

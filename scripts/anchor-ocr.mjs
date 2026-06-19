@@ -2661,6 +2661,55 @@ function buildSegmentChoiceAnchorFallbackMap(choiceMap, questionSegments, questi
       && existingXSpread < Math.max(0.070, width * 0.20)
       && (height <= 0.105 || existing.some((item) => String(item?.source || "").includes("post-inferred-trailing"))); // SOFTM-문항앵커: 2x2 보기 앵커가 한 열로 몰린 경우 partial/complete 모두 grid fallback으로 교체 - 2026-06-17
     const existingYValues = existing.map((item) => Number(item.yRatio)).filter(Number.isFinite);
+    const buildTopCompactVerticalLeadingRepair = () => {
+      if (choiceCount !== 4 || existing.length !== 4 || width >= 0.70 || height > 0.180) return null;
+      const byChoice = new Map(existing.map((item) => [Number(item.choice), item]));
+      const ordered = [1, 2, 3, 4].map((choice) => byChoice.get(choice));
+      if (ordered.some((item) => !item)) return null;
+      const xs = ordered.map((item) => Number(item.xRatio)).filter(Number.isFinite);
+      const ys = ordered.map((item) => Number(item.yRatio)).filter(Number.isFinite).sort((a, b) => a - b);
+      if (xs.length !== 4 || ys.length !== 4) return null;
+      const xSpread = Math.max(...xs) - Math.min(...xs);
+      if (xSpread > Math.max(0.050, width * 0.14)) return null;
+      const sources = ordered.map((item) => String(item.source || "").toLowerCase());
+      if (!sources.every((source) => source.includes("segment-bullet"))) return null;
+      const labelY = Number(questionLabelMap?.[String(q)]?.yRatio);
+      if (!Number.isFinite(labelY) || labelY < top - 0.006 || labelY > bottom) return null;
+      const gaps = ys.slice(1).map((value, idx) => value - ys[idx]);
+      const sortedGaps = gaps.slice().sort((a, b) => a - b);
+      const gap = sortedGaps[Math.floor(sortedGaps.length / 2)];
+      if (!Number.isFinite(gap) || gap < 0.010 || gap > 0.026) return null;
+      if (Math.max(...gaps) - Math.min(...gaps) > 0.010) return null;
+      if (ys[0] - labelY < Math.max(0.050, height * 0.36)) return null;
+      const leadingY = clampGeneratedRatio(
+        labelY + Math.max(0.022, Math.min(0.034, gap * 1.75)),
+        top + 0.030,
+        ys[0] - Math.max(0.006, gap * 0.45),
+      );
+      const leading = {
+        ...ordered[0],
+        choice: 1,
+        yRatio: leadingY,
+        source: `${ordered[0].source || "anchor-image"}-post-inferred-leading-compact`,
+        inferred: true,
+        confidence: Math.min(0.62, Number(ordered[0].confidence || 0.62)),
+      };
+      const repaired = [leading];
+      for (let idx = 0; idx < 3; idx += 1){
+        repaired.push({
+          ...ordered[idx],
+          choice: idx + 2,
+          source: `${ordered[idx].source || "anchor-image"}-post-shifted-leading-compact`,
+        });
+      }
+      return repaired.sort((a, b) => Number(a.choice) - Number(b.choice));
+    };
+    const compactVerticalLeadingRepair = buildTopCompactVerticalLeadingRepair();
+    if (compactVerticalLeadingRepair) {
+      out[String(q)] = compactVerticalLeadingRepair;
+      continue;
+    }
+    // SOFTM-문항앵커: 짧은 2단 세로형에서 첫 보기 원형이 누락되어 ②~④가 ①~③으로 밀린 경우에만 선두 보기 복원 - 2026-06-19
     const buildHorizontalFromLowerShortRescueGrid = () => {
       if (choiceCount !== 4 || width < 0.70 || existing.length < 4) return null;
       const byChoice = new Map(existing.map((item) => [Number(item.choice), item]));
@@ -2707,6 +2756,13 @@ function buildSegmentChoiceAnchorFallbackMap(choiceMap, questionSegments, questi
       if (xSpread > Math.max(0.045, width * 0.18)) return null;
       const sources = choices.map((item) => String(item.source || "").toLowerCase());
       if (!sources.some((source) => source.includes("anchor-image"))) return null;
+      const yGaps = ys.slice(1).map((value, idx) => value - ys[idx]);
+      const ySpan = ys[ys.length - 1] - ys[0];
+      const segmentBulletVertical = sources.every((source) => source.includes("segment-bullet"))
+        && ySpan >= 0.038
+        && yGaps.every((gap) => gap >= 0.009 && gap <= 0.026)
+        && Math.max(...yGaps) - Math.min(...yGaps) <= 0.010;
+      if (segmentBulletVertical) return null; // SOFTM-문항앵커: 실제 세로형 선택지 원형 4개가 이미 잡힌 경우 tail/grid fallback으로 덮지 않음 - 2026-06-19
       const xLeft = clampGeneratedRatio(Math.min(...xs), left + width * 0.055, right - width * 0.58);
       const xRight = clampGeneratedRatio(left + width * 0.525, left + width * 0.36, right - width * 0.080);
       let yTop = NaN;
@@ -3180,8 +3236,8 @@ def should_snap(anchor):
     if "pixel-snap" in source or "collapsed-column" in source:
         return False
     if layout == "vertical":
-        return False
-    # SOFTM-문항앵커: 텍스트 시작점 보정은 가로/그리드형 전용이며 세로형 보기는 원래 x축을 보존 - 2026-06-18
+        return bool(anchor.get("inferred") is True or source.startswith("segment-choice-anchor") or "post-" in source)
+    # SOFTM-문항앵커: 세로형 fallback도 실제 원형 픽셀로 재확인하되 안정적인 anchor-image 세로 앵커는 원래 x축을 보존 - 2026-06-19
     return bool(anchor.get("inferred") is True or "text-" in source or source.startswith("anchor-image"))
 
 def expected_anchor_xs(anchor, segment):
@@ -3196,7 +3252,12 @@ def expected_anchor_xs(anchor, segment):
     width = max(0.05, right - left)
     layout = str(anchor.get("layout") or "").lower()
     if layout == "vertical":
-        return []
+        try:
+            current_x = float(anchor.get("xRatio") or 0)
+            # SOFTM-문항앵커: 세로형 추정 앵커는 기하 슬롯이 아니라 현재 행 주변 실제 원형 후보로만 스냅 - 2026-06-19
+            return [clamp(current_x, left + 0.015, right - 0.015)]
+        except Exception:
+            return []
     horizontal_slots = [0.0965, 0.3095, 0.5225, 0.7340]
     grid_slots = [0.0965, 0.5225, 0.0965, 0.5225]
     xs = []
@@ -3258,8 +3319,13 @@ def find_mark_center(arr, anchor, segment):
     seg_top = float(segment["top"]) * h
     seg_bottom = float(segment["bottom"]) * h
     layout = str(anchor.get("layout") or "").lower()
+    source = str(anchor.get("source") or "").lower()
+    is_leading_probe = layout == "vertical" and "post-inferred-leading" in source
     x_radius = max(34, min(72, w * (0.035 if layout == "grid" else 0.030)))
     y_radius = max(26, min(58, h * (0.020 if layout == "grid" else 0.016)))
+    if layout == "vertical" and "post-inferred-leading" in source:
+        y_radius = max(y_radius, min(92, h * 0.030))
+        # SOFTM-문항앵커: 선두 복원 ①은 행 간격 추정이 위로 치우칠 수 있어 실제 원형까지 세로 snap 탐색을 넓힘 - 2026-06-19
     x0 = int(max(seg_left, ax - x_radius))
     x1 = int(min(seg_right, ax + x_radius))
     y0 = int(max(seg_top, ay - y_radius))
@@ -3289,6 +3355,9 @@ def find_mark_center(arr, anchor, segment):
         dx = abs(cx - ax)
         dy = abs(cy - ay)
         if dx > x_radius * 0.90 or dy > y_radius * 0.90:
+            continue
+        if is_leading_probe and cy < ay - y_radius * 0.30:
+            # SOFTM-문항앵커: 선두 ① 복원은 문제 제목/본문 글자 조각처럼 추정점보다 크게 위인 후보를 제외 - 2026-06-19
             continue
         candidates.append({
             "lx0": lx0, "ly0": ly0, "lx1": lx1, "ly1": ly1,
@@ -3329,7 +3398,8 @@ def find_mark_center(arr, anchor, segment):
         return None
     cx, cy, bw, bh = best
     # 과도한 이동은 본문 숫자나 선택지 텍스트 조각으로 스냅된 것으로 본다.
-    if abs(cx - ax) > x_radius * 0.78 or abs(cy - ay) > y_radius * 0.78:
+    move_limit = 0.96 if is_leading_probe else 0.78
+    if abs(cx - ax) > x_radius * move_limit or abs(cy - ay) > y_radius * move_limit:
         return None
     return {
         "xRatio": clamp(cx / max(1, w), 0.0, 1.0),
@@ -3677,6 +3747,39 @@ function repairBoxOptionUpperGridChoiceMap(choiceMap, questionSegments, question
   return out;
 }
 
+function alignGridFallbackRowsToSnappedSiblings(choiceMap, questionCount, choiceCount){
+  const out = {};
+  for (let q = 1; q <= questionCount; q += 1){
+    const anchors = Array.isArray(choiceMap?.[String(q)]) ? choiceMap[String(q)].map((item) => ({ ...item })) : [];
+    if (choiceCount !== 4 || anchors.length !== 4 || !anchors.every((item) => String(item?.layout || "") === "grid")) {
+      if (anchors.length) out[String(q)] = anchors;
+      continue;
+    }
+    const byChoice = new Map(anchors.map((item) => [Number(item.choice), item]));
+    for (const [leftChoice, rightChoice] of [[1, 2], [3, 4]]){
+      const left = byChoice.get(leftChoice);
+      const right = byChoice.get(rightChoice);
+      const leftY = Number(left?.yRatio);
+      const rightY = Number(right?.yRatio);
+      if (!left || !right || !Number.isFinite(leftY) || !Number.isFinite(rightY) || Math.abs(leftY - rightY) <= 0.010) continue;
+      const leftSource = String(left.source || "");
+      const rightSource = String(right.source || "");
+      const leftSnapped = leftSource.includes("pixel-snap");
+      const rightSnapped = rightSource.includes("pixel-snap");
+      if (leftSnapped === rightSnapped) continue;
+      const source = leftSnapped ? left : right;
+      const target = leftSnapped ? right : left;
+      target.yRatio = source.yRatio;
+      target.hRatio = source.hRatio || target.hRatio;
+      target.source = `${target.source || "segment-choice-anchor-text-grid"}-row-align`;
+      target.confidence = Math.max(Number(target.confidence) || 0.55, Math.min(0.68, Number(source.confidence) || 0.66));
+    }
+    out[String(q)] = anchors.sort((a, b) => Number(a.choice) - Number(b.choice));
+  }
+  return out;
+}
+// SOFTM-문항앵커: grid fallback의 한쪽 앵커가 본문 글자에 남아 있으면 실제 스냅된 형제 row 기준으로 높이를 보정 - 2026-06-19
+
 /* SOFTM-문항영역 시작: 위치맵 생성 단계에서 렌더 PNG 픽셀 기반 정밀 문항영역을 생성 - 2026-06-16 */
 async function buildPreciseChoiceClickAreaMapFromRenderedPages(pageDir, choiceAnchorMap, questionSegments, questionColumnBoundsMap, questionLabelMap, questionCount, choiceCount){
   const mapPath = path.join(pageDir, "choice-area-input.json");
@@ -3920,8 +4023,9 @@ for q in range(1, question_count + 1):
         tail_reach = max(0.018, min(0.026, row_gap * 1.40))
     elif vertical_text_layout:
         # SOFTM-문항영역: 세로형 긴 선택지는 다음 보기 직전까지 픽셀 탐색해 2줄 이상 텍스트를 포함 - 2026-06-17
-        separator_pad = max(0.004, min(0.010, row_gap * 0.22))
-        tail_reach = max(row_pad * 2.8, min(0.130, max(0.060, row_gap * 1.85)))
+        separator_pad = max(0.006, min(0.014, row_gap * 0.30))
+        tail_reach = max(row_pad * 2.2, min(0.085, max(0.038, row_gap * 1.34)))
+        # SOFTM-문항영역: 세로형 긴 보기 스캔은 유지하되 다음 보기 원/텍스트가 섞일 만큼 행 하단을 과확장하지 않음 - 2026-06-19
     else:
         separator_pad = max(row_pad, min(0.030, row_gap * 0.36))
         tail_reach = max(row_pad * 2.4, min(0.085, row_gap * 0.82))
@@ -4024,8 +4128,15 @@ for q in range(1, question_count + 1):
             elif text:
                 margin_x = max(9.0, min(26.0, r * 0.68))
                 margin_y = max(6.0, min(18.0, r * 0.42))
-                height_expands_for_text = expanded and (layout == "vertical" or len(row) > 1) and int(text.get("lineCount") or 1) >= 2
-                # SOFTM-문항영역: 세로형/그리드 모두 단일 줄이면 앵커 원 높이를 유지하고 실제 텍스트 행이 2개 이상일 때만 높이 확장 - 2026-06-17
+                text_height = float(text.get("h") or 0)
+                if layout == "vertical" and next_y is None:
+                    vertical_text_limit = min(row_bottom - row_top, r * 4.4)
+                else:
+                    vertical_text_limit = min(row_bottom - row_top, max(r * 7.2, (row_gap * h) * 1.10))
+                # SOFTM-문항영역: 중간 세로 보기는 실제 2줄을 허용하고 마지막 보기는 워터마크 과확장을 더 엄격히 차단 - 2026-06-19
+                text_height_reasonable = layout != "vertical" or text_height <= vertical_text_limit
+                height_expands_for_text = expanded and (layout == "vertical" or len(row) > 1) and int(text.get("lineCount") or 1) >= 2 and text_height_reasonable
+                # SOFTM-문항영역: 세로형/그리드 모두 단일 줄이면 앵커 원 높이를 유지하고 실제 텍스트 행이 합리적일 때만 높이 확장 - 2026-06-19
                 bottom_margin = max(margin_y, min(22.0, r * 0.56)) if height_expands_for_text else margin_y
                 left = start_x # SOFTM-문항영역: 영역 왼쪽은 텍스트 픽셀이 아니라 문항 앵커 원 오른쪽에 바짝 붙여 시작 - 2026-06-17
                 right = min(fallback_right, text["x"] + text["w"] + margin_x)
@@ -4033,10 +4144,17 @@ for q in range(1, question_count + 1):
                     right = min(right, structural_grid_area[2]) # SOFTM-문항영역: grid 텍스트 탐색이 워터마크를 포함해도 같은 cell 폭 상한을 넘지 않게 제한 - 2026-06-18
                 if height_expands_for_text:
                     top = max(row_top, min(base_top, text["y"] - margin_y))
-                    bottom = min(row_bottom, max(base_bottom, text["y"] + text["h"] + bottom_margin))
+                    text_bottom = text["y"] + text["h"] + bottom_margin
+                    if layout == "vertical" and next_y is not None:
+                        text_bottom = min(text_bottom, (next_y * h) - max(r * 1.12, margin_y * 1.35))
+                    bottom = min(row_bottom, max(base_bottom, text_bottom))
+                    # SOFTM-문항영역: 여러 줄 세로 보기라도 실제 텍스트 하단과 다음 보기 원 전까지만 높이를 확장 - 2026-06-19
                 else:
                     top = base_top
                     bottom = base_bottom
+                if layout == "vertical" and next_y is not None and (next_y - row_y) > max(0.044, row_gap * 1.42) and (right - left) > max(180.0, (column_right - column_left) * 0.45):
+                    bottom = min(row_bottom, max(bottom, (next_y * h) - max(r * 1.10, margin_y * 1.35)))
+                    # SOFTM-문항영역: lineCount가 1로 잡힌 긴 세로형 보기라도 다음 보기까지 큰 간격이 있으면 2줄 선택지 하단까지 포함 - 2026-06-19
                 min_width = max(28.0, r * 3.2)
                 right = min(fallback_right, max(right, left + min_width))
                 source = "generated-click-area-anchor-text"
@@ -4047,33 +4165,36 @@ for q in range(1, question_count + 1):
             area = make_area(q, choice, page, {"x": left, "y": top, "w": right - left, "h": bottom - top}, source, confidence)
             if area:
                 areas.append(area)
-    if not areas and segment_fallback_layout and layout == "horizontal" and len(anchors) >= choice_count:
-        # SOFTM-문항영역: 워터마크/저품질로 짧은 한 줄 보기 텍스트 픽셀이 모두 실패하면 앵커 원 기준 높이와 다음 앵커 전 폭으로 보수 영역 생성 - 2026-06-17
-        ordered_anchors = sorted(anchors, key=lambda item: float(item.get("xRatio") or 0))
-        for idx, anchor in enumerate(ordered_anchors):
-            choice = int(anchor.get("choice") or 0)
-            if choice < 1 or choice > choice_count:
-                continue
-            ax = float(anchor.get("xRatio") or 0)
-            ay = float(anchor.get("yRatio") or 0)
-            aw = max(0.010, min(0.040, float(anchor.get("wRatio") or 0.012)))
-            ah = max(0.010, min(0.040, float(anchor.get("hRatio") or 0.012)))
-            r_ratio = max(aw, ah) * 0.56
-            left = clamp(ax + r_ratio * 1.02, segment["left"], segment["right"])
-            next_anchor = ordered_anchors[idx + 1] if idx + 1 < len(ordered_anchors) else None
-            next_x = float(next_anchor.get("xRatio") or 0) if next_anchor is not None else segment["right"]
-            cell_width = max(0.001, next_x - left - max(0.016, r_ratio * 2.2))
-            width_ratio = min(max(0.055, r_ratio * 8.0), 0.155, cell_width, max(0.001, segment["right"] - left))
-            top = clamp(ay - r_ratio * 0.9, segment["top"], segment["bottom"])
-            height_ratio = min(max(0.010, r_ratio * 1.8), max(0.001, segment["bottom"] - top))
-            area = make_area(q, choice, page, {
-                "x": left * w,
-                "y": top * h,
-                "w": width_ratio * w,
-                "h": height_ratio * h,
-            }, "generated-click-area-anchor-text", float(anchor.get("confidence") or 0.60) * 0.90)
-            if area:
-                areas.append(area)
+    if not areas and segment_fallback_layout and layout in ("horizontal", "grid") and len(anchors) >= choice_count:
+        # SOFTM-문항영역 시작: 짧은 grid/horizontal 보기의 텍스트 픽셀이 모두 실패하면 문항앵커 원과 같은 행 sibling 경계 기준으로 최소 클릭 영역 생성 - 2026-06-19
+        fallback_rows = rows_for(anchors)
+        for row in fallback_rows:
+            ordered_anchors = sorted(row, key=lambda item: float(item.get("xRatio") or 0))
+            for idx, anchor in enumerate(ordered_anchors):
+                choice = int(anchor.get("choice") or 0)
+                if choice < 1 or choice > choice_count:
+                    continue
+                ax = float(anchor.get("xRatio") or 0)
+                ay = float(anchor.get("yRatio") or 0)
+                aw = max(0.010, min(0.040, float(anchor.get("wRatio") or 0.012)))
+                ah = max(0.010, min(0.040, float(anchor.get("hRatio") or 0.012)))
+                r_ratio = max(aw, ah) * 0.56
+                left = clamp(ax + r_ratio * 1.02, segment["left"], segment["right"])
+                next_anchor = ordered_anchors[idx + 1] if idx + 1 < len(ordered_anchors) else None
+                next_x = float(next_anchor.get("xRatio") or 0) if next_anchor is not None else segment["right"]
+                cell_width = max(0.001, next_x - left - max(0.016, r_ratio * 2.2))
+                width_ratio = min(max(0.055, r_ratio * 8.0), 0.155, cell_width, max(0.001, segment["right"] - left))
+                top = clamp(ay - r_ratio * 0.9, segment["top"], segment["bottom"])
+                height_ratio = min(max(0.010, r_ratio * 1.8), max(0.001, segment["bottom"] - top))
+                area = make_area(q, choice, page, {
+                    "x": left * w,
+                    "y": top * h,
+                    "w": width_ratio * w,
+                    "h": height_ratio * h,
+                }, "generated-click-area-anchor-text", float(anchor.get("confidence") or 0.60) * 0.90)
+                if area:
+                    areas.append(area)
+        # SOFTM-문항영역 끝
     if areas:
         unique = {}
         for area in areas:
@@ -4929,7 +5050,7 @@ async function main(){
       choiceCount,
       questionLabelMap,
     ), rawChoiceCandidates, baseQuestionSegments, questionColumnBoundsMap, questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount), baseQuestionSegments, questionLabelMap, questionCount, choiceCount); // SOFTM-문항앵커: segment fallback과 OCR 후보 보정 뒤 grid/horizontal 최종 형태를 복원 - 2026-06-18
-    const choiceAnchorMap = repairBoxOptionUpperGridChoiceMap(await snapFallbackChoiceAnchorsToRenderedMarks(workDir, choiceAnchorMapBeforePixelSnap, baseQuestionSegments, questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount); // SOFTM-문항앵커: 최종 fallback 앵커를 렌더 픽셀 후보와 박스형 선택지 행 기준으로 보정 - 2026-06-18
+    const choiceAnchorMap = alignGridFallbackRowsToSnappedSiblings(repairBoxOptionUpperGridChoiceMap(await snapFallbackChoiceAnchorsToRenderedMarks(workDir, choiceAnchorMapBeforePixelSnap, baseQuestionSegments, questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount), questionCount, choiceCount); // SOFTM-문항앵커: 최종 fallback 앵커를 렌더 픽셀 후보/박스형 행/스냅 형제 row 기준으로 보정 - 2026-06-19
     questionSegments = buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questionCount, choiceAnchorMap, questionLabelMap, choiceCount);
     let choiceClickAreaMap = {};
     try{
