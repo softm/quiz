@@ -27,7 +27,12 @@
     "questionStartNo": 1,
     "questionEndNo": 100,
     "ocrStatus": "정상",
-    "ocrPublished": true
+    "ocrPublished": true,
+    "anchorMap": "quiz/pdf/농산물품질관리사/2022년 제19회 농산물품질관리사 1차_anchor.json",
+    "anchorStatus": "위치맵 생성",
+    "anchorConfidence": 1,
+    "anchorWarnings": [],
+    "anchorGeneratedAt": "2026-06-19T05:19:03.836Z"
   },
   {
     "gNo": "01",
@@ -113,13 +118,11 @@
     "questionEndNo": 100,
     "ocrStatus": "OCR 확인 필요",
     "ocrPublished": false,
-    "anchorMap": "quiz/pdf/농산물품질관리사/2023년 제20회 농산물품질관리사 1차_anchor.json",
+    "anchorMap": "quiz/pdf/농산물품질관리사/2023년 제20회 농산물품질관리사 1차_anchor.json",
     "anchorStatus": "위치맵 생성",
-    "anchorConfidence": 0.9161999999999999,
-    "anchorWarnings": [
-      "선택지 위치 감지가 부족합니다(276/400). 누락 문항은 풀이 화면에서 직접 확인하거나 관리자에서 보정하세요."
-    ],
-    "anchorGeneratedAt": "2026-06-15T15:11:08.690Z",
+    "anchorConfidence": 0.972,
+    "anchorWarnings": [],
+    "anchorGeneratedAt": "2026-06-19T05:23:44.674Z",
     "choiceCount": 4
   },
   {
@@ -284,11 +287,6 @@
     "questionEndNo": 100,
     "ocrStatus": "정상",
     "ocrPublished": true,
-    "anchorMap": "quiz/pdf/농산물품질관리사/2025년 제22회 농산물품질관리사 1차_anchor.json",
-    "anchorStatus": "위치맵 생성",
-    "anchorConfidence": 1,
-    "anchorWarnings": [],
-    "anchorGeneratedAt": "2026-06-03T12:16:03.474Z",
     "choiceCount": 4,
     "anchorChoiceDetected": 400,
     "anchorChoiceExpected": 400,
@@ -299,7 +297,12 @@
     "anchorIssueCount": 0,
     "anchorPartialChoiceCount": 0,
     "anchorOutOfSegmentChoiceCount": 0,
-    "anchorGeneratorVersion": 1
+    "anchorGeneratorVersion": 1,
+    "anchorMap": "quiz/pdf/농산물품질관리사/2025년 제22회 농산물품질관리사 1차_anchor.json",
+    "anchorStatus": "위치맵 생성",
+    "anchorConfidence": 1,
+    "anchorWarnings": [],
+    "anchorGeneratedAt": "2026-06-19T07:00:10.662Z"
   },
   {
     "gNo": "02",
@@ -852,13 +855,11 @@
     "questionEndNo": 60,
     "ocrStatus": "OCR 확인 필요",
     "ocrPublished": false,
-    "anchorMap": "quiz/pdf/방통대/모바일앱프로그래밍/[기출문제] [2014.1학기 기말시험] 모바일앱프로그래밍_anchor.json",
+    "anchorMap": "quiz/pdf/방통대/모바일앱프로그래밍/[기출문제] [2014.1학기 기말시험] 모바일앱프로그래밍_anchor.json",
     "anchorStatus": "위치맵 생성",
-    "anchorConfidence": 0.9431999999999999,
-    "anchorWarnings": [
-      "일부 선택지 위치가 누락되었습니다(84/100). 틀린 좌표 대신 누락으로 표시합니다."
-    ],
-    "anchorGeneratedAt": "2026-06-15T23:40:14.297Z"
+    "anchorConfidence": 0.8599999999999999,
+    "anchorWarnings": [],
+    "anchorGeneratedAt": "2026-06-19T05:35:00.553Z"
   },
   {
     "gNo": "03",

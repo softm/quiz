@@ -182,13 +182,14 @@
       min-width: 720px;
     }
     #categoryTable {
+      width: 100%;
       min-width: 0;
       table-layout: fixed;
-    }
+    } /* SOFTM-ADMIN: 카테고리 목록 테이블을 패널 폭 100%에 맞춤 - 2026-06-16 */
     #categoryTable th:nth-child(1), #categoryTable td:nth-child(1) { width: 50%; }
     #categoryTable th:nth-child(2), #categoryTable td:nth-child(2) { width: 56px; }
     #categoryTable th:nth-child(3), #categoryTable td:nth-child(3) { width: 72px; }
-    #categoryTable th:nth-child(4), #categoryTable td:nth-child(4) { width: 220px; }
+    #categoryTable th:nth-child(4), #categoryTable td:nth-child(4) { width: 210px; } /* SOFTM-ADMIN: 텍스트 폭 기준 액션 버튼에 맞춰 컬럼 폭 축소 - 2026-06-16 */
     #categoryTable td { min-width: 0; }
     #categoryTable .cellTitle,
     #categoryTable .cellSub {
@@ -197,18 +198,30 @@
       word-break: keep-all;
     }
     #categoryTable td.row {
+      display: table-cell;
+      white-space: nowrap;
+    }
+    /* SOFTM-ADMIN 시작: 액션 셀의 행 구분선이 끊기지 않도록 td 대신 내부 래퍼만 flex 처리 - 2026-06-16 */
+    #categoryTable .categoryActions {
       display: flex;
-      flex-wrap: wrap;
       gap: 6px;
       align-items: center;
+      justify-content: flex-end;
+      min-width: 0;
     }
-    #categoryTable td.row .button,
-    #categoryTable td.row button {
-      flex: 1 1 52px;
+    #categoryTable .categoryActions .button {
+      flex: 0 0 auto;
+    }
+    #categoryTable .categoryActions button {
+      flex: 0 0 auto;
+    }
+    #categoryTable .categoryActions .button,
+    #categoryTable .categoryActions button {
       min-width: 0;
       padding-inline: 7px;
       text-align: center;
     }
+    /* SOFTM-ADMIN 끝 */
     th, td {
       border-bottom: 1px solid var(--line);
       padding: 9px 8px;
@@ -1156,10 +1169,13 @@
               <span class="pill ok">${item.published}</span>
               <span class="pill ${item.unpublished ? "warn" : "ok"}">${item.unpublished}</span>
             </td>
+            <!-- SOFTM-ADMIN: 갱신 버튼 문구와 액션 셀 내부 래퍼 구조 적용 - 2026-06-16 -->
             <td class="row">
-              <a class="button" href="${makeCategoryUrl(item)}">보기</a>
-              <a class="button" href="${makeAdminQuestionsUrl({ categoryKey: key, questionKey: "" })}">회차관리</a>
-              <button type="button" class="secondary" data-rebuild-category="${escapeHtml(key)}" ${item.dataset !== "default" ? "disabled" : ""} title="${escapeHtml(item.dataset !== "default" ? "기본 PDF 문제은행 카테고리만 부분 갱신할 수 있습니다." : "이 카테고리의 question/correct JSON만 갱신합니다.")}">JSON생성</button>
+              <div class="categoryActions">
+                <a class="button" href="${makeCategoryUrl(item)}">보기</a>
+                <a class="button" href="${makeAdminQuestionsUrl({ categoryKey: key, questionKey: "" })}">회차관리</a>
+                <button type="button" class="secondary" data-rebuild-category="${escapeHtml(key)}" ${item.dataset !== "default" ? "disabled" : ""} title="${escapeHtml(item.dataset !== "default" ? "기본 PDF 문제은행 카테고리만 부분 갱신할 수 있습니다." : "이 카테고리의 문제/정답 데이터를 갱신합니다.")}">갱신</button>
+              </div>
             </td>
           </tr>
         `;
