@@ -4308,6 +4308,19 @@
     anchorDetailLoadState.fullData = null;
   }
 
+  /* SOFTM-앵커초기화 시작: 초기화 저장 직후 같은 위치맵 경로라도 상세 캐시를 버려 화면을 즉시 갱신 - 2026-06-19 */
+  function forceResetAnchorDetailLoadState(anchorPath = currentAnchorMapPath || state.pdfNav?.anchorMapPath || "", versionKey = getAnchorDetailVersionKey(state.pdfNav)){
+    anchorDetailLoadState.path = "";
+    anchorDetailLoadState.version = "";
+    anchorDetailLoadState.baseLoaded = false;
+    anchorDetailLoadState.basePromise = null;
+    anchorDetailLoadState.loadedQs = new Set();
+    anchorDetailLoadState.promises = new Map();
+    anchorDetailLoadState.fullData = null;
+    setAnchorDetailPath(anchorPath, versionKey);
+  }
+  /* SOFTM-앵커초기화 끝 */
+
   /* SOFTM-위치맵 시작: 없는 위치맵 후보를 반복 요청하지 않고 런타임 분석 경로로 넘김 - 2026-06-18 */
   function anchorMapMissingCacheKeys(anchorPath){
     const rel = normalizePdfPathInput(anchorPath).replace(/^quiz\//, "");
@@ -10820,6 +10833,7 @@
       const restored = Number(data.restored || 0) > 0;
       setAnchorEditStatus(restored || radiusReset ? "앵커 수정값을 초기 상태로 되돌렸습니다." : "초기화할 수정 앵커가 없습니다."); // SOFTM-앵커초기화: 수동 수정값 복원 결과를 명확히 표시 - 2026-06-16
       showToastAndSnackbar(restored || radiusReset ? "앵커 수정값이 초기화되었습니다." : "초기화할 수정 앵커가 없습니다."); // SOFTM-앵커초기화: 파일 삭제와 구분되는 완료 메시지 사용 - 2026-06-16
+      forceResetAnchorDetailLoadState(currentAnchorMapPath); // SOFTM-앵커초기화: 리로드 없이 reset 반영 데이터를 다시 로드 - 2026-06-19
       await refreshAnchorEditView(getAnchorEditTargetQuestion(state.focusQ || 1) || 1);
     }catch(err){
       setAnchorEditStatus(`앵커 초기화 실패: ${err?.message || err}`);
@@ -10882,6 +10896,7 @@
       anchorEditState.lastSavedAt = data.manualEditedAt || "";
       setAnchorEditStatus(`${resetLabel}를 초기화했습니다.`);
       showToastAndSnackbar("저장 되었습니다.");
+      forceResetAnchorDetailLoadState(currentAnchorMapPath); // SOFTM-앵커초기화: 선택 초기화 후 같은 문제 상세 캐시를 강제로 무효화 - 2026-06-19
       await refreshAnchorEditView(q);
     }catch(err){
       anchorEditState.dirty = false;
