@@ -2440,7 +2440,7 @@
   const PDF_ANCHOR_MANUAL_SAVE_URL = "/api/admin/anchor-manual";
   const PDF_ANCHOR_MANUAL_DELETE_URL = "/api/admin/anchor-manual-delete";
   const PDF_PATTERN_VERSION = 3;
-  const CROP_CACHE_VERSION = 59; // SOFTM-위치맵: 단일보기 원본 배율/상하 여백/2단 구분선 crop 보정 - 2026-06-03
+  const CROP_CACHE_VERSION = 61; // SOFTM-한문제보기: 2단 보간 라벨 상단 여백 축소를 캐시 키에 반영 - 2026-06-21
   const GRADE_MARKER_VERSION = 21;
   const PRESET_PAGE_ANCHORS = {
     "2022년 제19회 농산물품질관리사 1차": [1,6,10,14,18,22,26,33,39,47,51,57,64,70,76,81,87,94],
@@ -8165,7 +8165,7 @@
 
   function isGeneratedChoiceClickAreaValue(item){
     const source = String(item?.source || "").toLowerCase();
-    return source === "generated-click-area-anchor-text"; // SOFTM-문항영역: generated 문항영역 source를 anchor-text 하나로 통일 - 2026-06-17
+    return source.startsWith("generated-click-area-anchor-text"); // SOFTM-문항영역: grid column 보정 suffix가 붙은 generated 영역도 자동 기준 영역으로 사용 - 2026-06-21
   }
 
   function getGeneratedChoiceClickAreas(q){
@@ -8523,6 +8523,36 @@
     }
     return best;
   }
+
+  function findChoiceAnchorRowBandHit(points, rects, canvasX, canvasY){
+    if (!Array.isArray(points) || !points.length || !Number.isFinite(Number(canvasX)) || !Number.isFinite(Number(canvasY))) return null;
+    const rectByChoice = new Map((Array.isArray(rects) ? rects : []).map((rect) => [Number(rect.choice), rect]));
+    let best = null;
+    for (const point of points){
+      const choice = Number(point?.choice);
+      const px = Number(point?.x);
+      const py = Number(point?.y);
+      if (!Number.isInteger(choice) || !Number.isFinite(px) || !Number.isFinite(py)) continue;
+      const r = Math.max(7, Math.min(28, Number(point?.r) || 10));
+      const rect = rectByChoice.get(choice);
+      const yPad = Math.max(8, r * 1.25);
+      const xPad = Math.max(12, r * 1.50);
+      const top = Number.isFinite(Number(rect?.y)) ? Math.min(Number(rect.y), py - r * 1.1) : (py - r * 1.45);
+      const bottom = Number.isFinite(Number(rect?.y)) && Number.isFinite(Number(rect?.h))
+        ? Math.max(Number(rect.y) + Number(rect.h), py + r * 1.1)
+        : (py + r * 1.45);
+      const left = Number.isFinite(Number(rect?.x)) ? Math.min(Number(rect.x), px - r * 1.3) : (px - r * 1.3);
+      const right = Number.isFinite(Number(rect?.x)) && Number.isFinite(Number(rect?.w))
+        ? Math.max(Number(rect.x) + Number(rect.w), px + r * 8)
+        : (px + r * 12);
+      if (canvasY < top - yPad || canvasY > bottom + yPad) continue;
+      if (canvasX < left - xPad || canvasX > right + xPad) continue;
+      const score = Math.abs(canvasY - py) + Math.max(0, Math.abs(canvasX - px) - r) * 0.08;
+      const hit = { q: Number(point.q), choice, distance: score, score, anchor: point.anchor, area: rect || null };
+      if (!best || hit.score < best.score) best = hit;
+    }
+    return best;
+  } // SOFTM-문항클릭: 얇은 문항영역 hit가 빗나가도 같은 행의 문항앵커 기준으로 선택 보정 - 2026-06-21
 
   /* SOFTM-문항클릭 시작: 문항 앵커 원과 문항영역 클릭을 같은 선택 동작으로 통합 - 2026-06-15 */
   function findChoiceAnchorPointHit(points, canvasX, canvasY, options = {}){
@@ -13141,7 +13171,7 @@
     if (centerRatio < 0.5) {
       width = Math.max(1, width - trimPx);
     } else {
-      left = Math.min(fullWidth - 1, left + trimPx);
+      // SOFTM-한문제보기: 오른쪽 단은 왼쪽을 밀면 문항번호/앵커 라벨이 잘리므로 오른쪽 여백만 줄임 - 2026-06-21
       width = Math.max(1, Math.min(fullWidth - left, width - trimPx));
     }
     return { ...source, left, top, width, height };
@@ -13662,14 +13692,29 @@
         let segmentTopRatio = Number(seg.top);
         if (!hasEndOverride && Number.isFinite(labelStartBoundary)) {
           const labelTopRatio = Math.max(0, Number(labelStartBoundary) - segmentTopPadRatio);
-          if (Number(labelStartBoundary) > Number(seg.top)) {
+          const labelInfo = state.pdfNav?.questionLabelMap && state.pdfNav.questionLabelMap[String(q)];
+          const labelSource = String(labelInfo?.source || "").toLowerCase();
+          const trustedLowerLabel = labelSource && !labelSource.includes("inferred") && !labelSource.includes("column-flow");
+          // SOFTM-한문제보기: 신뢰 가능한 OCR 문제 라벨은 이전 문항 꼬리를 잘라내는 상단 기준으로 허용 - 2026-06-21
+          if (Number(labelStartBoundary) > Number(seg.top) && trustedLowerLabel && Number(labelStartBoundary) - Number(seg.top) < 0.080) {
             segmentTopRatio = Math.max(
               Number(seg.top),
               Math.min(Number(seg.bottom) - 0.03, labelTopRatio)
             );
-          } else if (Number(seg.top) - Number(labelStartBoundary) < 0.045) {
+          } else if (Number(labelStartBoundary) <= Number(seg.top) && Number(seg.top) - Number(labelStartBoundary) < 0.045) { // SOFTM-한문제보기: 추정 라벨이 segment보다 아래로 밀린 경우 정상 상단을 자르지 않음 - 2026-06-21
             segmentTopRatio = Math.max(0, Math.min(Number(seg.bottom) - 0.03, labelTopRatio));
           }
+          if (labelSource.includes("inferred-column-flow")) {
+            const inferredLabelY = Number(labelInfo?.yRatio);
+            const inferredGap = inferredLabelY - Number(seg.top);
+            if (Number.isFinite(inferredLabelY) && inferredGap > 0.035 && inferredGap < 0.095) {
+              const inferredPad = mobileViewport ? 0.020 : 0.014;
+              segmentTopRatio = Math.max(
+                Number(seg.top),
+                Math.min(Number(seg.bottom) - 0.035, inferredLabelY - inferredPad)
+              );
+            }
+          } // SOFTM-한문제보기: inferred-column-flow 시작선은 실제 라벨 직전으로 제한해 이전 문제 선택지 행이 crop에 섞이지 않게 보정 - 2026-06-21
         }
         srcLeft = Math.max(0, Math.floor(fullCanvas.width * seg.left));
         srcTop = Math.max(0, Math.floor(fullCanvas.height * segmentTopRatio));
@@ -13695,9 +13740,27 @@
             : Math.min(0.995, choiceEndRatio);
           segmentBottomRatio = Math.max(segmentBottomRatio, choiceEndCap);
         }
+        const storedChoiceBottomRatio = (() => {
+          const candidates = [];
+          const addRatio = (value) => {
+            const n = Number(value);
+            if (Number.isFinite(n)) candidates.push(Math.max(0, Math.min(1, n)));
+          };
+          const storedAreas = getChoiceClickAreaEntries(q).filter((area) => Number(area?.page || safePage) === Number(safePage));
+          for (const area of storedAreas) addRatio(Number(area?.yRatio) + Number(area?.hRatio || 0));
+          const storedAnchors = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)])
+            .filter((anchor) => Number(anchor?.page || safePage) === Number(safePage));
+          for (const anchor of storedAnchors) addRatio(Number(anchor?.yRatio) + Math.max(0.004, Number(anchor?.hRatio || 0)));
+          if (!candidates.length) return null;
+          return Math.max(...candidates);
+        })();
         if (!hasEndOverride && Number.isFinite(finalContentEndCap)) {
           segmentBottomRatio = Math.min(segmentBottomRatio, Number(finalContentEndCap));
         }
+        if (!hasEndOverride && Number.isFinite(storedChoiceBottomRatio) && storedChoiceBottomRatio <= Number(seg.bottom) + 0.006) {
+          const storedChoicePad = mobileViewport ? 0.018 : 0.014;
+          segmentBottomRatio = Math.max(segmentBottomRatio, Math.min(Number(seg.bottom), storedChoiceBottomRatio + storedChoicePad));
+        } // SOFTM-한문제보기: 다음 문제 topMap이 이르게 잡혀도 현재 저장 문항영역/앵커 하단은 crop에 포함 - 2026-06-21
         if (Number.isFinite(segmentHardBottomRatio)) {
           segmentBottomRatio = Math.min(segmentBottomRatio, segmentHardBottomRatio);
         }
@@ -13738,15 +13801,27 @@
     const segmentDraws = [];
     if (multiSegments.length) {
       const sources = [];
-      for (const seg of multiSegments){
+      const firstSegmentTopRatio = Number.isFinite(Number(state.pdfNav?.questionTopRatioMap?.[q]))
+        ? Math.max(0, Math.min(1, Number(state.pdfNav.questionTopRatioMap[q])))
+        : null;
+      for (let i = 0; i < multiSegments.length; i++){
+        const seg = multiSegments[i];
         const left = Math.max(0, Math.floor(fullCanvas.width * seg.left));
-        const top = Math.max(0, Math.floor(fullCanvas.height * seg.top));
+        const canUseExpandedFirstTop = i === 0
+          && Number.isFinite(firstSegmentTopRatio)
+          && Number.isFinite(Number(seg.top))
+          && Number(seg.top) - firstSegmentTopRatio <= 0.030;
+        const segmentTopRatio = canUseExpandedFirstTop
+          ? Math.min(Number(seg.top), firstSegmentTopRatio)
+          : Number(seg.top);
+        const top = Math.max(0, Math.floor(fullCanvas.height * segmentTopRatio));
         const right = Math.min(fullCanvas.width, Math.ceil(fullCanvas.width * seg.right));
         const bottom = Math.min(fullCanvas.height, Math.ceil(fullCanvas.height * seg.bottom));
         const width = Math.max(1, right - left);
         const height = Math.max(1, bottom - top);
         sources.push(trimSingleColumnDividerSource(fullCanvas, { left, top, width, height }));
       }
+      // SOFTM-2단문항: 한문제 모드 continuation은 첫 단 시작 보정이 가까울 때만 적용해 이전 문제 선택지 유입을 막음 - 2026-06-21
       destWidth = Math.max(1, ...sources.map((item) => item.width));
       const pads = getSingleQuestionCanvasPads(Math.max(1, ...sources.map((item) => item.height)), fullCanvas);
       const segmentGap = Math.max(10, Math.floor(destWidth * 0.012));
@@ -16938,10 +17013,7 @@
         _order: index,
       };
     }).filter(Boolean);
-    const hasManualSequence = mapped.some((seg) => String(seg.source || "").includes("manual"));
-    return mapped.sort((a, b) => hasManualSequence
-      ? (a._order - b._order)
-      : (a.top - b.top || a.left - b.left));
+    return mapped.sort((a, b) => a._order - b._order); // SOFTM-2단문항: 한문제 모드는 저장 순서(primary→continuation)를 유지해 2단 연속 문항이 거꾸로 보이지 않게 함 - 2026-06-21
   }
   // SOFTM-위치맵: 저장된 문제 영역 segment를 한문제 보기 crop의 우선 입력으로 사용 - 2026-06-01
   // SOFTM-위치맵: 2단 문서는 같은 y범위라도 현재 문제의 컬럼만 단일문항 컷에 사용 - 2026-05-31
@@ -18967,6 +19039,10 @@
     if (anchorHit && Number.isFinite(anchorHit.choice)) {
       if (selectChoiceFromPdfHit(q, anchorHit.choice, { event: e })) return;
     }
+    const rowBandHit = findChoiceAnchorRowBandHit(areaPoints, areaRects, xOnCanvas, yOnCanvas);
+    if (rowBandHit && Number.isFinite(rowBandHit.choice)) {
+      if (selectChoiceFromPdfHit(q, rowBandHit.choice, { event: e })) return;
+    } // SOFTM-문항클릭: 문항영역이 얇아 중심 클릭 hit가 누락되면 문항앵커 행 기준으로 보정 선택 - 2026-06-21
     if (areaRects.length) return;
     if (anchors.length){
       const points = anchors.map((a) => {
