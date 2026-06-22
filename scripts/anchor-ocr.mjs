@@ -906,20 +906,23 @@ function buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questio
     let start = Number(topMap[q]);
     if (!Number.isFinite(page) || !Number.isFinite(start)) continue;
     const currentLane = boundsFor(q);
-    const currentLabelTop = Number(questionLabelMap[String(q)]?.yRatio);
-    if (Number.isFinite(currentLabelTop)) {
-      let hasPrevSameLane = false;
-      for (let prev = q - 1; prev >= 1; prev -= 1){
-        if (Number(pageMap[prev]) !== page) continue;
-        if (sameSegmentLane(currentLane, boundsFor(prev))) {
-          hasPrevSameLane = true;
-          break;
-        }
-      }
-      if (hasPrevSameLane) {
-        start = Math.max(start, clamp(currentLabelTop - 0.006, 0.02, 0.97)); // SOFTM-위치맵: 다음 문제와 겹치지 않도록 문제 label 위 segment 여백을 줄임 - 2026-06-17
+    const currentLabel = questionLabelMap[String(q)] || {};
+    const currentLabelTop = Number(currentLabel?.yRatio);
+    const currentLabelInferred = currentLabel?.inferred === true || String(currentLabel?.source || "").startsWith("inferred-");
+    let hasPrevSameLane = false;
+    for (let prev = q - 1; prev >= 1; prev -= 1){
+      if (Number(pageMap[prev]) !== page) continue;
+      if (sameSegmentLane(currentLane, boundsFor(prev))) {
+        hasPrevSameLane = true;
+        break;
       }
     }
+    if (Number.isFinite(currentLabelTop) && !currentLabelInferred && hasPrevSameLane) {
+      start = Math.max(start, clamp(currentLabelTop - 0.006, 0.02, 0.97)); // SOFTM-위치맵: 다음 문제와 겹치지 않도록 문제 label 위 segment 여백을 줄임 - 2026-06-17
+    } else if (Number.isFinite(currentLabelTop) && currentLabelInferred && String(currentLabel?.source || "") === "inferred-column-flow" && hasPrevSameLane) {
+      start = Math.max(start, clamp(currentLabelTop - 0.014, 0.02, 0.97)); // SOFTM-위치맵: 보간 문제번호는 실제 라벨 직전부터 시작해 이전 문제 선택지 행을 문항 후보에서 제외 - 2026-06-21
+    }
+    // SOFTM-문제앵커: 보간 라벨은 실제 문제번호 위치가 아니므로 segment 시작 기준으로 끌어올리지 않음 - 2026-06-21
     let end = 0.95;
     let hardEnd = null;
     let hardBoundary = null;
@@ -3233,8 +3236,9 @@ def should_snap(anchor):
     layout = str(anchor.get("layout") or "").lower()
     if not (source.startswith("segment-choice-anchor") or source.startswith("anchor-image")):
         return False
-    if "pixel-snap" in source or "collapsed-column" in source:
+    if "pixel-snap" in source:
         return False
+    # SOFTM-문항앵커: collapsed-column fallback도 렌더 원형/번호 픽셀을 통과할 때만 실제 앵커로 승격 - 2026-06-20
     if layout == "vertical":
         return bool(anchor.get("inferred") is True or source.startswith("segment-choice-anchor") or "post-" in source)
     # SOFTM-문항앵커: 세로형 fallback도 실제 원형 픽셀로 재확인하되 안정적인 anchor-image 세로 앵커는 원래 x축을 보존 - 2026-06-19
@@ -3254,8 +3258,18 @@ def expected_anchor_xs(anchor, segment):
     if layout == "vertical":
         try:
             current_x = float(anchor.get("xRatio") or 0)
-            # SOFTM-문항앵커: 세로형 추정 앵커는 기하 슬롯이 아니라 현재 행 주변 실제 원형 후보로만 스냅 - 2026-06-19
-            return [clamp(current_x, left + 0.015, right - 0.015)]
+            vertical_slot = left + width * 0.0965
+            xs = []
+            if abs(current_x - vertical_slot) > max(0.010, width * 0.045):
+                xs.append(vertical_slot)
+            xs.append(current_x)
+            out = []
+            for x in xs:
+                x = clamp(x, left + 0.015, right - 0.015)
+                if not any(abs(x - old) < 0.004 for old in out):
+                    out.append(x)
+            return out
+            # SOFTM-문항앵커: 세로형 앵커가 텍스트 내부로 밀린 경우 segment 왼쪽 보기 슬롯에서 원형 후보를 먼저 재탐색 - 2026-06-21
         except Exception:
             return []
     horizontal_slots = [0.0965, 0.3095, 0.5225, 0.7340]
@@ -3321,8 +3335,13 @@ def find_mark_center(arr, anchor, segment):
     layout = str(anchor.get("layout") or "").lower()
     source = str(anchor.get("source") or "").lower()
     is_leading_probe = layout == "vertical" and "post-inferred-leading" in source
+    is_collapsed_grid_probe = layout == "grid" and "collapsed-column" in source
     x_radius = max(34, min(72, w * (0.035 if layout == "grid" else 0.030)))
     y_radius = max(26, min(58, h * (0.020 if layout == "grid" else 0.016)))
+    if is_collapsed_grid_probe:
+        x_radius = max(x_radius, min(88, w * 0.043))
+        y_radius = max(y_radius, min(76, h * 0.026))
+        # SOFTM-문항앵커: 2단 collapsed grid는 기하 추정 오차가 커 실제 원형 후보 탐색 반경을 확장 - 2026-06-20
     if layout == "vertical" and "post-inferred-leading" in source:
         y_radius = max(y_radius, min(92, h * 0.030))
         # SOFTM-문항앵커: 선두 복원 ①은 행 간격 추정이 위로 치우칠 수 있어 실제 원형까지 세로 snap 탐색을 넓힘 - 2026-06-19
@@ -3343,8 +3362,9 @@ def find_mark_center(arr, anchor, segment):
         if bw < 5 or bh < 6 or bw > 34 or bh > 34:
             continue
         density = area / max(1, bw * bh)
-        if density < 0.08 or density > 0.72:
+        if density < 0.055 or density > 0.72:
             continue
+        # SOFTM-문항앵커: 얇게 렌더된 원형 outline이 밀도 0.08 미만이어도 후보에서 탈락하지 않게 허용 - 2026-06-20
         aspect = bw / max(1, bh)
         if aspect < 0.48 or aspect > 1.85:
             continue
@@ -3614,6 +3634,669 @@ def repair_false_horizontal_grid(arr, anchors, segment):
     return repaired
     # SOFTM-문항앵커: 2행 선택지를 한 줄 horizontal로 오판하고 2/4번을 본문 글자로 스냅한 경우 실제 아래 행 원형을 찾아 grid로 복구 - 2026-06-18
 
+def rendered_mark_candidates(arr, segment):
+    h, w = arr.shape
+    seg_left = float(segment["left"]) * w
+    seg_right = float(segment["right"]) * w
+    seg_top = float(segment["top"]) * h
+    seg_bottom = float(segment["bottom"]) * h
+    x0 = int(max(0, seg_left))
+    x1 = int(min(w, seg_right))
+    y0 = int(max(0, seg_top))
+    y1 = int(min(h, seg_bottom))
+    if x1 - x0 < 40 or y1 - y0 < 24:
+        return []
+    comps = connected_components(arr[y0:y1, x0:x1] < 138)
+    candidates = []
+    for lx0, ly0, lx1, ly1, area in comps:
+        bw = lx1 - lx0
+        bh = ly1 - ly0
+        if bw < 6 or bh < 7 or bw > 35 or bh > 35:
+            continue
+        density = area / max(1, bw * bh)
+        if density < 0.08 or density > 0.72:
+            continue
+        aspect = bw / max(1, bh)
+        if aspect < 0.45 or aspect > 1.90:
+            continue
+        # SOFTM-문항앵커: 2014 세로형 원형이 렌더 연결 과정에서 약간 납작하게 잡혀도 후보에서 탈락하지 않게 허용 - 2026-06-20
+        cx = x0 + (lx0 + lx1) * 0.5
+        cy = y0 + (ly0 + ly1) * 0.5
+        candidates.append({
+            "xRatio": clamp(cx / max(1, w), 0.0, 1.0),
+            "yRatio": clamp(cy / max(1, h), 0.0, 1.0),
+            "wRatio": clamp(max(8, bw) / max(1, w), 0.006, 0.035),
+            "hRatio": clamp(max(8, bh) / max(1, h), 0.006, 0.035),
+            "cx": cx,
+            "cy": cy,
+            "bw": bw,
+            "bh": bh,
+            "density": density,
+            "aspect": aspect,
+        })
+    return candidates
+
+def group_mark_rows(candidates, tolerance_px):
+    rows = []
+    for item in sorted(candidates, key=lambda value: value["cy"]):
+        placed = False
+        for row in rows:
+            row_y = sum(value["cy"] for value in row) / len(row)
+            if abs(item["cy"] - row_y) <= tolerance_px:
+                row.append(item)
+                placed = True
+                break
+        if not placed:
+            rows.append([item])
+    return rows
+
+def repair_rendered_choice_layout(arr, anchors, segment):
+    if choice_count != 4 or len(anchors) != 4:
+        return None
+    sources = [str(anchor.get("source") or "").lower() for anchor in anchors]
+    layouts = [str(anchor.get("layout") or "").lower() for anchor in anchors]
+    fallback_count = sum(1 for source in sources if source.startswith("segment-choice-anchor"))
+    unsnapped_fallback_count = sum(1 for source in sources if source.startswith("segment-choice-anchor") and "pixel-snap" not in source)
+    if not any(layout == "grid" for layout in layouts):
+        return None
+    if any("collapsed-column" in source or "tail-grid" in source for source in sources):
+        return None
+    try:
+        page = int(anchors[0].get("page") or 0)
+    except Exception:
+        return None
+    if page <= 0:
+        return None
+    h, w = arr.shape
+    seg_left = float(segment["left"]) * w
+    seg_right = float(segment["right"]) * w
+    seg_top = float(segment["top"]) * h
+    seg_bottom = float(segment["bottom"]) * h
+    seg_width = max(1.0, seg_right - seg_left)
+    seg_height = max(1.0, seg_bottom - seg_top)
+    if seg_width / max(1.0, w) >= 0.72:
+        return None
+    gate_by_choice = {int(anchor.get("choice") or 0): anchor for anchor in anchors}
+    def gate_y(choice):
+        try:
+            return float(gate_by_choice.get(choice, {}).get("yRatio") or 0) * h
+        except Exception:
+            return None
+    top_gate_values = [value for value in (gate_y(1), gate_y(2)) if value is not None and value > 0]
+    bottom_gate_values = [value for value in (gate_y(3), gate_y(4)) if value is not None and value > 0]
+    top_gate = sum(top_gate_values) / len(top_gate_values) if top_gate_values else None
+    bottom_gate = sum(bottom_gate_values) / len(bottom_gate_values) if bottom_gate_values else None
+    suspect_far_grid_top = (
+        fallback_count == 0
+        and top_gate is not None
+        and bottom_gate is not None
+        and bottom_gate - top_gate > max(42.0, seg_height * 0.42)
+    )
+    try:
+        gate_y1 = float(gate_by_choice.get(1, {}).get("yRatio") or 0) * h
+        gate_y2 = float(gate_by_choice.get(2, {}).get("yRatio") or 0) * h
+        gate_y3 = float(gate_by_choice.get(3, {}).get("yRatio") or 0) * h
+        gate_y4 = float(gate_by_choice.get(4, {}).get("yRatio") or 0) * h
+    except Exception:
+        gate_y1 = gate_y2 = gate_y3 = gate_y4 = 0
+    gate_same_tol = max(10.0, seg_height * 0.090)
+    gate_gap_tol = max(12.0, seg_height * 0.120)
+    suspect_grid_row_mismatch = (
+        fallback_count >= 2
+        and gate_y1 > 0
+        and gate_y2 > 0
+        and gate_y3 > 0
+        and gate_y4 > 0
+        and (
+            (abs(gate_y2 - gate_y4) <= gate_same_tol and gate_y3 - gate_y1 >= gate_gap_tol)
+            or (abs(gate_y1 - gate_y3) <= gate_same_tol and gate_y4 - gate_y2 >= gate_gap_tol)
+        )
+    )
+    gate_ys = [value for value in [gate_y1, gate_y2, gate_y3, gate_y4] if value > 0]
+    gate_x1 = float(gate_by_choice.get(1, {}).get("xRatio") or 0) * w
+    gate_x2 = float(gate_by_choice.get(2, {}).get("xRatio") or 0) * w
+    gate_x3 = float(gate_by_choice.get(3, {}).get("xRatio") or 0) * w
+    gate_x4 = float(gate_by_choice.get(4, {}).get("xRatio") or 0) * w
+    suspect_vertical_grid = (
+        fallback_count >= 2
+        and len(gate_ys) == 4
+        and max(gate_ys) - min(gate_ys) >= max(54.0, seg_height * 0.18)
+        and max(gate_ys) - min(gate_ys) <= max(112.0, seg_height * 0.30)
+        and abs(gate_x1 - gate_x3) <= max(16.0, seg_width * 0.055)
+        and abs(gate_x2 - gate_x4) <= max(20.0, seg_width * 0.070)
+        and min(gate_x2, gate_x4) - max(gate_x1, gate_x3) >= seg_width * 0.22
+    )
+    segment_choice_grid_probe = (
+        fallback_count >= 3
+        and len(gate_ys) == 4
+        and all(source.startswith("segment-choice-anchor") for source in sources)
+        and max(gate_ys) - min(gate_ys) <= max(72.0, seg_height * 0.24)
+    )
+    segment_top_start_vertical_probe = (
+        seg_width / max(1.0, w) < 0.70
+        and seg_height / max(1.0, h) <= 0.080
+        and len(gate_ys) == 4
+        and min(gate_ys) <= seg_top + max(110.0, seg_height * 0.48)
+    )
+    if not ((fallback_count >= 2 and unsnapped_fallback_count >= 1) or suspect_far_grid_top or suspect_grid_row_mismatch or suspect_vertical_grid or segment_choice_grid_probe):
+        return None
+    # SOFTM-문항앵커: grid 행/열이 본문 숫자로 잘못 snap된 경우에만 렌더 원형 후보로 제한 재검증 - 2026-06-20
+    candidates = rendered_mark_candidates(arr, segment)
+    if not candidates:
+        return None
+    left_slot = seg_left + seg_width * 0.0965
+    right_slot = seg_left + seg_width * 0.5225
+    x_tol = max(26.0, min(76.0, seg_width * 0.18))
+    y_tol = max(10.0, min(24.0, seg_height * 0.11))
+    if suspect_vertical_grid or segment_choice_grid_probe:
+        y_tol = max(8.0, min(14.0, seg_height * 0.055))
+        # SOFTM-문항앵커: grid로 오인된 세로형은 촘촘한 행 간격을 분리하기 위해 row grouping 허용치를 축소 - 2026-06-20
+    left_candidates = [item for item in candidates if abs(item["cx"] - left_slot) <= x_tol and item["cx"] <= seg_left + seg_width * 0.30]
+    right_candidates = [item for item in candidates if abs(item["cx"] - right_slot) <= x_tol and item["cx"] >= seg_left + seg_width * 0.34]
+    vertical_min_cy = seg_top
+    if suspect_vertical_grid and gate_ys and not segment_top_start_vertical_probe:
+        vertical_min_cy = max(seg_top, min(gate_ys) - max(46.0, seg_height * 0.16))
+        # SOFTM-문항앵커: 하단 두 행만 grid로 잡힌 세로형은 현재 앵커 위쪽의 실제 보기 원형까지만 세로 후보로 허용 - 2026-06-20
+
+    base_by_choice = {int(anchor.get("choice") or 0): anchor for anchor in anchors}
+
+    def is_left_outline_candidate(item):
+        bw = float(item.get("bw") or 0)
+        bh = float(item.get("bh") or 0)
+        density = float(item.get("density") or 1.0)
+        aspect = float(item.get("aspect") or 0.0)
+        return 10 <= bw <= 34 and 12 <= bh <= 34 and 0.055 <= density <= 0.22 and 0.42 <= aspect <= 2.10
+
+    def is_strong_right_outline_candidate(item):
+        bw = float(item.get("bw") or 0)
+        bh = float(item.get("bh") or 0)
+        density = float(item.get("density") or 1.0)
+        aspect = float(item.get("aspect") or 0.0)
+        return 20 <= bw <= 34 and 20 <= bh <= 34 and 0.055 <= density <= 0.18 and 0.42 <= aspect <= 1.65
+
+    def has_preceding_left_vertical_sequence(grid_first_y):
+        return False
+
+    if not suspect_far_grid_top or seg_height / max(1.0, h) <= 0.105:
+        left_outline = [item for item in left_candidates if is_left_outline_candidate(item)]
+        right_outline = [item for item in right_candidates if is_strong_right_outline_candidate(item)]
+        def has_preceding_left_vertical_sequence(grid_first_y):
+            loose_left = []
+            seen = set()
+            for item in left_outline + left_candidates:
+                bw = float(item.get("bw") or 0)
+                bh = float(item.get("bh") or 0)
+                density = float(item.get("density") or 1.0)
+                aspect = float(item.get("aspect") or 0.0)
+                key = (round(item["cx"], 1), round(item["cy"], 1))
+                if key in seen:
+                    continue
+                if (
+                    item["cx"] <= seg_left + seg_width * 0.24
+                    and 6 <= bw <= 24
+                    and 7 <= bh <= 24
+                    and 0.10 <= density <= 0.55
+                    and 0.40 <= aspect <= 2.10
+                ):
+                    loose_left.append(item)
+                    seen.add(key)
+            rows = group_mark_rows(loose_left, max(8.0, min(14.0, y_tol)))
+            picks = []
+            for row in rows:
+                row = [item for item in row if item["cx"] <= seg_left + seg_width * 0.24]
+                if not row:
+                    continue
+                picks.append(min(row, key=lambda item: abs(item["cx"] - left_slot)))
+            picks = sorted(picks, key=lambda item: item["cy"])
+            for start in range(0, max(0, len(picks) - 3)):
+                seq = picks[start:start + 4]
+                gaps = [seq[idx + 1]["cy"] - seq[idx]["cy"] for idx in range(3)]
+                x_spread = max(item["cx"] for item in seq) - min(item["cx"] for item in seq)
+                if (
+                    seq[0]["cy"] <= grid_first_y - max(18.0, seg_height * 0.075)
+                    and seq[-1]["cy"] <= grid_first_y + max(42.0, seg_height * 0.18)
+                    and x_spread <= max(16.0, min(34.0, seg_width * 0.085))
+                    and min(gaps) >= max(8.0, seg_height * 0.030)
+                    and max(gaps) <= max(58.0, seg_height * 0.28)
+                ):
+                    return True
+            return False
+            # SOFTM-문항앵커: compact grid 후보보다 위에서 같은 x축 원형 4개가 이어지면 실제 세로형 보기로 본다 - 2026-06-21
+        grid_pairs = []
+        for left in sorted(left_outline, key=lambda item: item["cy"]):
+            matches = [
+                right for right in right_outline
+                if abs(right["cy"] - left["cy"]) <= max(12.0, y_tol * 1.40)
+            ]
+            if not matches:
+                continue
+            right = min(matches, key=lambda item: abs(item["cy"] - left["cy"]))
+            row_y = (left["cy"] + right["cy"]) * 0.5
+            if row_y < seg_top + max(42.0, seg_height * 0.34):
+                continue
+            grid_pairs.append((left, right, row_y))
+        grid_pairs = sorted(grid_pairs, key=lambda row: row[2])
+        compact_pair = None
+        for idx in range(0, len(grid_pairs) - 1):
+            first = grid_pairs[idx]
+            second = grid_pairs[idx + 1]
+            row_gap = second[2] - first[2]
+            if max(10.0, seg_height * 0.035) <= row_gap <= max(72.0, seg_height * 0.28):
+                compact_pair = (first, second)
+                break
+        if compact_pair:
+            if not has_preceding_left_vertical_sequence(compact_pair[0][2]):
+                repaired = []
+                for choice, snap in [
+                    (1, compact_pair[0][0]),
+                    (2, compact_pair[0][1]),
+                    (3, compact_pair[1][0]),
+                    (4, compact_pair[1][1]),
+                ]:
+                    item = dict(base_by_choice.get(choice) or anchors[min(choice - 1, len(anchors) - 1)])
+                    item.update({k: snap[k] for k in ("xRatio", "yRatio", "wRatio", "hRatio")})
+                    item["choice"] = choice
+                    item["layout"] = "grid"
+                    item["source"] = f"{item.get('source') or 'anchor-image'}-rendered-outline-grid"
+                    item["confidence"] = max(float(item.get("confidence") or 0.55), 0.74)
+                    repaired.append(item)
+                return repaired
+        # SOFTM-문항앵커: 실제 오른쪽 원형 outline 두 행이 있으면 문제문 글자 세로 후보보다 2x2 grid를 우선 - 2026-06-20
+
+    def compact_outline_grid_repair():
+        if seg_height / max(1.0, h) > 0.105:
+            return None
+        left_outline = [item for item in left_candidates if is_left_outline_candidate(item)]
+        right_outline = [item for item in right_candidates if is_strong_right_outline_candidate(item)]
+        grid_pairs = []
+        for left in sorted(left_outline, key=lambda item: item["cy"]):
+            matches = [
+                right for right in right_outline
+                if abs(right["cy"] - left["cy"]) <= max(12.0, y_tol * 1.40)
+            ]
+            if not matches:
+                continue
+            right = min(matches, key=lambda item: abs(item["cy"] - left["cy"]))
+            row_y = (left["cy"] + right["cy"]) * 0.5
+            if row_y < seg_top + max(42.0, seg_height * 0.34):
+                continue
+            grid_pairs.append((left, right, row_y))
+        grid_pairs = sorted(grid_pairs, key=lambda row: row[2])
+        best_pair = None
+        best_gap = -1.0
+        for idx in range(0, len(grid_pairs) - 1):
+            first = grid_pairs[idx]
+            second = grid_pairs[idx + 1]
+            row_gap = second[2] - first[2]
+            if max(10.0, seg_height * 0.035) <= row_gap <= max(72.0, seg_height * 0.28) and row_gap > best_gap:
+                best_pair = (first, second)
+                best_gap = row_gap
+        if not best_pair:
+            return None
+        if has_preceding_left_vertical_sequence(best_pair[0][2]):
+            return None
+        repaired = []
+        for choice, snap in [
+            (1, best_pair[0][0]),
+            (2, best_pair[0][1]),
+            (3, best_pair[1][0]),
+            (4, best_pair[1][1]),
+        ]:
+            item = dict(base_by_choice.get(choice) or anchors[min(choice - 1, len(anchors) - 1)])
+            item.update({k: snap[k] for k in ("xRatio", "yRatio", "wRatio", "hRatio")})
+            item["choice"] = choice
+            item["layout"] = "grid"
+            item["source"] = f"{item.get('source') or 'anchor-image'}-rendered-outline-grid"
+            item["confidence"] = max(float(item.get("confidence") or 0.55), 0.74)
+            repaired.append(item)
+        return repaired
+        # SOFTM-문항앵커: 짧은 segment는 vertical 반환 직전에도 실제 2행 outline grid를 다시 우선 적용 - 2026-06-20
+
+    def row_estimate(choices):
+        values = []
+        for choice in choices:
+            try:
+                values.append(float(base_by_choice.get(choice, {}).get("yRatio") or 0) * h)
+            except Exception:
+                pass
+        if not values:
+            return None
+        values = sorted(values)
+        return values[len(values) // 2] if len(values) % 2 else (values[0] + values[-1]) * 0.5
+
+    def pick_slot_mark(slot_x, y_center, prefer_below=False):
+        if y_center is None:
+            return None
+        top_band = max(seg_top, y_center - max(10.0, seg_height * 0.040))
+        bottom_band = min(seg_bottom, y_center + (max(92.0, seg_height * 0.520) if prefer_below else max(34.0, seg_height * 0.180)))
+        pool = [
+            item for item in candidates
+            if abs(item["cx"] - slot_x) <= x_tol
+            and top_band <= item["cy"] <= bottom_band
+        ]
+        if not pool:
+            return None
+        def score(item):
+            upward_penalty = max(0.0, y_center - item["cy"]) * (1.2 if prefer_below else 0.35)
+            density = float(item.get("density") or 1.0)
+            aspect = float(item.get("aspect") or 0.0)
+            bw = float(item.get("bw") or 0)
+            bh = float(item.get("bh") or 0)
+            shape_penalty = 0.0 if 10 <= bw <= 32 and 12 <= bh <= 32 and 0.08 <= density <= 0.32 and 0.45 <= aspect <= 1.50 else 28.0
+            return abs(item["cx"] - slot_x) * 0.80 + abs(item["cy"] - y_center) * (0.22 if prefer_below else 0.55) + upward_penalty + shape_penalty
+        return min(pool, key=score)
+
+    def pick_vertical_row_mark(row):
+        def score(item):
+            density = float(item.get("density") or 1.0)
+            aspect = float(item.get("aspect") or 0.0)
+            bw = float(item.get("bw") or 0)
+            bh = float(item.get("bh") or 0)
+            shape_penalty = 0.0 if 8 <= bw <= 34 and 8 <= bh <= 32 and 0.06 <= density <= 0.50 and 0.42 <= aspect <= 2.05 else 20.0
+            return abs(item["cx"] - left_slot) * 2.15 + shape_penalty
+        return min(row, key=score) if row else None
+        # SOFTM-문항앵커: 세로형 후보는 단순 최좌측 컴포넌트가 아니라 예상 원형 slot에 가까운 번호/원 후보를 선택 - 2026-06-20
+
+    def pick_vertical_sequence(rows):
+        if len(rows) < 4:
+            return None
+        if not (suspect_vertical_grid or segment_choice_grid_probe or suspect_far_grid_top):
+            return rows[:4]
+        # SOFTM-문항앵커: 멀리 벌어진 grid 오판도 앞 4개가 아니라 실제 세로 보기 간격에 맞는 연속 4행을 선택 - 2026-06-20
+        if seg_left / max(1.0, w) >= 0.45 and seg_bottom / max(1.0, h) >= 0.94 and seg_height / max(1.0, h) <= 0.14:
+            return rows[-4:]
+        if segment_top_start_vertical_probe and rows[0]["cy"] <= seg_top + max(42.0, seg_height * 0.20):
+            return rows[:4]
+        target_last = max(gate_ys) if gate_ys else rows[min(3, len(rows) - 1)]["cy"]
+        if suspect_far_grid_top and len(rows) >= 4:
+            best_combo = None
+            best_combo_score = 1e18
+            for i in range(0, len(rows) - 3):
+                for j in range(i + 1, len(rows) - 2):
+                    for k in range(j + 1, len(rows) - 1):
+                        for l in range(k + 1, len(rows)):
+                            seq = [rows[i], rows[j], rows[k], rows[l]]
+                            gaps = [seq[idx + 1]["cy"] - seq[idx]["cy"] for idx in range(3)]
+                            if min(gaps) < max(9.0, seg_height * 0.035) or max(gaps) > max(132.0, seg_height * 0.40):
+                                continue
+                            x_spread = max(item["cx"] for item in seq) - min(item["cx"] for item in seq)
+                            if x_spread > max(16.0, min(34.0, seg_width * 0.085)):
+                                continue
+                            span = seq[-1]["cy"] - seq[0]["cy"]
+                            if span < max(90.0, seg_height * 0.38):
+                                continue
+                            gap_mean = sum(gaps) / len(gaps)
+                            gap_variance = sum(abs(gap - gap_mean) for gap in gaps)
+                            score = abs(seq[-1]["cy"] - target_last) * 0.85 + gap_variance * 0.55 + x_spread * 1.45
+                            if score < best_combo_score:
+                                best_combo = seq
+                                best_combo_score = score
+            if best_combo:
+                return best_combo
+            # SOFTM-문항앵커: 긴 세로형 안에 본문 글자 후보가 끼면 연속 4행 대신 같은 x축 조합 4개를 선택 - 2026-06-20
+        best = None
+        best_score = 1e18
+        for start in range(0, len(rows) - 3):
+            seq = rows[start:start + 4]
+            gaps = [seq[idx + 1]["cy"] - seq[idx]["cy"] for idx in range(3)]
+            if min(gaps) < max(9.0, seg_height * 0.045) or max(gaps) > max(72.0, seg_height * 0.35):
+                continue
+            x_spread = max(item["cx"] for item in seq) - min(item["cx"] for item in seq)
+            if x_spread > max(12.0, min(28.0, seg_width * 0.070)):
+                continue
+            gap_mean = sum(gaps) / len(gaps)
+            gap_variance = sum(abs(gap - gap_mean) for gap in gaps)
+            score = abs(seq[-1]["cy"] - target_last) * 0.80 + gap_variance * 0.65 + x_spread * 1.25
+            if score < best_score:
+                best = seq
+                best_score = score
+        return best
+        # SOFTM-문항앵커: false-grid 세로형은 마지막 4개가 아니라 현재 gate y와 가장 맞는 연속 4행을 선택 - 2026-06-20
+
+    def has_grid_right_pair_for_vertical_rows(seq):
+        if not seq:
+            return False
+        if seq[0]["cy"] <= seg_top + max(42.0, seg_height * 0.20):
+            return False
+        if seg_left / max(1.0, w) >= 0.45 and seg_bottom / max(1.0, h) >= 0.94 and seg_height / max(1.0, h) <= 0.14:
+            return False
+        if seq[-1]["cy"] - seq[0]["cy"] >= max(90.0, seg_height * 0.45) and suspect_far_grid_top:
+            return False
+            # SOFTM-문항앵커: 긴 세로형 4행은 오른쪽 본문 글자 조각을 grid 오른쪽 원형 후보로 오인하지 않음 - 2026-06-20
+        def is_right_outline(candidate):
+            bw = float(candidate.get("bw") or 0)
+            bh = float(candidate.get("bh") or 0)
+            density = float(candidate.get("density") or 1.0)
+            aspect = float(candidate.get("aspect") or 0.0)
+            return 10 <= bw <= 34 and 10 <= bh <= 34 and 0.06 <= density <= 0.20 and 0.42 <= aspect <= 2.05
+        matched = 0
+        for item in seq:
+            if any(abs(candidate["cy"] - item["cy"]) <= max(10.0, y_tol * 1.30) and is_right_outline(candidate) for candidate in right_candidates):
+                matched += 1
+        # SOFTM-문항앵커: 긴 세로형 문장 오른쪽 글자 조각이 아니라 실제 오른쪽 원형 outline이 있을 때만 grid 후보로 본다 - 2026-06-20
+        return matched >= 2
+        # SOFTM-문항앵커: segment 상단 직후 세로 보기와 오른쪽 단 하단 세로 보기는 오른쪽 본문 조각을 grid 원형으로 보지 않음 - 2026-06-20
+
+    left_rows = group_mark_rows(left_candidates, y_tol)
+    vertical_rows = []
+    for row in left_rows:
+        row = sorted(row, key=lambda item: item["cx"])
+        if not row:
+            continue
+        pick = pick_vertical_row_mark(row)
+        if not pick:
+            continue
+        if pick["cy"] < vertical_min_cy:
+            continue
+        if pick["cx"] > seg_left + seg_width * 0.24:
+            continue
+        vertical_rows.append(pick)
+    vertical_rows = sorted(vertical_rows, key=lambda item: item["cy"])
+    best_four = pick_vertical_sequence(vertical_rows)
+    if best_four and not has_grid_right_pair_for_vertical_rows(best_four):
+        gaps = [best_four[idx + 1]["cy"] - best_four[idx]["cy"] for idx in range(3)]
+        x_spread = max(item["cx"] for item in best_four) - min(item["cx"] for item in best_four)
+        if (
+            x_spread <= max(12.0, min(28.0, seg_width * 0.070))
+            and min(gaps) >= max(9.0, seg_height * 0.045)
+            and max(gaps) <= max(72.0, seg_height * 0.35)
+        ):
+            outline_grid = compact_outline_grid_repair()
+            if outline_grid:
+                return outline_grid
+            repaired = []
+            for idx, snap in enumerate(best_four, start=1):
+                item = dict(base_by_choice.get(idx) or anchors[min(idx - 1, len(anchors) - 1)])
+                item.update({k: snap[k] for k in ("xRatio", "yRatio", "wRatio", "hRatio")})
+                item["choice"] = idx
+                item["layout"] = "vertical"
+                item["source"] = f"{item.get('source') or 'segment-choice-anchor'}-rendered-vertical"
+                item["confidence"] = max(float(item.get("confidence") or 0.55), 0.72)
+                repaired.append(item)
+            return repaired
+        # SOFTM-문항앵커: 세로 원형 4개가 같은 x축에 모이면 grid 후보보다 먼저 세로형으로 확정 - 2026-06-20
+    if suspect_far_grid_top and len(vertical_rows) >= 4:
+        lower_vertical_rows = [item for item in vertical_rows if item["cy"] >= seg_top + max(42.0, seg_height * 0.18)]
+        long_four = lower_vertical_rows[:4] if len(lower_vertical_rows) >= 4 else None
+        if long_four:
+            gaps = [long_four[idx + 1]["cy"] - long_four[idx]["cy"] for idx in range(3)]
+            x_spread = max(item["cx"] for item in long_four) - min(item["cx"] for item in long_four)
+            if (
+                long_four[-1]["cy"] - long_four[0]["cy"] >= max(90.0, seg_height * 0.45)
+                and x_spread <= max(14.0, min(30.0, seg_width * 0.075))
+                and min(gaps) >= max(9.0, seg_height * 0.040)
+                and max(gaps) <= max(124.0, seg_height * 0.36)
+            ):
+                repaired = []
+                for idx, snap in enumerate(long_four, start=1):
+                    item = dict(base_by_choice.get(idx) or anchors[min(idx - 1, len(anchors) - 1)])
+                    item.update({k: snap[k] for k in ("xRatio", "yRatio", "wRatio", "hRatio")})
+                    item["choice"] = idx
+                    item["layout"] = "vertical"
+                    item["source"] = f"{item.get('source') or 'anchor-image'}-rendered-long-vertical"
+                    item["confidence"] = max(float(item.get("confidence") or 0.55), 0.74)
+                    repaired.append(item)
+                return repaired
+            # SOFTM-문항앵커: anchor-image grid가 긴 세로형 보기의 2/4번 행으로 오판된 경우 grid 복구보다 세로형을 우선 - 2026-06-20
+        tail_four = vertical_rows[-4:] if len(vertical_rows) >= 4 else None
+        if tail_four:
+            gaps = [tail_four[idx + 1]["cy"] - tail_four[idx]["cy"] for idx in range(3)]
+            x_spread = max(item["cx"] for item in tail_four) - min(item["cx"] for item in tail_four)
+            if (
+                tail_four[-1]["cy"] - tail_four[0]["cy"] >= max(90.0, seg_height * 0.42)
+                and x_spread <= max(16.0, min(34.0, seg_width * 0.085))
+                and min(gaps) >= max(9.0, seg_height * 0.035)
+                and max(gaps) <= max(132.0, seg_height * 0.40)
+            ):
+                repaired = []
+                for idx, snap in enumerate(tail_four, start=1):
+                    item = dict(base_by_choice.get(idx) or anchors[min(idx - 1, len(anchors) - 1)])
+                    item.update({k: snap[k] for k in ("xRatio", "yRatio", "wRatio", "hRatio")})
+                    item["choice"] = idx
+                    item["layout"] = "vertical"
+                    item["source"] = f"{item.get('source') or 'anchor-image'}-rendered-tail-vertical"
+                    item["confidence"] = max(float(item.get("confidence") or 0.55), 0.74)
+                    repaired.append(item)
+                return repaired
+            # SOFTM-문항앵커: 문제 문장 후보가 세로 rows 앞에 섞이면 마지막 4개 원형을 실제 1~4 보기로 확정 - 2026-06-20
+
+    top_est = row_estimate((1, 2))
+    bottom_est = row_estimate((3, 4))
+    if suspect_far_grid_top and top_est is not None and bottom_est is not None:
+        target_gap = max(18.0, min(44.0, seg_height * 0.20))
+        top_target = max(seg_top, bottom_est - target_gap)
+        top_left = pick_slot_mark(left_slot, top_target, False)
+        top_right = pick_slot_mark(right_slot, top_target, False)
+        if top_left and top_right:
+            row_y = (top_left["cy"] + top_right["cy"]) * 0.5
+            if (
+                row_y > top_est + max(14.0, seg_height * 0.10)
+                and bottom_est - row_y >= max(12.0, seg_height * 0.10)
+                and abs(top_left["cy"] - top_right["cy"]) <= max(12.0, seg_height * 0.08)
+            ):
+                repaired = []
+                for choice, snap in [(1, top_left), (2, top_right)]:
+                    item = dict(base_by_choice.get(choice) or anchors[min(choice - 1, len(anchors) - 1)])
+                    item.update({k: snap[k] for k in ("xRatio", "yRatio", "wRatio", "hRatio")})
+                    item["choice"] = choice
+                    item["layout"] = "grid"
+                    item["source"] = f"{item.get('source') or 'anchor-image'}-rendered-grid-top"
+                    item["confidence"] = max(float(item.get("confidence") or 0.55), 0.74)
+                    repaired.append(item)
+                for choice in (3, 4):
+                    item = dict(base_by_choice.get(choice) or anchors[min(choice - 1, len(anchors) - 1)])
+                    item["choice"] = choice
+                    item["layout"] = "grid"
+                    repaired.append(item)
+                return repaired
+        # SOFTM-문항앵커: 3/4번 실제 보기 행을 기준으로 본문 쪽에 붙은 1/2번 grid 앵커를 같은 row 원형으로 재정렬 - 2026-06-20
+    try:
+        y1 = float(base_by_choice.get(1, {}).get("yRatio") or 0) * h
+        y2 = float(base_by_choice.get(2, {}).get("yRatio") or 0) * h
+        y3 = float(base_by_choice.get(3, {}).get("yRatio") or 0) * h
+        y4 = float(base_by_choice.get(4, {}).get("yRatio") or 0) * h
+    except Exception:
+        y1 = y2 = y3 = y4 = 0
+    row_snap_updates = {}
+    row_same_tol = max(10.0, seg_height * 0.090)
+    row_gap_tol = max(12.0, seg_height * 0.120)
+    if y1 > 0 and y2 > 0 and y3 > 0 and y4 > 0:
+        if abs(y2 - y4) <= row_same_tol and y3 - y1 >= row_gap_tol:
+            snap = pick_slot_mark(right_slot, y1, False)
+            if snap and abs(snap["cy"] - y1) <= row_same_tol and y4 - snap["cy"] >= row_gap_tol:
+                row_snap_updates[2] = snap
+        if abs(y1 - y3) <= row_same_tol and y4 - y2 >= row_gap_tol:
+            snap = pick_slot_mark(left_slot, y2, False)
+            if snap and abs(snap["cy"] - y2) <= row_same_tol and y3 - snap["cy"] >= row_gap_tol:
+                row_snap_updates[1] = snap
+    if row_snap_updates:
+        repaired = []
+        for choice in range(1, choice_count + 1):
+            item = dict(base_by_choice.get(choice) or anchors[min(choice - 1, len(anchors) - 1)])
+            snap = row_snap_updates.get(choice)
+            if snap:
+                item.update({k: snap[k] for k in ("xRatio", "yRatio", "wRatio", "hRatio")})
+                item["source"] = f"{item.get('source') or 'segment-choice-anchor'}-rendered-row-sibling"
+                item["confidence"] = max(float(item.get("confidence") or 0.55), 0.72)
+            item["choice"] = choice
+            item["layout"] = "grid"
+            repaired.append(item)
+        return repaired
+        # SOFTM-문항앵커: grid 한쪽 상단 앵커가 하단 형제 행으로 붙으면 반대쪽 상단 앵커 y를 기준으로 해당 slot만 재스냅 - 2026-06-20
+    selected = []
+    if top_est is not None and bottom_est is not None and bottom_est - top_est >= max(12.0, seg_height * 0.070):
+        top_left = pick_slot_mark(left_slot, top_est, True)
+        top_right = pick_slot_mark(right_slot, top_est, True)
+        if top_left and top_right:
+            top_row_y = (top_left["cy"] + top_right["cy"]) * 0.5
+            bottom_center = max(bottom_est, top_row_y + max(14.0, seg_height * 0.080))
+            bottom_left = pick_slot_mark(left_slot, bottom_center, True)
+            bottom_right = pick_slot_mark(right_slot, bottom_center, True)
+        else:
+            bottom_left = None
+            bottom_right = None
+        if top_left and top_right and bottom_left and bottom_right:
+            bottom_row_y = (bottom_left["cy"] + bottom_right["cy"]) * 0.5
+            if bottom_row_y - top_row_y >= max(12.0, seg_height * 0.070):
+                selected = [(top_left, top_right, top_row_y), (bottom_left, bottom_right, bottom_row_y)]
+    if len(selected) == 2:
+        repaired = []
+        for choice, snap in [
+            (1, selected[0][0]),
+            (2, selected[0][1]),
+            (3, selected[1][0]),
+            (4, selected[1][1]),
+        ]:
+            item = dict(base_by_choice.get(choice) or anchors[min(choice - 1, len(anchors) - 1)])
+            item.update({k: snap[k] for k in ("xRatio", "yRatio", "wRatio", "hRatio")})
+            item["choice"] = choice
+            item["layout"] = "grid"
+            item["source"] = f"{item.get('source') or 'segment-choice-anchor'}-rendered-grid"
+            item["confidence"] = max(float(item.get("confidence") or 0.55), 0.72)
+            repaired.append(item)
+        return repaired
+
+    left_rows = group_mark_rows(left_candidates, y_tol)
+    vertical_rows = []
+    for row in left_rows:
+        row = sorted(row, key=lambda item: item["cx"])
+        if not row:
+            continue
+        pick = pick_vertical_row_mark(row)
+        if not pick:
+            continue
+        if pick["cy"] < vertical_min_cy:
+            continue
+        if pick["cx"] > seg_left + seg_width * 0.24:
+            continue
+        vertical_rows.append(pick)
+    vertical_rows = sorted(vertical_rows, key=lambda item: item["cy"])
+    best_four = pick_vertical_sequence(vertical_rows)
+    if best_four and not has_grid_right_pair_for_vertical_rows(best_four):
+        gaps = [best_four[idx + 1]["cy"] - best_four[idx]["cy"] for idx in range(3)]
+        x_spread = max(item["cx"] for item in best_four) - min(item["cx"] for item in best_four)
+        if (
+            x_spread <= max(12.0, min(28.0, seg_width * 0.070))
+            and min(gaps) >= max(9.0, seg_height * 0.045)
+            and max(gaps) <= max(72.0, seg_height * 0.35)
+        ):
+            outline_grid = compact_outline_grid_repair()
+            if outline_grid:
+                return outline_grid
+            base_by_choice = {int(anchor.get("choice") or 0): anchor for anchor in anchors}
+            repaired = []
+            for idx, snap in enumerate(best_four, start=1):
+                item = dict(base_by_choice.get(idx) or anchors[min(idx - 1, len(anchors) - 1)])
+                item.update({k: snap[k] for k in ("xRatio", "yRatio", "wRatio", "hRatio")})
+                item["choice"] = idx
+                item["layout"] = "vertical"
+                item["source"] = f"{item.get('source') or 'segment-choice-anchor'}-rendered-vertical"
+                item["confidence"] = max(float(item.get("confidence") or 0.55), 0.72)
+                repaired.append(item)
+            return repaired
+    return None
+    # SOFTM-문항앵커: 2단 문제는 unsnapped fallback이 있을 때만 렌더 원형 후보 배치로 vertical/grid를 재검증 - 2026-06-20
+
 out = {}
 image_cache = {}
 for q in range(1, question_count + 1):
@@ -3661,6 +4344,9 @@ for q in range(1, question_count + 1):
                 if page not in image_cache:
                     image_cache[page] = np.array(Image.open(page_files[page]).convert("L"))
                 segment = segment_for(q, page, next_anchors[0])
+                repaired_layout = repair_rendered_choice_layout(image_cache[page], next_anchors, segment)
+                if repaired_layout:
+                    next_anchors = repaired_layout
                 repaired_grid = repair_false_horizontal_grid(image_cache[page], next_anchors, segment)
                 if repaired_grid:
                     next_anchors = repaired_grid
@@ -3779,6 +4465,62 @@ function alignGridFallbackRowsToSnappedSiblings(choiceMap, questionCount, choice
   return out;
 }
 // SOFTM-문항앵커: grid fallback의 한쪽 앵커가 본문 글자에 남아 있으면 실제 스냅된 형제 row 기준으로 높이를 보정 - 2026-06-19
+
+function alignGridLowerRowColumnsToUpper(choiceMap, questionCount, choiceCount){
+  const out = {};
+  for (let q = 1; q <= questionCount; q += 1){
+    const key = String(q);
+    const anchors = Array.isArray(choiceMap?.[key]) ? choiceMap[key].map((item) => ({ ...item })) : [];
+    if (choiceCount !== 4 || anchors.length !== 4 || !anchors.every((item) => String(item?.layout || "") === "grid")) {
+      if (anchors.length) out[key] = anchors;
+      continue;
+    }
+    const byChoice = new Map(anchors.map((item) => [Number(item.choice), item]));
+    const ordered = [1, 2, 3, 4].map((choice) => byChoice.get(choice));
+    if (ordered.some((item) => !item)) {
+      out[key] = anchors;
+      continue;
+    }
+    const page = Number(ordered[0].page);
+    const xs = ordered.map((item) => Number(item.xRatio));
+    const ys = ordered.map((item) => Number(item.yRatio));
+    if (
+      !Number.isFinite(page)
+      || ordered.some((item) => Number(item.page) !== page)
+      || xs.some((value) => !Number.isFinite(value))
+      || ys.some((value) => !Number.isFinite(value))
+    ) {
+      out[key] = anchors;
+      continue;
+    }
+    const topRowAligned = Math.abs(ys[0] - ys[1]) <= 0.016;
+    const bottomRowAligned = Math.abs(ys[2] - ys[3]) <= 0.016;
+    const rowGap = ((ys[2] + ys[3]) * 0.5) - ((ys[0] + ys[1]) * 0.5);
+    if (!topRowAligned || !bottomRowAligned || rowGap <= 0.007) {
+      out[key] = anchors;
+      continue;
+    }
+    const leftGap = xs[2] - xs[0];
+    const rightGap = xs[3] - xs[1];
+    const threshold = Math.max(0.010, Math.min(0.018, Math.abs(xs[1] - xs[0]) * 0.075));
+    const sameDirectionDrift = leftGap > threshold && rightGap > threshold && Math.abs(leftGap - rightGap) <= Math.max(0.012, threshold * 1.25);
+    if (!sameDirectionDrift) {
+      out[key] = anchors;
+      continue;
+    }
+    ordered[2].xRatio = ordered[0].xRatio;
+    ordered[2].wRatio = ordered[0].wRatio || ordered[2].wRatio;
+    ordered[2].source = `${ordered[2].source || "segment-choice-anchor-grid"}-column-align`;
+    ordered[2].confidence = Math.max(Number(ordered[2].confidence) || 0.60, Math.min(0.76, Number(ordered[0].confidence) || 0.74));
+    ordered[3].xRatio = ordered[1].xRatio;
+    ordered[3].wRatio = ordered[1].wRatio || ordered[3].wRatio;
+    ordered[3].source = `${ordered[3].source || "segment-choice-anchor-grid"}-column-align`;
+    ordered[3].confidence = Math.max(Number(ordered[3].confidence) || 0.60, Math.min(0.76, Number(ordered[1].confidence) || 0.74));
+    out[key] = ordered.sort((a, b) => Number(a.choice) - Number(b.choice));
+  }
+  return out;
+}
+// SOFTM-문항앵커: 2행 grid 하단 앵커가 선택지 텍스트 내부 숫자로 같이 밀리면 상단 row의 같은 column x축으로 복원 - 2026-06-21
 
 /* SOFTM-문항영역 시작: 위치맵 생성 단계에서 렌더 PNG 픽셀 기반 정밀 문항영역을 생성 - 2026-06-16 */
 async function buildPreciseChoiceClickAreaMapFromRenderedPages(pageDir, choiceAnchorMap, questionSegments, questionColumnBoundsMap, questionLabelMap, questionCount, choiceCount){
@@ -4030,13 +4772,13 @@ def reconcile_sibling_choice_areas(unique, anchors, rows, layout, segment):
 
     if str(layout) == "grid" and len(rows) == 2:
         raw_row_ys = [median([float(item.get("yRatio") or 0) for item in row], 0.0) for row in rows]
-        if len(raw_row_ys) == 2 and abs(raw_row_ys[1] - raw_row_ys[0]) < 0.012:
+        if len(raw_row_ys) == 2 and abs(raw_row_ys[1] - raw_row_ys[0]) < 0.006:
             center_y = median(raw_row_ys, (float(segment["top"]) + float(segment["bottom"])) * 0.5)
             gap = max(0.018, min(0.040, (float(segment["bottom"]) - float(segment["top"])) * 0.28))
             for row_index, row in enumerate(rows):
                 for anchor in row:
                     anchor["_layoutSolvedY"] = clamp(center_y + (-gap * 0.5 if row_index == 0 else gap * 0.5), segment["top"], segment["bottom"])
-            # SOFTM-문항영역: grid 두 행이 같은 픽셀 후보로 붙으면 segment 안에서 위/아래 행을 분리해 중복 영역을 방지 - 2026-06-19
+            # SOFTM-문항영역: grid 두 행이 거의 같은 픽셀 후보로 붙은 경우에만 위/아래 행을 분리하고 정상적인 촘촘한 2행 grid는 보존 - 2026-06-20
 
     row_bounds = {}
     for row_index, row in enumerate(rows):
@@ -4051,8 +4793,11 @@ def reconcile_sibling_choice_areas(unique, anchors, rows, layout, segment):
         if str(layout) == "grid" and row_segment_fallback:
             row_pad = max(0.002, row_r * 0.35)
             top = row_y - max(0.010, row_r * 1.35) if prev_y is None else (prev_y + row_y) * 0.5 + row_pad
-            bottom = float(segment["bottom"]) if next_y is None else next_y - max(0.004, row_r * 1.05)
-            # SOFTM-문항영역: segment fallback grid는 최종 sibling 보정에서도 이미지/코드 cell 높이를 유지 - 2026-06-19
+            if next_y is None:
+                bottom = float(segment["bottom"]) if prev_y is not None and row_y - prev_y > max(0.045, row_r * 7.0) else row_y + max(0.014, row_r * 2.20)
+            else:
+                bottom = next_y - max(0.004, row_r * 1.05)
+            # SOFTM-문항영역: segment fallback grid 마지막 행은 이미지형 큰 행간만 segment 하단까지 허용하고 텍스트형은 앵커 행 주변으로 제한 - 2026-06-20
         else:
             top = row_y - max(0.010, row_r * 1.35) if prev_y is None else (prev_y + row_y) * 0.5 + max(0.0015, row_r * 0.14)
             bottom = row_y + max(0.011, row_r * (3.8 if str(layout) == "vertical" else 1.65)) if next_y is None else (row_y + next_y) * 0.5 - max(0.0015, row_r * 0.14)
@@ -4083,6 +4828,7 @@ def reconcile_sibling_choice_areas(unique, anchors, rows, layout, segment):
                 "rightMax": max(left_min + 0.006, right_max),
                 "x": ax,
                 "y": float(anchor.get("_layoutSolvedY", anchor.get("yRatio") or row_y)),
+                "r": r,
             }
 
     repaired = {}
@@ -4092,6 +4838,8 @@ def reconcile_sibling_choice_areas(unique, anchors, rows, layout, segment):
             continue
         x = clamp(float(area.get("xRatio") or 0), bounds["leftMin"], bounds["rightMax"])
         y = clamp(float(area.get("yRatio") or 0), bounds["top"], bounds["bottom"])
+        anchor_band_top = clamp(float(bounds.get("y", y)) - max(0.002, float(bounds.get("r") or 0.006) * 0.90), bounds["top"], bounds["bottom"])
+        y = min(y, anchor_band_top) # SOFTM-문항영역: sibling 보정 후에도 영역 top은 문항 앵커 원 상단 기준을 포함 - 2026-06-20
         right = clamp(float(area.get("xRatio") or 0) + float(area.get("wRatio") or 0), x + 0.001, bounds["rightMax"])
         bottom = clamp(float(area.get("yRatio") or 0) + float(area.get("hRatio") or 0), y + 0.001, bounds["bottom"])
         if right - x < 0.004 or bottom - y < 0.004:
@@ -4102,6 +4850,35 @@ def reconcile_sibling_choice_areas(unique, anchors, rows, layout, segment):
         next_area["wRatio"] = right - x
         next_area["hRatio"] = bottom - y
         repaired[int(choice)] = next_area
+
+    if str(layout) == "grid" and len(rows) == 2:
+        for row in rows:
+            row_choices = []
+            for anchor in row:
+                try:
+                    choice = int(anchor.get("choice") or 0)
+                except Exception:
+                    continue
+                if choice in repaired:
+                    row_choices.append(choice)
+            if len(row_choices) < 2:
+                continue
+            row_areas = [repaired[choice] for choice in row_choices]
+            heights = [float(area.get("hRatio") or 0) for area in row_areas]
+            if not heights or max(heights) < 0.045:
+                continue
+            target_bottom = max(float(area.get("yRatio") or 0) + float(area.get("hRatio") or 0) for area in row_areas)
+            for choice in row_choices:
+                area = repaired[choice]
+                bounds = row_bounds.get(choice)
+                if not bounds:
+                    continue
+                y = float(area.get("yRatio") or 0)
+                current_bottom = y + float(area.get("hRatio") or 0)
+                next_bottom = min(float(bounds["bottom"]), target_bottom)
+                if next_bottom - current_bottom >= 0.006:
+                    area["hRatio"] = max(0.001, next_bottom - y)
+        # SOFTM-문항영역: 이미지형 grid에서 한 보기만 흰 여백 때문에 짧게 끝나면 같은 행 이미지 높이와 row 경계로 보완 - 2026-06-20
 
     def box(area):
         x1 = float(area.get("xRatio") or 0)
@@ -4125,8 +4902,9 @@ def reconcile_sibling_choice_areas(unique, anchors, rows, layout, segment):
                     continue
                 overlap = iw * ih
                 small_area = max(0.000001, min((ax2 - ax1) * (ay2 - ay1), (bx2 - bx1) * (by2 - by1)))
-                if overlap / small_area < 0.08:
+                if overlap / small_area < 0.02:
                     continue
+                # SOFTM-문항영역: 2014 2단 문항영역은 미세 겹침도 선택 hit 오류로 이어져 sibling 경계로 더 적극 보정 - 2026-06-20
                 a_anchor = row_bounds.get(a_key, {})
                 b_anchor = row_bounds.get(b_key, {})
                 same_grid_row = str(layout) == "grid" and ((a_key in (1, 2) and b_key in (1, 2)) or (a_key in (3, 4) and b_key in (3, 4)))
@@ -4164,6 +4942,121 @@ def reconcile_sibling_choice_areas(unique, anchors, rows, layout, segment):
         if float(area.get("wRatio") or 0) >= 0.004 and float(area.get("hRatio") or 0) >= 0.004
     }
     # SOFTM-문항영역 끝
+
+def cap_text_grid_area_heights(unique, anchors, layout, segment):
+    if str(layout) != "grid" or not unique:
+        return unique
+    anchor_by_choice = {}
+    for anchor in anchors:
+        try:
+            anchor_by_choice[int(anchor.get("choice") or 0)] = anchor
+        except Exception:
+            pass
+    capped = {}
+    for choice, area in unique.items():
+        next_area = dict(area)
+        h_ratio = float(next_area.get("hRatio") or 0)
+        if 0.018 < h_ratio < 0.040:
+            anchor = anchor_by_choice.get(int(choice))
+            anchor_h = max(0.006, min(0.020, float(anchor.get("hRatio") or 0.010))) if anchor else 0.010
+            cap_h = max(0.008, min(0.0125, anchor_h * 1.85))
+            next_area["hRatio"] = min(h_ratio, max(0.001, min(cap_h, float(segment["bottom"]) - float(next_area.get("yRatio") or 0))))
+        capped[int(choice)] = next_area
+    return capped
+    # SOFTM-문항영역: grid 텍스트 선택지가 하단 구분선까지 과확장된 경우 이미지 cell은 보존하고 중간 높이만 제한 - 2026-06-20
+
+def expand_image_grid_area_heights(unique, anchors, layout, segment):
+    if str(layout) != "grid" or choice_count != 4 or not unique:
+        return unique
+    anchor_by_choice = {}
+    for anchor in anchors:
+        try:
+            choice = int(anchor.get("choice") or 0)
+        except Exception:
+            continue
+        if 1 <= choice <= choice_count:
+            anchor_by_choice[choice] = anchor
+    if len(anchor_by_choice) < 4:
+        return unique
+
+    def anchor_radius(anchor):
+        aw = max(0.006, min(0.040, float(anchor.get("wRatio") or 0.012)))
+        ah = max(0.006, min(0.040, float(anchor.get("hRatio") or 0.012)))
+        return max(aw, ah) * 0.56
+
+    fixed = {int(choice): dict(area) for choice, area in unique.items()}
+    for row_choices, next_row_choices in [((1, 2), (3, 4)), ((3, 4), ())]:
+        row_areas = [fixed.get(choice) for choice in row_choices if fixed.get(choice)]
+        if len(row_areas) < 2:
+            continue
+        heights = [float(area.get("hRatio") or 0) for area in row_areas]
+        if max(heights) < 0.045:
+            continue
+        target_bottom = max(float(area.get("yRatio") or 0) + float(area.get("hRatio") or 0) for area in row_areas)
+        next_ys = [float(anchor_by_choice[choice].get("yRatio") or 0) for choice in next_row_choices if choice in anchor_by_choice]
+        if next_ys:
+            next_r = median([anchor_radius(anchor_by_choice[choice]) for choice in next_row_choices if choice in anchor_by_choice], 0.004)
+            target_bottom = min(target_bottom, min(next_ys) - max(0.004, next_r * 1.05))
+        else:
+            target_bottom = min(target_bottom, float(segment["bottom"]))
+        for choice in row_choices:
+            area = fixed.get(choice)
+            if not area:
+                continue
+            y = float(area.get("yRatio") or 0)
+            current_bottom = y + float(area.get("hRatio") or 0)
+            if target_bottom - current_bottom >= 0.006:
+                area["hRatio"] = max(0.001, min(float(segment["bottom"]), target_bottom) - y)
+    return fixed
+    # SOFTM-문항영역: 이미지형 grid 보기의 흰 배경 때문에 한 영역만 짧아지는 경우 같은 행/다음 행 경계로 최종 보완 - 2026-06-20
+
+def expand_narrow_vertical_area_widths(unique, layout, segment):
+    if str(layout) != "vertical" or not unique:
+        return unique
+    widths = sorted(float(area.get("wRatio") or 0) for area in unique.values() if float(area.get("wRatio") or 0) >= 0.12)
+    if len(widths) < 2:
+        return unique
+    target = widths[len(widths) // 2]
+    fixed = {}
+    for choice, area in unique.items():
+        next_area = dict(area)
+        width = float(next_area.get("wRatio") or 0)
+        x_ratio = float(next_area.get("xRatio") or 0)
+        if width > 0 and width < min(0.050, target * 0.32):
+            next_area["wRatio"] = max(0.001, min(target, float(segment["right"]) - x_ratio))
+        fixed[int(choice)] = next_area
+    return fixed
+    # SOFTM-문항영역: 세로형 긴 보기 중 한 문항만 텍스트 픽셀 탐색이 짧게 끝나면 형제 보기 폭으로 최소 보완 - 2026-06-20
+
+def restore_anchor_band_area_tops(unique, anchors, layout, segment):
+    if not unique or not anchors:
+        return unique
+    anchor_by_choice = {}
+    for anchor in anchors:
+        try:
+            choice = int(anchor.get("choice") or 0)
+        except Exception:
+            continue
+        if 1 <= choice <= choice_count:
+            anchor_by_choice[choice] = anchor
+    fixed = {}
+    for choice, area in unique.items():
+        next_area = dict(area)
+        anchor = anchor_by_choice.get(int(choice))
+        if anchor:
+            aw = max(0.006, min(0.040, float(anchor.get("wRatio") or 0.012)))
+            ah = max(0.006, min(0.040, float(anchor.get("hRatio") or 0.012)))
+            r = max(aw, ah) * 0.56
+            ay = float(anchor.get("_layoutSolvedY", anchor.get("yRatio") or 0))
+            desired_top = clamp(ay - r * 0.90, float(segment["top"]), float(segment["bottom"]))
+            current_y = float(next_area.get("yRatio") or 0)
+            current_bottom = min(float(segment["bottom"]), current_y + float(next_area.get("hRatio") or 0))
+            if current_y > desired_top + 0.001 and current_bottom > desired_top + 0.004:
+                next_area["yRatio"] = desired_top
+                next_area["hRatio"] = max(0.001, current_bottom - desired_top)
+        fixed[int(choice)] = next_area
+    return fixed
+    # SOFTM-문항영역: 최종 overlap 보정 뒤에도 저장 영역 top이 문항 앵커 원 상단 기준 아래로 밀리지 않게 복원 - 2026-06-20
 
 out = {}
 for q in range(1, question_count + 1):
@@ -4431,7 +5324,7 @@ for q in range(1, question_count + 1):
                     if float(area.get("wRatio") or 0) > max(cap_width, width_mid * 2.20):
                         area["wRatio"] = max(0.001, min(cap_width, 1.0 - float(area.get("xRatio") or 0)))
         # SOFTM-문항영역 끝
-        unique = reconcile_sibling_choice_areas(unique, anchors, rows, layout, segment) # SOFTM-문항영역: 저장 직전 1~4 문항을 배열 단위로 보정 - 2026-06-19
+        unique = restore_anchor_band_area_tops(expand_narrow_vertical_area_widths(expand_image_grid_area_heights(cap_text_grid_area_heights(reconcile_sibling_choice_areas(unique, anchors, rows, layout, segment), anchors, layout, segment), anchors, layout, segment), layout, segment), anchors, layout, segment) # SOFTM-문항영역: 저장 직전 1~4 문항을 배열 단위로 보정 - 2026-06-19
         if len(unique) < choice_count and len(anchors) >= choice_count:
             # SOFTM-문항영역 시작: 텍스트 픽셀 탐색 실패 문항도 sibling 배열 경계 안에서 최소 anchor-band 영역으로 보완 - 2026-06-19
             for row in rows:
@@ -4460,7 +5353,7 @@ for q in range(1, question_count + 1):
                     }, "generated-click-area-anchor-text", float(anchor.get("confidence") or 0.58) * 0.88)
                     if fallback_area:
                         unique[choice] = fallback_area
-            unique = reconcile_sibling_choice_areas(unique, anchors, rows, layout, segment)
+            unique = restore_anchor_band_area_tops(expand_narrow_vertical_area_widths(expand_image_grid_area_heights(cap_text_grid_area_heights(reconcile_sibling_choice_areas(unique, anchors, rows, layout, segment), anchors, layout, segment), anchors, layout, segment), layout, segment), anchors, layout, segment)
             # SOFTM-문항영역 끝
         if len(unique) < choice_count and len(anchors) >= choice_count:
             # SOFTM-문항영역 시작: 최종 reconcile 후 삭제된 누락 문항은 앵커 원 높이 기준 최소 영역으로 다시 채움 - 2026-06-19
@@ -4827,6 +5720,146 @@ function repairQuestionLineGridChoiceMap(choiceMap, questionSegments, questionLa
 }
 // SOFTM-문항앵커: 문제문 줄을 grid 첫 행으로 착각한 전폭 짧은 문항은 실제 하단 한 줄 보기로 복구 - 2026-06-18
 
+function repairShortSegmentGridTopDrift(choiceMap, questionSegments, questionCount, choiceCount){
+  const out = {};
+  for (let q = 1; q <= questionCount; q += 1){
+    const key = String(q);
+    const anchors = Array.isArray(choiceMap?.[key]) ? choiceMap[key].map((item) => ({ ...item })) : [];
+    if (choiceCount !== 4 || anchors.length !== 4) {
+      if (anchors.length) out[key] = anchors;
+      continue;
+    }
+    const ordered = anchors
+      .filter((item) => Number(item.choice) >= 1 && Number(item.choice) <= 4)
+      .sort((a, b) => Number(a.choice) - Number(b.choice));
+    const segment = Array.isArray(questionSegments?.[key]) ? questionSegments[key][0] : null;
+    if (ordered.length !== 4 || !segment || ordered.some((item) => String(item.layout || "") !== "grid")) {
+      out[key] = anchors;
+      continue;
+    }
+    const left = Number(segment.left);
+    const right = Number(segment.right);
+    const top = Number(segment.top);
+    const bottom = Number(segment.bottom);
+    const width = right - left;
+    const height = bottom - top;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width >= 0.70 || height > 0.105) {
+      out[key] = anchors;
+      continue;
+    }
+    const topY = (Number(ordered[0].yRatio) + Number(ordered[1].yRatio)) * 0.5;
+    const bottomY = (Number(ordered[2].yRatio) + Number(ordered[3].yRatio)) * 0.5;
+    if (!Number.isFinite(topY) || !Number.isFinite(bottomY) || bottomY - topY < Math.max(0.030, height * 0.34)) {
+      out[key] = anchors;
+      continue;
+    }
+    const rowGap = Math.min(0.020, Math.max(0.012, height * 0.17));
+    const repairedTopY = clampGeneratedRatio(bottomY - rowGap, top + height * 0.45, bottomY - 0.010);
+    const leftX = clampGeneratedRatio(left + width * 0.0965, left + width * 0.045, right - width * 0.58);
+    const rightX = clampGeneratedRatio(left + width * 0.5225, left + width * 0.34, right - width * 0.10);
+    ordered[0] = {
+      ...ordered[0],
+      xRatio: leftX,
+      yRatio: repairedTopY,
+      source: `${ordered[0].source || "anchor-image"}-short-grid-top-realign`,
+      confidence: Math.max(Number(ordered[0].confidence) || 0.55, 0.68),
+    };
+    ordered[1] = {
+      ...ordered[1],
+      xRatio: rightX,
+      yRatio: repairedTopY,
+      source: `${ordered[1].source || "anchor-image"}-short-grid-top-realign`,
+      confidence: Math.max(Number(ordered[1].confidence) || 0.55, 0.68),
+    };
+    out[key] = ordered;
+  }
+  return out;
+}
+// SOFTM-문항앵커: 짧은 2열 grid의 위 행이 문제문 숫자로 밀리면 아래 행 기준으로 스냅 전 재정렬 - 2026-06-20
+
+function repairVerticalChoiceDriftFromSiblings(choiceMap, questionSegments, questionCount, choiceCount){
+  const out = {};
+  const median = (values) => {
+    const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+    if (!sorted.length) return null;
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) * 0.5;
+  };
+  for (let q = 1; q <= questionCount; q += 1){
+    const key = String(q);
+    const anchors = Array.isArray(choiceMap?.[key]) ? choiceMap[key].map((item) => ({ ...item })) : [];
+    if (choiceCount !== 4 || anchors.length !== 4) {
+      if (anchors.length) out[key] = anchors;
+      continue;
+    }
+    const ordered = anchors
+      .filter((item) => Number(item.choice) >= 1 && Number(item.choice) <= 4)
+      .sort((a, b) => Number(a.choice) - Number(b.choice));
+    const page = Number(ordered[0]?.page);
+    if (ordered.length !== 4 || ordered.some((item) => String(item.layout || "") !== "vertical" || Number(item.page) !== page)) {
+      out[key] = anchors;
+      continue;
+    }
+    const segment = (Array.isArray(questionSegments?.[key]) ? questionSegments[key] : []).find((item) => Number(item.page) === page) || null;
+    const left = Number(segment?.left);
+    const right = Number(segment?.right);
+    const width = right - left;
+    if (!Number.isFinite(width) || width <= 0 || width >= 0.72) {
+      out[key] = anchors;
+      continue;
+    }
+    const xs = ordered.map((item) => Number(item.xRatio));
+    const ys = ordered.map((item) => Number(item.yRatio));
+    if (xs.some((value) => !Number.isFinite(value)) || ys.some((value) => !Number.isFinite(value))) {
+      out[key] = anchors;
+      continue;
+    }
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const driftThreshold = Math.max(0.010, width * 0.035);
+    if (maxX - minX <= driftThreshold) {
+      out[key] = anchors;
+      continue;
+    }
+    const stable = ordered.filter((item) => Number(item.xRatio) <= minX + driftThreshold * 0.65);
+    if (stable.length < 2) {
+      out[key] = anchors;
+      continue;
+    }
+    const baseX = median(stable.map((item) => Number(item.xRatio)));
+    const baseW = median(stable.map((item) => Number(item.wRatio))) || 0.010;
+    const baseH = median(stable.map((item) => Number(item.hRatio))) || 0.010;
+    const stableY = stable.map((item) => Number(item.yRatio)).sort((a, b) => a - b);
+    const rowGap = median(stableY.slice(1).map((value, index) => value - stableY[index]).filter((value) => value > 0.004 && value < 0.080));
+    const repaired = ordered.map((item, index) => {
+      const x = Number(item.xRatio);
+      if (!Number.isFinite(baseX) || Math.abs(x - baseX) <= driftThreshold) return item;
+      let y = Number(item.yRatio);
+      const prev = ordered[index - 1] ? Number(ordered[index - 1].yRatio) : null;
+      const next = ordered[index + 1] ? Number(ordered[index + 1].yRatio) : null;
+      if (Number.isFinite(prev) && Number.isFinite(next) && next > prev) {
+        y = (prev + next) * 0.5;
+      } else if (Number.isFinite(prev) && Number.isFinite(rowGap)) {
+        y = prev + rowGap;
+      } else if (Number.isFinite(next) && Number.isFinite(rowGap)) {
+        y = next - rowGap;
+      }
+      return {
+        ...item,
+        xRatio: clampGeneratedRatio(baseX),
+        yRatio: clampGeneratedRatio(y),
+        wRatio: Math.max(0.006, Math.min(0.026, baseW)),
+        hRatio: Math.max(0.006, Math.min(0.026, baseH)),
+        source: `${item.source || "anchor-image"}-vertical-sibling-align`,
+        confidence: Math.max(Number(item.confidence) || 0.55, 0.70),
+      };
+    });
+    out[key] = repaired;
+  }
+  return out;
+}
+// SOFTM-문항앵커: 세로형 1~4번 중 일부가 텍스트 내부로 밀리면 형제 앵커 x축과 행 간격으로 outlier만 복구 - 2026-06-21
+
 function summarizeChoiceAnchorMap(choiceMap, questionCount, choiceCount){
   let detected = 0;
   const missingQuestions = [];
@@ -5005,6 +6038,66 @@ function adjustQuestionLabelsByChoiceSpacing(pageMap, topMap, questionLabelMap, 
   return { changed, topMap: nextTopMap, questionLabelMap: nextLabelMap };
 }
 // SOFTM-위치맵: 다음 문제번호가 이전 보기 불렛으로 오인되면 다음 문제 첫 보기와의 과도한 간격으로 라벨/segment 시작을 보정 - 2026-06-17
+
+function repairInferredQuestionStartsByChoiceBand(pageMap, topMap, questionLabelMap, choiceMap, questionCount, choiceCount, questionColumnBoundsMap = {}){
+  const nextTopMap = Array.isArray(topMap) ? topMap.slice() : [];
+  const nextLabelMap = { ...(questionLabelMap || {}) };
+  const boundsFor = (q) => questionColumnBoundsMap?.[String(q)] || {};
+  const sameLane = (a, b) => {
+    const ac = Number(a?.column);
+    const bc = Number(b?.column);
+    if (Number.isFinite(ac) && Number.isFinite(bc)) return ac === bc;
+    const al = Number(a?.left);
+    const ar = Number(a?.right);
+    const bl = Number(b?.left);
+    const br = Number(b?.right);
+    if (![al, ar, bl, br].every(Number.isFinite)) return true;
+    return Math.max(al, bl) < Math.min(ar, br) - 0.080;
+  };
+  const reliableChoiceYs = (q) => (Array.isArray(choiceMap?.[String(q)]) ? choiceMap[String(q)] : [])
+    .filter((item) => isReliableChoiceAnchor(item, choiceCount))
+    .map((item) => {
+      const y = Number(item.yRatio);
+      const h = Math.max(0.010, Number(item.hRatio) || 0.012);
+      return Number.isFinite(y) ? { y, bottom: y + h } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.y - b.y);
+  let changed = false;
+  for (let q = 2; q <= questionCount; q += 1){
+    if (Number(pageMap[q]) !== Number(pageMap[q - 1])) continue;
+    const label = nextLabelMap[String(q)] || {};
+    const source = String(label.source || "");
+    if (!(label.inferred === true || source.startsWith("inferred-"))) continue;
+    if (!sameLane(boundsFor(q), boundsFor(q - 1))) continue;
+    const previousChoices = reliableChoiceYs(q - 1);
+    const currentChoices = reliableChoiceYs(q);
+    if (previousChoices.length < Math.min(2, choiceCount) || currentChoices.length < Math.min(2, choiceCount)) continue;
+    const previousBottom = Math.max(...previousChoices.map((item) => item.bottom));
+    const firstChoiceY = currentChoices[0].y;
+    const currentTop = Number(nextTopMap[q]);
+    const currentLabelY = Number(label.yRatio);
+    if (![previousBottom, firstChoiceY, currentTop, currentLabelY].every(Number.isFinite)) continue;
+    const availableBand = firstChoiceY - previousBottom;
+    const topGap = currentTop - previousBottom;
+    const labelToFirstChoice = firstChoiceY - currentLabelY;
+    if (availableBand < 0.115 || topGap < 0.052 || labelToFirstChoice > 0.045) continue;
+    const proposedTop = Math.max(previousBottom - 0.004, Math.min(currentTop, firstChoiceY - 0.180));
+    const proposedLabelY = Math.max(proposedTop + 0.020, Math.min(firstChoiceY - 0.100, previousBottom + 0.024));
+    if (!Number.isFinite(proposedTop) || !Number.isFinite(proposedLabelY)) continue;
+    if (proposedTop >= currentTop - 0.012 || proposedLabelY >= currentLabelY - 0.030) continue;
+    nextTopMap[q] = Math.max(0.030, Math.min(0.940, proposedTop));
+    nextLabelMap[String(q)] = {
+      ...label,
+      yRatio: Math.max(0.035, Math.min(0.965, proposedLabelY)),
+      adjustedByChoiceBand: true,
+      source: "inferred-choice-band",
+    };
+    changed = true;
+  }
+  return { changed, topMap: nextTopMap, questionLabelMap: nextLabelMap };
+}
+// SOFTM-문제앵커: 실제 문제번호를 못 찾은 2단 문제는 이전 보기 끝과 현재 보기 시작 사이 빈 band로 시작점을 보정 - 2026-06-21
 
 async function cropQuestionAreas(inputDir, outputDir, options = {}){
   const script = `
@@ -5280,7 +6373,7 @@ async function main(){
 	      questionCount,
       choiceCount,
     ); // SOFTM-문항영역: OCR 오탐 제거 뒤 2행 선택지의 한 칸 누락은 기하 관계로 보수 복구 - 2026-06-16
-    const choiceAnchorMapBeforePixelSnap = repairQuestionLineGridChoiceMap(repairCollapsedLowerGridChoiceMap(snapFallbackChoiceAnchorsToRawCandidates(buildSegmentChoiceAnchorFallbackMap(
+    const choiceAnchorMapBeforePixelSnap = repairShortSegmentGridTopDrift(repairQuestionLineGridChoiceMap(repairCollapsedLowerGridChoiceMap(snapFallbackChoiceAnchorsToRawCandidates(buildSegmentChoiceAnchorFallbackMap(
       repairLeadingVerticalChoiceMap(
         completeTrailingChoiceMap(
           reliableChoiceMap,
@@ -5299,8 +6392,13 @@ async function main(){
       questionCount,
       choiceCount,
       questionLabelMap,
-    ), rawChoiceCandidates, baseQuestionSegments, questionColumnBoundsMap, questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount), baseQuestionSegments, questionLabelMap, questionCount, choiceCount); // SOFTM-문항앵커: segment fallback과 OCR 후보 보정 뒤 grid/horizontal 최종 형태를 복원 - 2026-06-18
-    const choiceAnchorMap = alignGridFallbackRowsToSnappedSiblings(repairBoxOptionUpperGridChoiceMap(await snapFallbackChoiceAnchorsToRenderedMarks(workDir, choiceAnchorMapBeforePixelSnap, baseQuestionSegments, questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount), questionCount, choiceCount); // SOFTM-문항앵커: 최종 fallback 앵커를 렌더 픽셀 후보/박스형 행/스냅 형제 row 기준으로 보정 - 2026-06-19
+    ), rawChoiceCandidates, baseQuestionSegments, questionColumnBoundsMap, questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount), baseQuestionSegments, questionLabelMap, questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount); // SOFTM-문항앵커: segment fallback과 OCR 후보 보정 뒤 grid/horizontal 최종 형태를 복원 - 2026-06-18
+    const choiceAnchorMap = repairVerticalChoiceDriftFromSiblings(alignGridLowerRowColumnsToUpper(alignGridFallbackRowsToSnappedSiblings(repairBoxOptionUpperGridChoiceMap(await snapFallbackChoiceAnchorsToRenderedMarks(workDir, choiceAnchorMapBeforePixelSnap, baseQuestionSegments, questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount), questionCount, choiceCount), questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount); // SOFTM-문항앵커: 최종 fallback 앵커를 렌더 픽셀 후보/박스형 행/스냅 형제 row/grid column/세로형 x축 기준으로 보정 - 2026-06-21
+    const inferredStartAdjusted = repairInferredQuestionStartsByChoiceBand(pageMap, topMap, questionLabelMap, choiceAnchorMap, questionCount, choiceCount, questionColumnBoundsMap);
+    if (inferredStartAdjusted.changed) {
+      topMap = inferredStartAdjusted.topMap;
+      questionLabelMap = inferredStartAdjusted.questionLabelMap;
+    } // SOFTM-문제앵커: 최종 문항앵커 기준으로 보간 문제 시작점을 재조정해 한문제 crop 누락을 방지 - 2026-06-21
     questionSegments = buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questionCount, choiceAnchorMap, questionLabelMap, choiceCount);
     let choiceClickAreaMap = {};
     try{
