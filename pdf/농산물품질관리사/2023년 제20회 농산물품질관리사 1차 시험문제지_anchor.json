@@ -1619,12 +1619,12 @@
     "56": [
       {
         "page": 11,
-        "top": 0.6943497862417412,
+        "top": 0.6453497862417411,
         "bottom": 0.95,
         "left": 0,
         "right": 1,
         "column": null,
-        "source": "page-segment"
+        "source": "page-segment-softm-q56-top"
       }
     ],
     "57": [
@@ -13724,5 +13724,5 @@
   },
   "confidence": 0.972,
   "warnings": [],
-  "generatedAt": "2026-06-18T13:16:26.653Z"
+  "generatedAt": "2026-06-22T02:01:32.571Z"
 }

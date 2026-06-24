@@ -123,21 +123,31 @@ def main():
     }
     write_json(correct_path, next_correct_payload)
 
-    ocr_ok, ocr_status, ocr_warnings = diagnose_question_ocr(row, count)
     fields = {
         "correctJson": manifest_path(correct_path),
         "answerCount": count,
         "questionCount": count,
-        "ocrStatus": ocr_status,
-        "ocrPublished": ocr_ok,
-        "ocrWarnings": ocr_warnings,
     }
+    try:
+        question_start = int(row.get("questionStartNo") or 0)
+        question_end = int(row.get("questionEndNo") or 0)
+    except Exception:
+        question_start = 0
+        question_end = 0
+    if question_start > 0 and (question_end < question_start or question_end - question_start + 1 != count):
+        fields["questionEndNo"] = question_start + count - 1
+    # SOFTM-정답OCR: 개별 정답 재생성에서도 오염된 questionEndNo를 count 기준으로 복구 - 2026-06-24
     if answer_payload.get("answerStartNo"):
         fields["answerStartNo"] = answer_payload.get("answerStartNo")
         fields["answerEndNo"] = answer_payload.get("answerEndNo")
         if not row.get("questionStartNo"):
             fields["questionStartNo"] = answer_payload.get("answerStartNo")
             fields["questionEndNo"] = answer_payload.get("answerEndNo")
+    diagnostic_row = {**row, **fields}
+    ocr_ok, ocr_status, ocr_warnings = diagnose_question_ocr(diagnostic_row, count)
+    fields["ocrStatus"] = ocr_status
+    fields["ocrPublished"] = ocr_ok
+    fields["ocrWarnings"] = ocr_warnings
 
     rows[idx] = {**row, **fields}
     write_json(manifest_file, rows)

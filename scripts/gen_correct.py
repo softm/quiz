@@ -159,7 +159,6 @@ def main():
                 continue
 
             correct_path = directory / "correct.json"
-            ocr_ok, ocr_status, ocr_warnings = diagnose_question_ocr(row, count)
             item = {
                 "questionNo": row.get("questionNo", ""),
                 "questionNm": row.get("questionNm", ""),
@@ -176,12 +175,22 @@ def main():
             row["correctJson"] = manifest_path(correct_path)
             row["answerCount"] = count
             row["questionCount"] = count
+            try:
+                question_start = int(row.get("questionStartNo") or 0)
+                question_end = int(row.get("questionEndNo") or 0)
+            except Exception:
+                question_start = 0
+                question_end = 0
+            if question_start > 0 and (question_end < question_start or question_end - question_start + 1 != count):
+                row["questionEndNo"] = question_start + count - 1
+            # SOFTM-정답OCR: 이미지형 정답표 복구 후 기존 오염된 questionEndNo가 남지 않도록 count와 범위를 동기화 - 2026-06-24
             if answer_payload and answer_payload.get("answerStartNo"):
                 row["answerStartNo"] = answer_payload.get("answerStartNo")
                 row["answerEndNo"] = answer_payload.get("answerEndNo")
                 if not row.get("questionStartNo"):
                     row["questionStartNo"] = answer_payload.get("answerStartNo")
                     row["questionEndNo"] = answer_payload.get("answerEndNo")
+            ocr_ok, ocr_status, ocr_warnings = diagnose_question_ocr(row, count)
             row["ocrStatus"] = ocr_status
             row["ocrPublished"] = ocr_ok
             row["ocrWarnings"] = ocr_warnings

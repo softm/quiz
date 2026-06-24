@@ -1,0 +1,19 @@
+[
+  {
+    "gNo": "04",
+    "gNm": "테스트",
+    "catNm": "테스트",
+    "catNo": "0006",
+    "parentCatNo": "",
+    "questionNm": "[3일의기적] 중등도덕2 1학기 기말고사 03 (2단원 30문제)",
+    "questionNo": "0027",
+    "questionPdf": "quiz/pdf/테스트/[3일의기적] 중등도덕2 1학기 기말고사 03 (2단원 30문제).pdf",
+    "answerPdf": "",
+    "correctJson": "",
+    "published": true,
+    "year": "",
+    "semester": "1",
+    "examType": "기말시험",
+    "seq": 1
+  }
+]

@@ -1,0 +1,205 @@
+{
+  "version": 1,
+  "kind": "question-anchor-map",
+  "questionNo": "0030",
+  "questionPdf": "pdf/한국어교육능력검정/2025년 제20회 한국어교육능력검정 1교시.pdf",
+  "pageCount": 17,
+  "questionCount": 1,
+  "choiceCount": 4,
+  "questionStartNo": 1,
+  "questionEndNo": 1,
+  "printedQuestionNoMap": [
+    null,
+    1
+  ],
+  "questionLabelMap": {
+    "1": {
+      "page": 5,
+      "xRatio": 0.48488180318856516,
+      "yRatio": 0.42996108949416345,
+      "anchorColumn": 0,
+      "text": "1)2.7",
+      "markerText": "1)2.7",
+      "source": "ocr-number-layer"
+    }
+  },
+  "questionColumnBoundsMap": {
+    "1": {
+      "page": 5,
+      "left": 0,
+      "right": 0.5145684442001099,
+      "split": 0.4997251236943375,
+      "column": 0,
+      "source": "anchor-column"
+    }
+  },
+  "questionSegments": {
+    "1": [
+      {
+        "page": 5,
+        "top": 0.37496108949416346,
+        "bottom": 0.95,
+        "left": 0,
+        "right": 0.5145684442001099,
+        "column": 0,
+        "source": "column-segment"
+      }
+    ]
+  },
+  "questionPageMap": [
+    null,
+    5
+  ],
+  "questionTopRatioMap": [
+    null,
+    0.37496108949416346
+  ],
+  "choiceAnchorMap": {
+    "1": [
+      {
+        "choice": 1,
+        "page": 5,
+        "xRatio": 0.0959318306761957,
+        "yRatio": 0.772568093385214,
+        "wRatio": 0.018141836173721827,
+        "hRatio": 0.012840466926070038,
+        "source": "segment-choice-anchor-tail-grid-collapsed-column-pixel-snap",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.66,
+        "inferred": true
+      },
+      {
+        "choice": 2,
+        "page": 5,
+        "xRatio": 0.24656404617921934,
+        "yRatio": 0.769455252918288,
+        "wRatio": 0.007146783947223749,
+        "hRatio": 0.006614785992217899,
+        "source": "segment-choice-anchor-tail-grid-collapsed-column-pixel-snap",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.66,
+        "inferred": true
+      },
+      {
+        "choice": 3,
+        "page": 5,
+        "xRatio": 0.0959318306761957,
+        "yRatio": 0.8005836575875487,
+        "wRatio": 0.018141836173721827,
+        "hRatio": 0.012840466926070038,
+        "source": "segment-choice-anchor-tail-grid-collapsed-column-pixel-snap",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.66,
+        "inferred": true
+      },
+      {
+        "choice": 4,
+        "page": 5,
+        "xRatio": 0.24024189114898295,
+        "yRatio": 0.7982490272373541,
+        "wRatio": 0.014293567894447499,
+        "hRatio": 0.008171206225680934,
+        "source": "segment-choice-anchor-tail-grid-collapsed-column-pixel-snap",
+        "anchorMode": "center",
+        "layout": "grid",
+        "confidence": 0.66,
+        "inferred": true
+      }
+    ]
+  },
+  "choiceClickAreaMap": {
+    "1": [
+      {
+        "q": 1,
+        "choice": 1,
+        "page": 5,
+        "xRatio": 0.10223067619571193,
+        "yRatio": 0.7634246079536582,
+        "wRatio": 0.09298559648158326,
+        "hRatio": 0.01561508076229512,
+        "source": "generated-click-area-anchor-text",
+        "confidence": 0.66
+      },
+      {
+        "q": 1,
+        "choice": 2,
+        "page": 5,
+        "xRatio": 0.24959956019791094,
+        "yRatio": 0.7658532738088872,
+        "wRatio": 0.0933919736118746,
+        "hRatio": 0.006935831249478497,
+        "source": "generated-click-area-anchor-text",
+        "confidence": 0.66
+      },
+      {
+        "q": 1,
+        "choice": 3,
+        "page": 5,
+        "xRatio": 0.10223067619571193,
+        "yRatio": 0.7914401721559928,
+        "wRatio": 0.08906586036283672,
+        "hRatio": 0.01561508076229512,
+        "source": "generated-click-area-anchor-text",
+        "confidence": 0.66
+      },
+      {
+        "q": 1,
+        "choice": 4,
+        "page": 5,
+        "xRatio": 0.24520461792193513,
+        "yRatio": 0.7910450690185526,
+        "wRatio": 0.08915206157229247,
+        "hRatio": 0.012302790903626293,
+        "source": "generated-click-area-anchor-text",
+        "confidence": 0.66
+      }
+    ]
+  },
+  "anchors": [
+    {
+      "label": 1,
+      "page": 5,
+      "xRatio": 0.48488180318856516,
+      "yRatio": 0.42996108949416345,
+      "text": "1)2.7",
+      "markerText": "1)2.7",
+      "anchorScore": 1.1199999999999999,
+      "lineHeightRatio": 0.013229571984435798,
+      "source": "ocr-number-layer",
+      "labelWeight": 1,
+      "repairedLabel": false,
+      "repairId": 171,
+      "anchorColumn": 0,
+      "q": 1
+    }
+  ],
+  "rawAnchorCount": 577,
+  "sourceStats": {
+    "questionDetected": 1,
+    "questionExpected": 1,
+    "ocrChoiceCandidateCount": 66,
+    "choiceDetected": 4,
+    "choiceExpected": 4,
+    "choiceCoverage": 1,
+    "choiceClickAreaDetected": 4,
+    "choiceMissingQuestions": [],
+    "parserDiagnostics": {
+      "missingSegments": [],
+      "outOfSegmentChoices": [],
+      "partialChoiceQuestions": [],
+      "suspiciousChoiceOrder": [],
+      "missingSegmentCount": 0,
+      "outOfSegmentChoiceCount": 0,
+      "partialChoiceQuestionCount": 0,
+      "suspiciousChoiceOrderCount": 0
+    }
+  },
+  "confidence": 0.8870588235294117,
+  "warnings": [
+    "예상 문제 수(1) 대비 문제 위치 감지가 부족합니다(1개)."
+  ],
+  "generatedAt": "2026-06-24T01:59:48.191Z"
+}

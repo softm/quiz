@@ -6,6 +6,19 @@ import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 
+const scriptRoot = process.cwd();
+const bundledBinDir = path.resolve(scriptRoot, "..", "..", ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "bin");
+const bundledPythonBinDir = path.resolve(scriptRoot, "..", "..", ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "python", "bin");
+const bundledNativePopplerBinDir = path.resolve(scriptRoot, "..", "..", ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "native", "poppler", "bin");
+const toolPath = [
+  bundledBinDir,
+  bundledPythonBinDir,
+  bundledNativePopplerBinDir,
+  "/opt/homebrew/bin",
+  "/usr/local/bin",
+  process.env.PATH || "",
+].filter(Boolean).join(path.delimiter); // SOFTM-위치맵: 직접 실행 시에도 pdfinfo/pdftoppm 경로를 보강해 서버 PATH 의존을 줄임 - 2026-06-23
+
 function arg(name, fallback = ""){
   const idx = process.argv.indexOf(name);
   return idx >= 0 ? process.argv[idx + 1] : fallback;
@@ -17,6 +30,7 @@ function run(command, args, options = {}){
       cwd: options.cwd || process.cwd(),
       maxBuffer: options.maxBuffer || 80 * 1024 * 1024,
       timeout: options.timeout || 0,
+      env: { ...process.env, PATH: toolPath, ...(options.env || {}) },
     }, (err, stdout, stderr) => {
       if (err) {
         err.message = `${err.message}\n${stderr || stdout}`;
@@ -859,7 +873,7 @@ function buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questio
     const nextQ = q + 1;
     const nextPage = Number(pageMap[nextQ]);
     if (!Number.isFinite(page) || !Number.isFinite(nextPage) || nextQ > questionCount) return null;
-    if (!Number.isFinite(Number(currentLane?.column))) return null;
+    if (currentLane?.column == null || !Number.isFinite(Number(currentLane.column))) return null;
     if (!isLastQuestionInLane(q, page, currentLane)) return null;
     if (hasCompleteChoiceAnchorsInLane(q, page, currentLane)) return null; // SOFTM-연속문항: 현재 단에서 문항앵커가 완결된 문제는 반대 단 continuation을 붙이지 않음 - 2026-06-17
     let targetPage = 0;
@@ -917,11 +931,13 @@ function buildQuestionSegments(pageMap, topMap, questionColumnBoundsMap, questio
         break;
       }
     }
-    if (Number.isFinite(currentLabelTop) && !currentLabelInferred && hasPrevSameLane) {
+    const hasColumnLane = currentLane.column != null && Number.isFinite(Number(currentLane.column));
+    if (Number.isFinite(currentLabelTop) && !currentLabelInferred && hasPrevSameLane && hasColumnLane) {
       start = Math.max(start, clamp(currentLabelTop - 0.006, 0.02, 0.97)); // SOFTM-위치맵: 다음 문제와 겹치지 않도록 문제 label 위 segment 여백을 줄임 - 2026-06-17
-    } else if (Number.isFinite(currentLabelTop) && currentLabelInferred && String(currentLabel?.source || "") === "inferred-column-flow" && hasPrevSameLane) {
-      start = Math.max(start, clamp(currentLabelTop - 0.014, 0.02, 0.97)); // SOFTM-위치맵: 보간 문제번호는 실제 라벨 직전부터 시작해 이전 문제 선택지 행을 문항 후보에서 제외 - 2026-06-21
+    } else if (Number.isFinite(currentLabelTop) && currentLabelInferred && String(currentLabel?.source || "") === "inferred-column-flow" && hasPrevSameLane && hasColumnLane) {
+      start = Math.max(start, clamp(currentLabelTop - 0.007, 0.02, 0.97)); // SOFTM-위치맵: 보간 문제번호 segment 시작은 이전 문제 꼬리가 섞이지 않도록 라벨 직전의 작은 여백만 허용 - 2026-06-22
     }
+    // SOFTM-문제영역: 1단 전체폭 문제는 라벨 y가 본문 시작보다 늦게 잡히므로 topMap을 유지해 q56 같은 상단 잘림을 막음 - 2026-06-22
     // SOFTM-문제앵커: 보간 라벨은 실제 문제번호 위치가 아니므로 segment 시작 기준으로 끌어올리지 않음 - 2026-06-21
     let end = 0.95;
     let hardEnd = null;
@@ -989,7 +1005,6 @@ async function detectChoiceAnchorsFromImages(pageDir, pageMap, topMap, questionC
 import json, os, re, sys
 from PIL import Image
 import numpy as np
-from scipy import ndimage
 
 page_dir, map_path = sys.argv[1], sys.argv[2]
 meta = json.load(open(map_path, "r", encoding="utf-8"))
@@ -1079,27 +1094,65 @@ def segment_for_q(q, page):
             continue
     return None
 
+def binary_closing_2x2(mask):
+    padded = np.pad(mask.astype(bool), ((1, 1), (1, 1)), mode="constant", constant_values=False)
+    dilated = np.zeros(mask.shape, dtype=bool)
+    for dy in (0, 1):
+        for dx in (0, 1):
+            dilated |= padded[dy:dy + mask.shape[0], dx:dx + mask.shape[1]]
+    padded = np.pad(dilated, ((1, 1), (1, 1)), mode="constant", constant_values=False)
+    eroded = np.ones(mask.shape, dtype=bool)
+    for dy in (0, 1):
+        for dx in (0, 1):
+            eroded &= padded[dy:dy + mask.shape[0], dx:dx + mask.shape[1]]
+    return eroded
+
+def component_boxes(mask):
+    mask = mask.astype(bool)
+    h, w = mask.shape
+    visited = np.zeros(mask.shape, dtype=bool)
+    boxes = []
+    ys, xs = np.nonzero(mask)
+    for start_y, start_x in zip(ys.tolist(), xs.tolist()):
+        if visited[start_y, start_x]:
+            continue
+        stack = [(start_y, start_x)]
+        visited[start_y, start_x] = True
+        y0 = y1 = start_y
+        x0 = x1 = start_x
+        pixels = 0
+        while stack:
+            y, x = stack.pop()
+            pixels += 1
+            if y < y0: y0 = y
+            if y > y1: y1 = y
+            if x < x0: x0 = x
+            if x > x1: x1 = x
+            for ny in (y - 1, y, y + 1):
+                if ny < 0 or ny >= h:
+                    continue
+                for nx in (x - 1, x, x + 1):
+                    if nx < 0 or nx >= w or visited[ny, nx] or not mask[ny, nx]:
+                        continue
+                    visited[ny, nx] = True
+                    stack.append((ny, nx))
+        boxes.append((y0, y1 + 1, x0, x1 + 1, pixels))
+    return boxes
+    # SOFTM-위치맵: scipy 없는 환경에서도 이미지 선택지 후보 탐지를 실행하도록 내부 connected-component 구현 - 2026-06-22
+
 def page_features(image_path):
     im = Image.open(image_path).convert("L")
     arr = np.array(im)
     h, w = arr.shape
     mask = arr < 100
-    labels, count = ndimage.label(mask)
-    objects = ndimage.find_objects(labels)
     out = []
-    for idx, obj in enumerate(objects, start=1):
-        if obj is None:
-            continue
-        ys, xs = obj
-        y0, y1 = ys.start, ys.stop
-        x0, x1 = xs.start, xs.stop
+    for y0, y1, x0, x1, pixels in component_boxes(mask):
         bw, bh = x1 - x0, y1 - y0
         if bw < 10 or bw > 62 or bh < 10 or bh > 62:
             continue
         aspect = bw / max(1, bh)
         if aspect < 0.38 or aspect > 1.75:
             continue
-        pixels = int(np.sum(labels[obj] == idx))
         fill = pixels / max(1, bw * bh)
         if fill < 0.055 or fill > 0.55:
             continue
@@ -1117,22 +1170,14 @@ def page_features(image_path):
             left_density = float(np.mean(arr[ly0:ly1, lx0:lx1] < 125))
         out.append({"xRatio": cx, "yRatio": cy, "wRatio": bw / w, "hRatio": bh / h, "fill": fill, "leftDensity": left_density, "aspect": aspect})
     marker_xs = [0.035, 0.085, 0.245, 0.305, 0.405, 0.515, 0.525, 0.585, 0.725, 0.765]
-    outline_mask = ndimage.binary_closing(arr < 190, structure=np.ones((2, 2)))
-    outline_labels, outline_count = ndimage.label(outline_mask)
-    outline_objects = ndimage.find_objects(outline_labels)
-    for idx, obj in enumerate(outline_objects, start=1):
-        if obj is None:
-            continue
-        ys, xs = obj
-        y0, y1 = ys.start, ys.stop
-        x0, x1 = xs.start, xs.stop
+    outline_mask = binary_closing_2x2(arr < 190)
+    for y0, y1, x0, x1, pixels in component_boxes(outline_mask):
         bw, bh = x1 - x0, y1 - y0
         if bw < 18 or bw > 48 or bh < 18 or bh > 48:
             continue
         aspect = bw / max(1, bh)
         if aspect < 0.72 or aspect > 1.28:
             continue
-        pixels = int(np.sum(outline_labels[obj] == idx))
         fill = pixels / max(1, bw * bh)
         if fill < 0.075 or fill > 0.24:
             continue
@@ -2801,9 +2846,65 @@ function buildSegmentChoiceAnchorFallbackMap(choiceMap, questionSegments, questi
         inferred: true,
       }));
     };
+    const buildLowerRowShortRescueGridReplacement = () => {
+      if (choiceCount !== 4 || width < 0.70 || height < 0.150 || existing.length < 4) return null;
+      const byChoice = new Map(existing.map((item) => [Number(item.choice), item]));
+      const choices = [1, 2, 3, 4].map((choice) => byChoice.get(choice));
+      if (choices.some((item) => !item)) return null;
+      if (!choices.every((item) => String(item.layout || "").toLowerCase() === "horizontal")) return null;
+      const sources = choices.map((item) => String(item.source || "").toLowerCase());
+      if (!sources.some((source) => source.includes("short-rescue"))) return null;
+      const realLower = [choices[0], choices[2]].filter((item) => {
+        const source = String(item.source || "").toLowerCase();
+        return source.includes("short-rescue") && !source.includes("expected-x");
+      });
+      const synthetic = [choices[1], choices[3]].filter((item) => {
+        const source = String(item.source || "").toLowerCase();
+        return source.includes("expected-x") || Number(item.confidence || 0) <= 0.64;
+      });
+      if (realLower.length < 2 || synthetic.length < 1) return null;
+      const lowerYValues = realLower.map((item) => Number(item.yRatio)).filter(Number.isFinite);
+      const lowerXValues = realLower.map((item) => Number(item.xRatio)).filter(Number.isFinite).sort((a, b) => a - b);
+      if (lowerYValues.length !== realLower.length || lowerXValues.length < 2) return null;
+      const lowerY = lowerYValues.reduce((sum, value) => sum + value, 0) / lowerYValues.length;
+      if (lowerY < top + height * 0.48 || lowerY > bottom + 0.012) return null;
+      const labelY = Number(questionLabelMap?.[String(q)]?.yRatio);
+      let gap = Math.max(0.022, Math.min(0.038, height * 0.14));
+      if (Number.isFinite(labelY) && lowerY > labelY) {
+        gap = Math.max(0.022, Math.min(0.040, (lowerY - labelY) * 0.48));
+      }
+      const upperY = clampGeneratedRatio(lowerY - gap, top + height * 0.34, lowerY - 0.016);
+      const xLeft = clampGeneratedRatio(lowerXValues[0], left + width * 0.055, right - width * 0.58);
+      const xRight = clampGeneratedRatio(lowerXValues[lowerXValues.length - 1], left + width * 0.36, right - width * 0.080);
+      if (xRight - xLeft < width * 0.30 || xRight - xLeft > width * 0.58) return null;
+      const base = realLower.reduce((best, item) => Number(item.confidence || 0) > Number(best?.confidence || 0) ? item : best, realLower[0]);
+      return [
+        { choice: 1, xRatio: xLeft, yRatio: upperY },
+        { choice: 2, xRatio: xRight, yRatio: upperY },
+        { choice: 3, xRatio: xLeft, yRatio: lowerY },
+        { choice: 4, xRatio: xRight, yRatio: lowerY },
+      ].map((item) => ({
+        ...base,
+        ...item,
+        page,
+        wRatio: Math.max(0.010, Math.min(0.022, Number(base?.wRatio) || width * 0.018)),
+        hRatio: Math.max(0.010, Math.min(0.018, Number(base?.hRatio) || 0.012)),
+        source: "segment-choice-anchor-text-grid-short-rescue-lower-row",
+        anchorMode: "center",
+        layout: "grid",
+        confidence: 0.70,
+        inferred: true,
+      }));
+    };
+    // SOFTM-문항앵커: 2x2 보기의 아래 행만 short-rescue로 잡혀 한 줄 보기처럼 배정된 경우 grid로 재배치 - 2026-06-24
     const shortRescueHorizontal = buildHorizontalFromLowerShortRescueGrid();
     if (shortRescueHorizontal) {
       out[String(q)] = shortRescueHorizontal;
+      continue;
+    }
+    const lowerRowShortRescueGrid = buildLowerRowShortRescueGridReplacement();
+    if (lowerRowShortRescueGrid) {
+      out[String(q)] = lowerRowShortRescueGrid;
       continue;
     }
     const collapsedColumnGrid = buildCollapsedColumnGridReplacement();
@@ -4433,6 +4534,87 @@ function repairBoxOptionUpperGridChoiceMap(choiceMap, questionSegments, question
   return out;
 }
 
+function repairBoxRowHorizontalGridChoiceMap(choiceMap, questionSegments, questionLabelMap, questionCount, choiceCount){
+  const out = {};
+  for (let q = 1; q <= questionCount; q += 1){
+    const key = String(q);
+    const anchors = Array.isArray(choiceMap?.[key]) ? choiceMap[key].map((item) => ({ ...item })) : [];
+    if (choiceCount !== 4 || anchors.length !== 4) {
+      if (anchors.length) out[key] = anchors;
+      continue;
+    }
+    const ordered = anchors
+      .filter((item) => Number(item.choice) >= 1 && Number(item.choice) <= 4)
+      .sort((a, b) => Number(a.choice) - Number(b.choice));
+    const sourceText = ordered.map((item) => String(item.source || "").toLowerCase()).join(" ");
+    if (ordered.length !== 4 || !ordered.every((item) => String(item.layout || "") === "horizontal") || !sourceText.includes("horizontal-box-row")) {
+      out[key] = anchors;
+      continue;
+    }
+    const page = Number(ordered[0]?.page);
+    if (!Number.isFinite(page) || ordered.some((item) => Number(item.page) !== page)) {
+      out[key] = anchors;
+      continue;
+    }
+    const segment = (Array.isArray(questionSegments?.[key]) ? questionSegments[key] : []).find((item) => Number(item.page) === page) || null;
+    const label = questionLabelMap?.[key] || {};
+    const top = Number(segment?.top);
+    const bottom = Number(segment?.bottom);
+    const left = Number.isFinite(Number(segment?.left)) ? Number(segment.left) : 0;
+    const right = Number.isFinite(Number(segment?.right)) ? Number(segment.right) : 1;
+    const labelY = Number(label.yRatio);
+    if (!Number.isFinite(top) || !Number.isFinite(bottom) || !Number.isFinite(labelY) || bottom <= top || right <= left) {
+      out[key] = anchors;
+      continue;
+    }
+    const width = right - left;
+    const height = bottom - top;
+    const xs = ordered.map((item) => Number(item.xRatio)).filter(Number.isFinite);
+    const ys = ordered.map((item) => Number(item.yRatio)).filter(Number.isFinite);
+    if (xs.length !== 4 || ys.length !== 4 || Math.max(...ys) - Math.min(...ys) > 0.014) {
+      out[key] = anchors;
+      continue;
+    }
+    const rowY = ys.reduce((sum, value) => sum + value, 0) / ys.length;
+    const labelToRow = rowY - labelY;
+    const looksLikeLowerGridRow = width >= 0.70
+      && height >= 0.125
+      && height <= 0.245
+      && labelToRow >= Math.max(0.038, height * 0.28)
+      && labelToRow <= Math.min(0.105, height * 0.62)
+      && rowY <= bottom + 0.012;
+    if (!looksLikeLowerGridRow) {
+      out[key] = anchors;
+      continue;
+    }
+    const gap = Math.max(0.026, Math.min(0.050, labelToRow * 0.52));
+    const upperY = clampGeneratedRatio(rowY - gap, top + height * 0.34, rowY - 0.016);
+    const xLeft = clampGeneratedRatio(xs[0], left + width * 0.055, right - width * 0.58);
+    const xRight = clampGeneratedRatio(xs[2], left + width * 0.36, right - width * 0.080);
+    if (xRight - xLeft < width * 0.30 || xRight - xLeft > width * 0.58) {
+      out[key] = anchors;
+      continue;
+    }
+    out[key] = [
+      { ...ordered[0], choice: 1, xRatio: xLeft, yRatio: upperY },
+      { ...ordered[2], choice: 2, xRatio: xRight, yRatio: upperY },
+      { ...ordered[0], choice: 3, xRatio: xLeft, yRatio: rowY },
+      { ...ordered[2], choice: 4, xRatio: xRight, yRatio: rowY },
+    ].map((item) => ({
+      ...item,
+      wRatio: Math.max(0.010, Math.min(0.022, Number(item.wRatio) || width * 0.018)),
+      hRatio: Math.max(0.010, Math.min(0.018, Number(item.hRatio) || 0.012)),
+      source: "segment-choice-anchor-text-grid-box-row-restore",
+      layout: "grid",
+      anchorMode: "center",
+      confidence: Math.max(Number(item.confidence) || 0.60, 0.70),
+      inferred: true,
+    }));
+  }
+  return out;
+}
+// SOFTM-문항앵커: box-row 보정이 실제 2x2 보기의 윗줄을 지운 경우 문제 라벨과 하단 행 간격으로 grid를 공통 복원 - 2026-06-24
+
 function alignGridFallbackRowsToSnappedSiblings(choiceMap, questionCount, choiceCount){
   const out = {};
   for (let q = 1; q <= questionCount; q += 1){
@@ -5860,6 +6042,191 @@ function repairVerticalChoiceDriftFromSiblings(choiceMap, questionSegments, ques
 }
 // SOFTM-문항앵커: 세로형 1~4번 중 일부가 텍스트 내부로 밀리면 형제 앵커 x축과 행 간격으로 outlier만 복구 - 2026-06-21
 
+function repairGridChoiceLayoutByVerticalFlow(choiceMap, questionSegments, questionCount, choiceCount){
+  const out = {};
+  const median = (values) => {
+    const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+    if (!sorted.length) return null;
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) * 0.5;
+  };
+  for (let q = 1; q <= questionCount; q += 1){
+    const key = String(q);
+    const anchors = Array.isArray(choiceMap?.[key]) ? choiceMap[key].map((item) => ({ ...item })) : [];
+    if (choiceCount !== 4 || anchors.length !== 4) {
+      if (anchors.length) out[key] = anchors;
+      continue;
+    }
+    const ordered = anchors
+      .filter((item) => Number(item.choice) >= 1 && Number(item.choice) <= 4)
+      .sort((a, b) => Number(a.choice) - Number(b.choice));
+    const page = Number(ordered[0]?.page);
+    if (ordered.length !== 4 || ordered.some((item) => String(item.layout || "") !== "grid" || Number(item.page) !== page)) {
+      out[key] = anchors;
+      continue;
+    }
+    const segment = (Array.isArray(questionSegments?.[key]) ? questionSegments[key] : []).find((item) => Number(item.page) === page) || null;
+    const left = Number(segment?.left);
+    const right = Number(segment?.right);
+    const top = Number(segment?.top);
+    const bottom = Number(segment?.bottom);
+    const width = right - left;
+    const height = bottom - top;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height < 0.055 || width >= 0.70) { // SOFTM-문항앵커: 짧은 2단 문항도 grid/vertical 오판 재검증 대상에 포함 - 2026-06-22
+      out[key] = anchors;
+      continue;
+    }
+    const xs = ordered.map((item) => Number(item.xRatio));
+    const ys = ordered.map((item) => Number(item.yRatio));
+    if (xs.some((value) => !Number.isFinite(value)) || ys.some((value) => !Number.isFinite(value))) {
+      out[key] = anchors;
+      continue;
+    }
+    const leftPairAligned = Math.abs(xs[0] - xs[2]) <= Math.max(0.014, width * 0.040);
+    const rightPairAligned = Math.abs(xs[1] - xs[3]) <= Math.max(0.045, width * 0.120);
+    const columnSpread = Math.min(xs[1], xs[3]) - Math.max(xs[0], xs[2]);
+    const topRowDrift = Math.abs(ys[1] - ys[0]);
+    const bottomRowDrift = Math.abs(ys[3] - ys[2]);
+    const yProgressive = ys[1] > ys[0] + 0.008 && ys[2] > ys[1] + 0.014;
+    const tooCloseBottomPair = bottomRowDrift < Math.max(0.004, height * 0.045);
+    const looksLikeActualGrid = topRowDrift <= Math.max(0.006, height * 0.055)
+      && bottomRowDrift <= Math.max(0.006, height * 0.055);
+    const sortedYs = [...ys].sort((a, b) => a - b);
+    const sortedGaps = sortedYs.slice(1).map((value, index) => value - sortedYs[index]);
+    const rowPairLike = sortedGaps.filter((value) => value <= Math.max(0.004, height * 0.050)).length;
+    // SOFTM-문항앵커: 2x2 행쌍이 없고 네 후보가 계단식이면 본문 숫자를 오른쪽 grid로 오판한 세로형으로 복구 - 2026-06-22
+    const sortedVerticalFlow = sortedGaps.length === 3
+      && rowPairLike === 0
+      && sortedGaps.every((value) => value >= Math.max(0.007, height * 0.080) && value <= Math.max(0.026, height * 0.300))
+      && sortedYs[3] - sortedYs[0] >= Math.max(0.034, height * 0.440)
+      && (topRowDrift > Math.max(0.008, height * 0.090) || bottomRowDrift > Math.max(0.008, height * 0.090));
+    const shouldRepair = yProgressive || sortedVerticalFlow;
+    if (!leftPairAligned || !rightPairAligned || columnSpread < Math.max(0.075, width * 0.30) || !shouldRepair || (looksLikeActualGrid && !tooCloseBottomPair)) {
+      out[key] = anchors;
+      continue;
+    }
+    const baseX = median([xs[0], xs[2]]);
+    const baseW = median([Number(ordered[0].wRatio), Number(ordered[2].wRatio)]) || 0.010;
+    const baseH = median([Number(ordered[0].hRatio), Number(ordered[2].hRatio)]) || 0.010;
+    const candidateGaps = [ys[1] - ys[0], ys[2] - ys[1]]
+      .filter((value) => Number.isFinite(value) && value > 0.006 && value < Math.max(0.070, height * 0.55));
+    const rowGap = median(candidateGaps) || Math.min(0.030, Math.max(0.014, height * 0.18));
+    const repairedYs = sortedVerticalFlow && !yProgressive
+      ? sortedYs
+      : [
+          ys[0],
+          Math.max(ys[1], ys[0] + rowGap * 0.65),
+          Math.max(ys[2], ys[1] + rowGap * 0.65),
+          Math.min(bottom - 0.006, Math.max(ys[3], ys[2] + rowGap)),
+        ];
+    out[key] = ordered.map((item, index) => ({
+      ...item,
+      xRatio: clampGeneratedRatio(baseX, left, right),
+      yRatio: clampGeneratedRatio(repairedYs[index], top, bottom),
+      wRatio: Math.max(0.006, Math.min(0.026, baseW)),
+      hRatio: Math.max(0.006, Math.min(0.026, baseH)),
+      source: `${item.source || "anchor-image"}-grid-to-vertical-flow`,
+      layout: "vertical",
+      confidence: Math.max(Number(item.confidence) || 0.55, 0.72),
+    }));
+  }
+  return out;
+}
+// SOFTM-문항앵커: 2단 세로형 보기의 ②/④가 본문 글자로 grid 오판되면 같은 문제 안 y 흐름으로 세로형 복구 - 2026-06-22
+
+function repairChoiceLayoutByOcrVerticalCandidates(choiceMap, rawChoiceCandidates, questionSegments, questionCount, choiceCount){
+  const out = {};
+  const candidates = Array.isArray(rawChoiceCandidates) ? rawChoiceCandidates : [];
+  for (let q = 1; q <= questionCount; q += 1){
+    const key = String(q);
+    const anchors = Array.isArray(choiceMap?.[key]) ? choiceMap[key].map((item) => ({ ...item })) : [];
+    if (choiceCount !== 4 || anchors.length !== 4) {
+      if (anchors.length) out[key] = anchors;
+      continue;
+    }
+    const ordered = anchors
+      .filter((item) => Number(item.choice) >= 1 && Number(item.choice) <= 4)
+      .sort((a, b) => Number(a.choice) - Number(b.choice));
+    if (ordered.length !== 4) {
+      out[key] = anchors;
+      continue;
+    }
+    const page = Number(ordered[0]?.page);
+    const segment = (Array.isArray(questionSegments?.[key]) ? questionSegments[key] : []).find((item) => Number(item.page) === page) || null;
+    const left = Number(segment?.left);
+    const right = Number(segment?.right);
+    const top = Number(segment?.top);
+    const bottom = Number(segment?.bottom);
+    if (!Number.isFinite(page) || !Number.isFinite(left) || !Number.isFinite(right) || !Number.isFinite(top) || !Number.isFinite(bottom) || right <= left || bottom <= top) {
+      out[key] = anchors;
+      continue;
+    }
+    const width = right - left;
+    const height = bottom - top;
+    const currentXs = ordered.map((item) => Number(item.xRatio)).filter(Number.isFinite);
+    const currentYs = ordered.map((item) => Number(item.yRatio)).filter(Number.isFinite);
+    const currentXSpread = currentXs.length ? Math.max(...currentXs) - Math.min(...currentXs) : 0;
+    const currentYSpan = currentYs.length ? Math.max(...currentYs) - Math.min(...currentYs) : 0;
+    const layout = String(ordered[0]?.layout || "");
+    if (layout === "vertical" && currentXSpread <= Math.max(0.020, width * 0.070)) {
+      out[key] = anchors;
+      continue;
+    }
+    const leftBandRight = left + width * (width >= 0.70 ? 0.22 : 0.30);
+    const byChoice = new Map();
+    for (const raw of candidates){
+      const choice = Number(raw?.choice);
+      if (choice < 1 || choice > 4 || Number(raw?.page) !== page) continue;
+      const x = Number(raw.xRatio);
+      const y = Number(raw.yRatio);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      if (x < left - 0.006 || x > leftBandRight || y < top - 0.006 || y > bottom + 0.006) continue;
+      const expectedX = left + width * 0.095;
+      const score = Math.abs(x - expectedX) + Math.max(0, top + height * 0.050 - y) * 1.5;
+      const prev = byChoice.get(choice);
+      if (!prev || score < prev.score) byChoice.set(choice, { ...raw, score });
+    }
+    if (![1, 2, 3, 4].every((choice) => byChoice.has(choice))) {
+      out[key] = anchors;
+      continue;
+    }
+    const rawOrdered = [1, 2, 3, 4].map((choice) => byChoice.get(choice));
+    const rawYs = rawOrdered.map((item) => Number(item.yRatio));
+    const rawXs = rawOrdered.map((item) => Number(item.xRatio));
+    const gaps = rawYs.slice(1).map((value, idx) => value - rawYs[idx]);
+    const xSpread = Math.max(...rawXs) - Math.min(...rawXs);
+    const minGap = Math.min(...gaps);
+    const maxGap = Math.max(...gaps);
+    const rawYSpan = rawYs[3] - rawYs[0];
+    if (
+      gaps.some((gap) => !Number.isFinite(gap) || gap <= 0)
+      || xSpread > Math.max(0.020, width * 0.075)
+      || rawYSpan < Math.max(0.030, height * 0.18)
+      || minGap < Math.max(0.006, height * 0.030)
+      || maxGap > Math.max(0.080, height * 0.46)
+      || rawYSpan < currentYSpan * 0.72
+    ) {
+      out[key] = anchors;
+      continue;
+    }
+    out[key] = rawOrdered.map((raw, idx) => ({
+      ...ordered[idx],
+      choice: idx + 1,
+      page,
+      xRatio: clampGeneratedRatio(Number(raw.xRatio), left, right),
+      yRatio: clampGeneratedRatio(Number(raw.yRatio), top, bottom),
+      wRatio: Math.max(0.006, Math.min(0.026, Number(raw.wRatio) || Number(ordered[idx].wRatio) || 0.010)),
+      hRatio: Math.max(0.006, Math.min(0.026, Number(raw.hRatio) || Number(ordered[idx].hRatio) || 0.010)),
+      source: `${ordered[idx].source || "anchor-image"}-ocr-vertical-layout`,
+      layout: "vertical",
+      anchorMode: "center",
+      confidence: Math.max(Number(ordered[idx].confidence) || 0.55, 0.74),
+    }));
+  }
+  return out;
+}
+// SOFTM-문항앵커: OCR 선택지 번호 1~4가 문제 segment 안에서 한 x축 세로 흐름이면 grid 오판을 세로형으로 복구 - 2026-06-22
+
 function summarizeChoiceAnchorMap(choiceMap, questionCount, choiceCount){
   let detected = 0;
   const missingQuestions = [];
@@ -6212,6 +6579,7 @@ for idx, name in enumerate(sorted(os.listdir(src)), start=1):
             (f"{stem}__col0{ext}", (0, top, int(w * 0.515), bottom), "col0"),
             (f"{stem}__col1{ext}", (int(w * 0.485), top, int(w * 0.96), bottom), "col1"),
         ]
+        # SOFTM-위치맵: 2단 OCR crop은 중앙을 겹쳐 잘라 오른쪽 단 왼쪽 선택지/문제번호를 보존 - 2026-06-22
     else:
         boxes = [(name, (0, top, int(w * 0.96), bottom), "full")]
     for out_name, box, crop_kind in boxes:
@@ -6393,7 +6761,7 @@ async function main(){
       choiceCount,
       questionLabelMap,
     ), rawChoiceCandidates, baseQuestionSegments, questionColumnBoundsMap, questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount), baseQuestionSegments, questionLabelMap, questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount); // SOFTM-문항앵커: segment fallback과 OCR 후보 보정 뒤 grid/horizontal 최종 형태를 복원 - 2026-06-18
-    const choiceAnchorMap = repairVerticalChoiceDriftFromSiblings(alignGridLowerRowColumnsToUpper(alignGridFallbackRowsToSnappedSiblings(repairBoxOptionUpperGridChoiceMap(await snapFallbackChoiceAnchorsToRenderedMarks(workDir, choiceAnchorMapBeforePixelSnap, baseQuestionSegments, questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount), questionCount, choiceCount), questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount); // SOFTM-문항앵커: 최종 fallback 앵커를 렌더 픽셀 후보/박스형 행/스냅 형제 row/grid column/세로형 x축 기준으로 보정 - 2026-06-21
+    const choiceAnchorMap = repairChoiceLayoutByOcrVerticalCandidates(repairGridChoiceLayoutByVerticalFlow(repairVerticalChoiceDriftFromSiblings(alignGridLowerRowColumnsToUpper(alignGridFallbackRowsToSnappedSiblings(repairBoxRowHorizontalGridChoiceMap(repairBoxOptionUpperGridChoiceMap(await snapFallbackChoiceAnchorsToRenderedMarks(workDir, choiceAnchorMapBeforePixelSnap, baseQuestionSegments, questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount), baseQuestionSegments, questionLabelMap, questionCount, choiceCount), questionCount, choiceCount), questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount), baseQuestionSegments, questionCount, choiceCount), rawChoiceCandidates, baseQuestionSegments, questionCount, choiceCount); // SOFTM-문항앵커: 최종 fallback 앵커를 렌더 픽셀/box-row grid 복원/형제 row/grid column/세로형 x축/grid 세로 흐름/OCR 후보 기준으로 보정 - 2026-06-24
     const inferredStartAdjusted = repairInferredQuestionStartsByChoiceBand(pageMap, topMap, questionLabelMap, choiceAnchorMap, questionCount, choiceCount, questionColumnBoundsMap);
     if (inferredStartAdjusted.changed) {
       topMap = inferredStartAdjusted.topMap;

@@ -48,5 +48,25 @@
     "catPath": "quiz/pdf/방통대/Java프로그래밍",
     "depth": 2,
     "seq": 5
+  },
+  {
+    "gNo": "04",
+    "gNm": "테스트",
+    "catNm": "테스트",
+    "catNo": "0006",
+    "parentCatNo": "",
+    "catPath": "quiz/pdf/테스트",
+    "depth": 1,
+    "seq": 6
+  },
+  {
+    "gNo": "05",
+    "gNm": "한국어교육능력검정",
+    "catNm": "한국어교육능력검정",
+    "catNo": "0007",
+    "parentCatNo": "",
+    "catPath": "quiz/pdf/한국어교육능력검정",
+    "depth": 1,
+    "seq": 7
   }
 ]

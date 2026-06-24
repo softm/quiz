@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import unicodedata
+from collections import defaultdict
 from html import unescape
 from pathlib import Path
 
@@ -188,6 +189,98 @@ def extract_exam_type(value):
     return ""
 
 
+# SOFTM-정답매핑 시작: 문제지명/정답명에서 연도·회차·차수를 뽑아 정답 디렉토리 후보를 좁힘 - 2026-06-24
+def extract_exam_round(value):
+    text = nfc(value)
+    match = re.search(r"제\s*(\d{1,3})\s*회", text)
+    if not match:
+        match = re.search(r"(?<!\d)(\d{1,3})\s*회(?!\s*(?:차|분|전|동안))", text)
+    return match.group(1) if match else ""
+
+
+def extract_exam_round_range(value):
+    text = nfc(value)
+    patterns = [
+        r"제\s*(\d{1,3})\s*회\s*[~∼～\-–—]\s*제?\s*(\d{1,3})\s*회",
+        r"제\s*(\d{1,3})\s*[~∼～\-–—]\s*(\d{1,3})\s*회",
+        r"제\s*(\d{1,3})\s*회\s*(?:부터|에서)\s*제?\s*(\d{1,3})\s*회",
+        r"(\d{1,3})\s*회\s*[~∼～\-–—]\s*(\d{1,3})\s*회",
+        r"(\d{1,3})\s*[~∼～\-–—]\s*(\d{1,3})\s*회",
+        r"(\d{1,3})\s*회\s*(?:부터|에서)\s*(?:제\s*)?(\d{1,3})\s*회",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if not match:
+            continue
+        start = int(match.group(1))
+        end = int(match.group(2))
+        if start > end:
+            start, end = end, start
+        return str(start), str(end)
+    single = extract_exam_round(value)
+    return (single, single) if single else ("", "")
+
+
+def extract_exam_phase(value):
+    text = nfc(value)
+    match = re.search(r"([12])\s*차", text)
+    return match.group(1) if match else ""
+
+
+def extract_exam_session(value):
+    text = nfc(value)
+    match = re.search(r"(?:제\s*)?([12])\s*교시", text)
+    return match.group(1) if match else ""
+
+
+def extract_exam_identity(value):
+    year, semester = extract_year_semester(value)
+    return {
+        "year": year,
+        "semester": semester,
+        "exam_type": extract_exam_type(value),
+        "round": extract_exam_round(value),
+        "round_range": extract_exam_round_range(value),
+        "phase": extract_exam_phase(value),
+        "session": extract_exam_session(value),
+    }
+
+
+def exam_identity_match_score(question_name, answer_name):
+    q = extract_exam_identity(question_name)
+    a = extract_exam_identity(answer_name)
+    score = 0
+    comparable = False
+    # SOFTM-정답매핑: 문제지 파일명에서 년도·회차·교시 같은 숫자+문자 식별 패턴을 뽑아 정답지를 구분 - 2026-06-24
+    for key, weight in [("year", 35), ("round", 45), ("session", 18), ("phase", 15), ("semester", 12)]:
+        q_value = q.get(key) or ""
+        a_value = a.get(key) or ""
+        if key == "round" and q_value:
+            # SOFTM-정답매핑: 제1회~제3회처럼 통합 정답지는 문제 회차가 범위 안이면 후보로 인정 - 2026-06-24
+            a_start, a_end = a.get("round_range") or ("", "")
+            if a_start and a_end and a_start != a_end:
+                comparable = True
+                q_round = int(q_value)
+                if not (int(a_start) <= q_round <= int(a_end)):
+                    return None
+                score += weight - 3
+                continue
+        if q_value and a_value:
+            comparable = True
+            if q_value != a_value:
+                return None
+            score += weight
+    q_type = q.get("exam_type") or ""
+    a_type = a.get("exam_type") or ""
+    if q_type and a_type:
+        comparable = True
+        if q_type != a_type:
+            return None
+        score += 8
+    return score if comparable and score > 0 else 0
+# SOFTM-정답매핑 끝
+
+
 def normalize_match_title(value):
     stem = nfc(Path(value).stem if Path(str(value)).suffix else value)
     stem = re.sub(r"\[[^\]]*\]", " ", stem)
@@ -271,6 +364,10 @@ def find_same_dir_answer(question_file):
             continue
         a_key = normalize_match_title(item.stem)
         score = 0
+        identity_score = exam_identity_match_score(q.name, item.name)
+        if identity_score is None:
+            continue
+        score += identity_score
         if q_key and a_key and (a_key.startswith(q_key) or q_key.startswith(a_key)):
             score += 50
         if q_key and q_key[:8] and q_key[:8] in a_key:
@@ -302,16 +399,32 @@ def find_answer_from_roots(question_file):
                     if not item.is_file() or not is_answer_file(item):
                         continue
                     a_year, a_semester = extract_year_semester(item.name)
-                    if a_year == year and a_semester == semester:
-                        score = 30 + (5 if exam_type and exam_type in rel_posix(item) else 0)
-                        if subject_hint and answer_file_contains_subject(item, subject_hint):
-                            score += 40
-                        candidates.append((score, item))
+                    if (a_year and a_year != year) or (a_semester and a_semester != semester):
+                        continue
+                    # SOFTM-정답매핑: 정답지 파일명에 년도/학기 일부가 빠져도 회차 등 남은 식별자만 맞으면 연결 - 2026-06-24
+                    identity_score = exam_identity_match_score(q.name, item.name)
+                    if identity_score is None:
+                        continue
+                    score = 30 + identity_score + (5 if exam_type and exam_type in rel_posix(item) else 0)
+                    if subject_hint and answer_file_contains_subject(item, subject_hint):
+                        score += 40
+                    candidates.append((score, item))
         else:
             for item in root.rglob("*"):
                 if not item.is_file() or not is_answer_file(item):
                     continue
+                identity_score = exam_identity_match_score(q.name, item.name)
                 a_key = normalize_match_title(item.stem)
+                if identity_score is None:
+                    continue
+                if identity_score:
+                    score = identity_score
+                    if q_key and a_key and (a_key.startswith(q_key) or q_key.startswith(a_key)):
+                        score += 20
+                    if subject_hint and compact(q.parent.name) and compact(q.parent.name) in compact(item.stem):
+                        score += 10
+                    candidates.append((score, item))
+                    continue
                 if q_key and a_key.startswith(q_key):
                     candidates.append((20, item))
 
@@ -524,6 +637,347 @@ def parse_hwp_subjects(path):
     return subjects or parse_subject_rows_from_text(re.sub(r"<[^>]+>", " ", html))
 
 
+# SOFTM-정답OCR 시작: 텍스트 추출이 표 숫자를 놓치는 이미지형 정답표를 렌더 이미지의 격자/숫자 템플릿으로 복원 - 2026-06-24
+def is_answer_table_gray(pixel):
+    r, g, b = pixel[:3]
+    return abs(r - g) < 4 and abs(g - b) < 4 and 145 <= r <= 215
+
+
+def find_gray_components(image):
+    width, height = image.size
+    pixels = image.load()
+    mask = set()
+    for y in range(height):
+        for x in range(width):
+            if is_answer_table_gray(pixels[x, y]):
+                mask.add((x, y))
+    seen = set()
+    components = []
+    for point in list(mask):
+        if point in seen:
+            continue
+        stack = [point]
+        seen.add(point)
+        xs = []
+        ys = []
+        while stack:
+            x, y = stack.pop()
+            xs.append(x)
+            ys.append(y)
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if (nx, ny) in mask and (nx, ny) not in seen:
+                    seen.add((nx, ny))
+                    stack.append((nx, ny))
+        if len(xs) > 50000:
+            components.append((min(xs), min(ys), max(xs) + 1, max(ys) + 1, len(xs)))
+    return sorted(components, key=lambda item: (item[1], item[0]))
+
+
+def gray_projection_bands(image, bbox, axis):
+    x0, y0, x1, y1 = bbox[:4]
+    pixels = image.load()
+    values = []
+    if axis == "y":
+        for y in range(y0, y1):
+            count = sum(1 for x in range(x0, x1) if is_answer_table_gray(pixels[x, y]))
+            if count > 100:
+                values.append(y)
+    else:
+        for x in range(x0, x1):
+            count = sum(1 for y in range(y0, y1) if is_answer_table_gray(pixels[x, y]))
+            if count > 100:
+                values.append(x)
+    bands = []
+    for value in values:
+        if not bands or value > bands[-1][1] + 1:
+            bands.append([value, value])
+        else:
+            bands[-1][1] = value
+    return bands
+
+
+def dark_components(crop, threshold=120):
+    image = crop.convert("L")
+    width, height = image.size
+    pixels = image.load()
+    mask = set()
+    for y in range(height):
+        for x in range(width):
+            if pixels[x, y] < threshold:
+                mask.add((x, y))
+    seen = set()
+    components = []
+    for point in list(mask):
+        if point in seen:
+            continue
+        stack = [point]
+        seen.add(point)
+        xs = []
+        ys = []
+        while stack:
+            x, y = stack.pop()
+            xs.append(x)
+            ys.append(y)
+            for nx in (x - 1, x, x + 1):
+                for ny in (y - 1, y, y + 1):
+                    if (nx, ny) in mask and (nx, ny) not in seen:
+                        seen.add((nx, ny))
+                        stack.append((nx, ny))
+        if len(xs) >= 8:
+            components.append((min(xs), min(ys), max(xs) + 1, max(ys) + 1, len(xs)))
+    return sorted(
+        [item for item in components if item[3] - item[1] > 10 and item[2] - item[0] > 2],
+        key=lambda item: item[0],
+    )
+
+
+def normalized_digit_bitmap(crop, bbox):
+    from PIL import ImageOps
+
+    image = ImageOps.autocontrast(crop.convert("L").crop(bbox[:4])).resize((16, 24))
+    return [1 if value < 140 else 0 for value in image.getdata()]
+
+
+def digit_bitmap_distance(left, right):
+    return sum(1 for a, b in zip(left, right) if a != b)
+
+
+def classify_answer_digit(crop, templates):
+    components = dark_components(crop, 160)
+    if not components:
+        return None
+    value = normalized_digit_bitmap(crop, components[0])
+    best = None
+    for digit, bitmaps in ((digit, templates.get(digit) or []) for digit in "12345"):
+        if not bitmaps:
+            continue
+        distance = min(digit_bitmap_distance(value, item) for item in bitmaps)
+        if best is None or distance < best[0]:
+            best = (distance, digit)
+    return int(best[1]) if best else None
+
+
+def classify_answer_value(crop, templates):
+    values = []
+    for component in dark_components(crop, 160):
+        value = normalized_digit_bitmap(crop, component)
+        best = None
+        for digit, bitmaps in ((digit, templates.get(digit) or []) for digit in "12345"):
+            if not bitmaps:
+                continue
+            distance = min(digit_bitmap_distance(value, item) for item in bitmaps)
+            if best is None or distance < best[0]:
+                best = (distance, digit)
+        if best:
+            values.append(int(best[1]))
+    if not values:
+        return None
+    return values[0] if len(values) == 1 else values
+
+
+def parse_answer_cells_from_image(image):
+    templates = defaultdict(list)
+    cells = []
+    next_no = 1
+    for bbox in find_gray_components(image):
+        row_bands = [band for band in gray_projection_bands(image, bbox, "y") if band[1] - band[0] > 10]
+        question_bands = [band for band in gray_projection_bands(image, bbox, "x") if band[1] - band[0] > 50]
+        if len(row_bands) < 2 or len(question_bands) < 2:
+            continue
+        for y_band in row_bands:
+            for col_index, x_band in enumerate(question_bands):
+                question_crop = image.crop((x_band[0] + 5, y_band[0] + 3, x_band[1] - 5, y_band[1] - 3))
+                question_components = dark_components(question_crop)
+                expected_label = str(next_no)
+                if len(question_components) != len(expected_label):
+                    continue
+                for digit, component in zip(expected_label, question_components):
+                    templates[digit].append(normalized_digit_bitmap(question_crop, component))
+                if col_index < len(question_bands) - 1:
+                    answer_x0 = x_band[1] + 5
+                    answer_x1 = question_bands[col_index + 1][0] - 5
+                else:
+                    answer_x0 = x_band[1] + 5
+                    answer_x1 = bbox[2] - 5
+                answer_crop = image.crop((answer_x0, y_band[0] + 3, answer_x1, y_band[1] - 3))
+                cells.append((next_no, answer_crop))
+                next_no += 1
+    if not templates:
+        return []
+    answers = []
+    for question_no, answer_crop in cells:
+        answer = classify_answer_digit(answer_crop, templates)
+        if answer is None:
+            continue
+        while len(answers) < question_no:
+            answers.append(None)
+        answers[question_no - 1] = answer
+    while answers and answers[-1] is None:
+        answers.pop()
+    return answers
+
+
+def projection_line_bands(image, bbox, axis, threshold_ratio=0.28):
+    gray = image.convert("L")
+    width, height = gray.size
+    pixels = gray.load()
+    x0, y0, x1, y1 = bbox
+    values = []
+    if axis == "y":
+        threshold = max(20, int((x1 - x0) * threshold_ratio))
+        for y in range(y0, y1):
+            count = sum(1 for x in range(x0, x1) if pixels[x, y] < 90)
+            if count >= threshold:
+                values.append(y)
+    else:
+        threshold = max(20, int((y1 - y0) * threshold_ratio))
+        for x in range(x0, x1):
+            count = sum(1 for y in range(y0, y1) if pixels[x, y] < 90)
+            if count >= threshold:
+                values.append(x)
+    bands = []
+    for value in values:
+        if not bands or value > bands[-1][1] + 1:
+            bands.append([value, value])
+        else:
+            bands[-1][1] = value
+    return bands
+
+
+def center_of_band(band):
+    return int(round((band[0] + band[1]) / 2))
+
+
+def select_regular_grid_lines(row_bands):
+    lines = [center_of_band(band) for band in row_bands]
+    if len(lines) < 3:
+        return lines
+    runs = []
+    current = [lines[0]]
+    for value in lines[1:]:
+        gap = value - current[-1]
+        if 18 <= gap <= 90:
+            current.append(value)
+        else:
+            if len(current) >= 3:
+                runs.append(current)
+            current = [value]
+    if len(current) >= 3:
+        runs.append(current)
+    if not runs:
+        return lines
+    return max(runs, key=lambda item: (len(item), item[-1] - item[0]))
+
+
+def parse_black_grid_answers_from_image(image, printed_start_no=1):
+    row_bands = projection_line_bands(image, (0, 0, image.size[0], image.size[1]), "y", 0.18)
+    if len(row_bands) < 3:
+        return []
+    row_lines = select_regular_grid_lines(row_bands)
+    if len(row_lines) < 3:
+        return []
+    table_y0 = max(0, row_lines[0] - 2)
+    table_y1 = min(image.size[1], row_lines[-1] + 3)
+    col_bands = projection_line_bands(image, (0, table_y0, image.size[0], table_y1), "x", 0.35)
+    if len(col_bands) < 2:
+        return []
+    col_lines = [center_of_band(band) for band in col_bands]
+    col_lines = [value for idx, value in enumerate(col_lines) if idx == 0 or value - col_lines[idx - 1] > 12]
+    templates = defaultdict(list)
+    answer_cells = []
+    expected_no = int(printed_start_no or 1)
+    for row_idx in range(0, len(row_lines) - 1, 2):
+        if row_idx + 1 >= len(row_lines) - 1:
+            break
+        q_y0, q_y1 = row_lines[row_idx], row_lines[row_idx + 1]
+        a_y0, a_y1 = row_lines[row_idx + 1], row_lines[row_idx + 2]
+        for col_idx in range(len(col_lines) - 1):
+            x0, x1 = col_lines[col_idx], col_lines[col_idx + 1]
+            if x1 - x0 <= 12 or q_y1 - q_y0 <= 6 or a_y1 - a_y0 <= 6:
+                continue
+            q_crop = image.crop((x0 + 4, q_y0 + 3, x1 - 4, q_y1 - 3))
+            components = dark_components(q_crop)
+            if not components:
+                continue
+            expected_label = str(expected_no)
+            if len(components) == len(expected_label):
+                for digit, component in zip(expected_label, components):
+                    templates[digit].append(normalized_digit_bitmap(q_crop, component))
+            answer_cells.append(image.crop((x0 + 4, a_y0 + 3, x1 - 4, a_y1 - 3)))
+            expected_no += 1
+    if not templates:
+        return []
+    answers = []
+    for answer_crop in answer_cells:
+        value = classify_answer_value(answer_crop, templates)
+        if value is not None:
+            answers.append(value)
+    return answers
+# SOFTM-정답OCR: 검은 격자 이미지 정답표도 셀 분할과 숫자 템플릿으로 읽도록 보강 - 2026-06-24
+
+
+def parse_image_answer_sections(path, text):
+    try:
+        import pypdfium2 as pdfium
+    except Exception:
+        return []
+    try:
+        document = pdfium.PdfDocument(str(path))
+    except Exception:
+        return []
+    text_pages = nfc(text).split("\f")
+    sections = []
+    rendered_pages = []
+    for page_index in range(len(document)):
+        try:
+            image = document[page_index].render(scale=200 / 72).to_pil().convert("RGB")
+        except Exception:
+            continue
+        rendered_pages.append((page_index, image))
+        answers = parse_answer_cells_from_image(image)
+        if answer_count(answers) < 5:
+            continue
+        page_text = text_pages[page_index] if page_index < len(text_pages) else ""
+        match = re.search(r"(\d{1,2})\s*교시", page_text)
+        fallback_session_no = page_index + 1 if "교시" in page_text else None
+        sections.append({
+            "sessionNo": int(match.group(1)) if match else fallback_session_no,
+            "answers": answers,
+            "questionCount": len(answers),
+        })
+    if sections:
+        return sections
+    round_start, round_end = extract_exam_round_range(path.name)
+    if round_start and round_end:
+        round_count = int(round_end) - int(round_start) + 1
+        if round_count > 0 and len(rendered_pages) == round_count * 3:
+            for offset in range(round_count):
+                round_no = int(round_start) + offset
+                first_page = rendered_pages[offset * 3][1]
+                second_page = rendered_pages[offset * 3 + 1][1]
+                third_page = rendered_pages[offset * 3 + 2][1]
+                first_answers = parse_black_grid_answers_from_image(first_page, 1)
+                if answer_count(first_answers) >= 5:
+                    sections.append({
+                        "roundNo": round_no,
+                        "sessionNo": 1,
+                        "answers": first_answers,
+                        "questionCount": len(first_answers),
+                    })
+                second_answers = parse_black_grid_answers_from_image(second_page, 1)
+                third_answers = parse_black_grid_answers_from_image(third_page, len(second_answers) + 1)
+                combined = second_answers + third_answers
+                if answer_count(combined) >= 5:
+                    sections.append({
+                        "roundNo": round_no,
+                        "sessionNo": 2,
+                        "answers": combined,
+                        "questionCount": len(combined),
+                    })
+    return sections
+# SOFTM-정답OCR 끝
+
+
 def parse_answer_file(path):
     path = Path(path)
     adjacent_json = path.with_suffix(".json")
@@ -546,6 +1000,11 @@ def parse_answer_file(path):
     if subjects:
         return {"kind": "subjects", "subjects": subjects}
     pairs = parse_pairs_from_text(text)
+    if len(pairs) >= 5:
+        return {"kind": "answer_pairs", "pairs": pairs}
+    image_sections = parse_image_answer_sections(path, text)
+    if image_sections:
+        return {"kind": "answer_sections", "sections": image_sections}
     return {"kind": "answer_pairs", "pairs": pairs} if pairs else {"kind": "empty"}
 
 
@@ -563,6 +1022,24 @@ def choose_answer_payload(parsed, question):
 
     if parsed.get("kind") == "answer_pairs":
         return answers_from_printed_pairs(parsed.get("pairs") or [], question)
+
+    if parsed.get("kind") == "answer_sections":
+        sections = parsed.get("sections") or []
+        title = nfc(question.get("questionNm"))
+        session_match = re.search(r"(\d{1,2})\s*교시", title)
+        session_no = int(session_match.group(1)) if session_match else None
+        round_no = int(extract_exam_round(title) or 0)
+        picked = None
+        if session_no is not None:
+            for section in sections:
+                if section.get("sessionNo") == session_no and (not section.get("roundNo") or not round_no or section.get("roundNo") == round_no):
+                    picked = section
+                    break
+        if picked is None and len(sections) == 1:
+            picked = sections[0]
+        if not picked:
+            return None
+        return answer_payload(picked.get("answers") or [], 1, "image-table-section")
 
     subjects = parsed.get("subjects") or []
     if not subjects:

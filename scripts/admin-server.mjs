@@ -10,6 +10,17 @@ import { fileURLToPath } from "node:url";
 const root = process.cwd();
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || getArg("--port") || 8787);
+const bundledBinDir = path.resolve(root, "..", "..", ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "bin");
+const bundledPythonBinDir = path.resolve(root, "..", "..", ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "python", "bin");
+const bundledNativePopplerBinDir = path.resolve(root, "..", "..", ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "native", "poppler", "bin");
+const toolPath = [
+  bundledBinDir,
+  bundledPythonBinDir,
+  bundledNativePopplerBinDir,
+  "/opt/homebrew/bin",
+  "/usr/local/bin",
+  process.env.PATH || "",
+].filter(Boolean).join(path.delimiter); // SOFTM-위치맵: 관리자 서버 PATH에 poppler/pdfinfo 후보 경로를 보강해 GUI 실행 환경에서도 위치맵 생성이 실패하지 않게 함 - 2026-06-23
 const maxUploadBytes = 250 * 1024 * 1024;
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -1346,6 +1357,38 @@ function answerDiagSummary(row, data){
   return { status: "정답 없음", tone: "warn", warnings: ["정답 파일 또는 정답 원본 ID가 연결되지 않았습니다."], textChars: data?.textChars || 0, answerPairs: data?.answerPairs || 0 };
 }
 
+function answerStateDetails(row, answerFiles, answerDiag, data){
+  const existingCount = answerFiles.filter((item) => manifestFileExists(item)).length;
+  const missingCount = Math.max(0, answerFiles.length - existingCount);
+  const hasSource = Boolean(String(row?.answerSourceId || "").trim());
+  const correctJson = stripManifestPrefix(row?.correctJson || "");
+  const hasCorrect = correctJsonReady(row);
+  const fileStatus = answerFiles.length
+    ? (existingCount ? (missingCount ? `일부 있음 ${existingCount}/${answerFiles.length}` : `있음 ${existingCount}/${answerFiles.length}`) : "파일 없음")
+    : (hasSource ? "원본 ID 연결" : "없음");
+  const jsonStatus = hasCorrect ? "연결됨" : (correctJson ? "경로 오류" : "없음");
+  const textStatus = data
+    ? (data.needsOcr ? "OCR 확인 필요" : "텍스트 확인")
+    : (answerFiles.some((item) => /\.pdf$/i.test(item)) ? "미진단" : "비PDF/미진단");
+  const detailParts = [
+    `정답 파일: ${fileStatus}`,
+    `정답 JSON: ${jsonStatus}`,
+    `정답 텍스트: ${textStatus}`,
+  ];
+  const warnings = Array.isArray(answerDiag?.warnings) ? answerDiag.warnings : [];
+  if (warnings.length) detailParts.push(`확인: ${warnings.slice(0, 2).join(" / ")}`);
+  return {
+    answerFileCount: answerFiles.length,
+    answerFileExistingCount: existingCount,
+    answerFileMissingCount: missingCount,
+    answerFileStatus: fileStatus,
+    answerJsonStatus: jsonStatus,
+    answerTextStatus: textStatus,
+    answerStatusDetail: detailParts.join("\n"),
+  };
+}
+// SOFTM-정답진단: 정답 원본/JSON/OCR 상태를 목록과 상세에서 분리 표시하도록 서버 응답 필드 추가 - 2026-06-24
+
 async function buildCatalogDataset(dataset, datasetLabel, categories, questions){
   const categoryRows = Array.isArray(categories) ? categories : [];
   const questionRows = Array.isArray(questions) ? questions : [];
@@ -1362,6 +1405,7 @@ async function buildCatalogDataset(dataset, datasetLabel, categories, questions)
     const answerDiagnostics = answerExt === ".pdf" && manifestFileExists(primaryAnswerPdf) ? await cachedPdfDiagnostics(primaryAnswerPdf, { docType: "answer", meta: row }) : null;
     const questionDiag = questionDiagSummary(diagnostics);
     const answerDiag = answerDiagSummary({ ...row, answerPdf: primaryAnswerPdf, answerPdfs }, answerDiagnostics);
+    const answerState = answerStateDetails({ ...row, answerPdf: primaryAnswerPdf, answerPdfs }, answerPdfs, answerDiag, answerDiagnostics);
     const anchorMapPath = inferAnchorMapPath(row);
     const anchorMeta = readAnchorMapMeta(anchorMapPath);
     const hasAnchorMapFile = Boolean(anchorMapPath);
@@ -1449,6 +1493,7 @@ async function buildCatalogDataset(dataset, datasetLabel, categories, questions)
       answerIssue,
       answerTextChars: answerDiag.textChars || 0,
       answerPairs: answerDiag.answerPairs || 0,
+      ...answerState,
       hasQuestionFile: manifestFileExists(row?.questionPdf || ""),
       hasAnswerFile: answerPdfs.length ? answerPdfs.some((item) => manifestFileExists(item)) : Boolean(row?.answerSourceId),
       hasCorrectJson: correctJsonReady(row),
@@ -1716,7 +1761,7 @@ function scriptInfo(scriptName){
 
 function checkCommand(name){
   return new Promise((resolve) => {
-    execFile("which", [name], { cwd: root }, (err, stdout) => {
+    execFile("which", [name], { cwd: root, env: { ...process.env, PATH: toolPath } }, (err, stdout) => {
       resolve({ name, ok: !err, path: stdout.trim() });
     });
   });
@@ -1728,6 +1773,7 @@ function runCommand(command, args, options = {}){
       cwd: root,
       maxBuffer: options.maxBuffer || 80 * 1024 * 1024,
       timeout: options.timeout || 0,
+      env: { ...process.env, PATH: toolPath, ...(options.env || {}) },
     }, (err, stdout, stderr) => {
       if (err) {
         err.message = `${err.message}\n${stderr || stdout}`;
@@ -2328,7 +2374,7 @@ async function startOcrJob(body){
     command: `${config.commandName} ${config.args.map((arg) => /\s/.test(arg) ? `"${arg}"` : arg).join(" ")}`,
   };
   ocrJobs.set(id, job);
-  const child = spawn(config.commandName, config.args, { cwd: root, detached: true, env: { ...process.env, PYTHONUNBUFFERED: "1" } });
+  const child = spawn(config.commandName, config.args, { cwd: root, detached: true, env: { ...process.env, PATH: toolPath, PYTHONUNBUFFERED: "1" } });
   job.child = child;
   job.pid = child.pid;
   appendOcrLog(job, `OCR 작업을 시작했습니다. PID ${child.pid || "-"}`, "stdout");
@@ -2647,7 +2693,7 @@ async function startAnchorJob(body){
     command: `${process.execPath} ${config.args.map((arg) => /\s/.test(arg) ? `"${arg}"` : arg).join(" ")}`,
   };
   anchorJobs.set(id, job);
-  const child = spawn(process.execPath, config.args, { cwd: root, detached: true, env: { ...process.env, PYTHONUNBUFFERED: "1" } });
+  const child = spawn(process.execPath, config.args, { cwd: root, detached: true, env: { ...process.env, PATH: toolPath, PYTHONUNBUFFERED: "1" } });
   job.child = child;
   job.pid = child.pid;
   appendAnchorLog(job, `위치맵 생성 작업을 시작했습니다. PID ${child.pid || "-"}`, "stdout");
@@ -3359,6 +3405,62 @@ async function handleCorrectGenerate(req, res){
 }
 // SOFTM-GEN: 회차 상세에서 현재 회차 하나만 correct.json에 추가/교체하는 관리자 API 추가 - 2026-06-15
 
+async function handleAnswerRefind(req, res){
+  const body = JSON.parse((await readBody(req)).toString("utf8") || "{}");
+  const found = findQuestionManifestRow(body);
+  const row = found.row;
+  const questionNo = String(row?.questionNo || "");
+  const questionPdf = stripManifestPrefix(row?.questionPdf || "");
+  if (!questionPdf) throw new Error("문제 PDF 경로가 없습니다.");
+  if (!manifestFileExists(questionPdf)) throw new Error(`문제 PDF 파일을 찾을 수 없습니다: ${questionPdf}`);
+
+  const script = [
+    "import json",
+    "import sys",
+    "from pathlib import Path",
+    "sys.path.insert(0, 'scripts')",
+    "from pdf_manifest_lib import ROOT, find_answer_file, manifest_path",
+    "p = ROOT / sys.argv[1]",
+    "answer = find_answer_file(p)",
+    "print(json.dumps({'answerPdf': manifest_path(answer) if answer else ''}, ensure_ascii=False))",
+  ].join("\n");
+  const result = await runCommand("python3", ["-c", script, questionPdf], {
+    maxBuffer: 16 * 1024 * 1024,
+    timeout: 90 * 1000,
+  });
+  let parsed = {};
+  try{
+    parsed = JSON.parse(String(result.stdout || "").trim() || "{}");
+  }catch(err){
+    throw new Error(`정답 원본 찾기 결과를 해석하지 못했습니다: ${err?.message || err}`);
+  }
+  const answerPdf = stripManifestPrefix(parsed.answerPdf || "");
+  if (!answerPdf) {
+    sendJson(res, 404, {
+      ok: false,
+      questionNo,
+      questionNm: row?.questionNm || "",
+      questionPdf,
+      message: "문제지명 기준으로 다시 찾아도 매칭되는 정답 원본 파일을 찾지 못했습니다.",
+    });
+    return;
+  }
+  const fields = { answerPdf: `quiz/${answerPdf}` };
+  found.rows[found.index] = { ...found.rows[found.index], ...fields };
+  await writeJsonFile(found.manifestName, found.rows);
+  await updateCategoryQuestionManifest(row, fields);
+  sendJson(res, 200, {
+    ok: true,
+    questionNo,
+    questionNm: row?.questionNm || "",
+    questionPdf,
+    answerPdf: fields.answerPdf,
+    manifestName: found.manifestName,
+    message: `정답 원본 파일을 다시 찾아 연결했습니다: ${answerPdf}`,
+  });
+}
+// SOFTM-정답매핑: 정답 원본을 찾지 못한 회차에서 문제지명 기준으로 다시 매칭해 manifest에 연결 - 2026-06-24
+
 async function handleCorrectDelete(req, res){
   const body = await readSmallJsonRequest(req);
   const found = findQuestionManifestRow(body);
@@ -3873,6 +3975,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/admin/anchor-ocr" && req.method === "POST") return await handleAnchorOcr(req, res);
     if (url.pathname === "/api/admin/anchor-delete" && req.method === "POST") return await handleAnchorDelete(req, res);
     if (url.pathname === "/api/admin/question-reset" && req.method === "POST") return await handleQuestionResetInitial(req, res);
+    if (url.pathname === "/api/admin/answer-refind" && req.method === "POST") return await handleAnswerRefind(req, res);
     if (url.pathname === "/api/admin/correct-generate" && req.method === "POST") return await handleCorrectGenerate(req, res);
     if (url.pathname === "/api/admin/correct-delete" && req.method === "POST") return await handleCorrectDelete(req, res);
     if (url.pathname === "/api/admin/download") return await handleAdminDownload(req, res, url);

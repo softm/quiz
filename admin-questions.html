@@ -815,6 +815,34 @@
       return q > 0 ? q * c : 0;
     }
 
+    function answerJsonLabel(item){
+      if (item?.hasCorrectJson) return "연결됨";
+      if (item?.correctJson) return "경로 오류";
+      return "없음";
+    }
+
+    function answerJsonTone(item){
+      if (item?.hasCorrectJson) return "ok";
+      return item?.correctJson ? "warn" : "muted";
+    }
+
+    function answerDiagLabel(item){
+      const status = String(item?.answerDiagStatus || "").trim();
+      if (!status) return "미확인";
+      if (status === "정답 확인 필요" && item?.hasCorrectJson) return "OCR/텍스트 확인";
+      return status;
+    }
+
+    function answerDiagTitle(item){
+      return item?.answerStatusDetail || [
+        `정답 파일: ${item?.answerFileStatus || (item?.hasAnswerFile ? "있음" : "없음")}`,
+        `정답 JSON: ${answerJsonLabel(item)}`,
+        `정답 진단: ${answerDiagLabel(item)}`,
+        warningText(item?.answerDiagWarnings),
+      ].filter(Boolean).join("\n");
+    }
+    // SOFTM-정답진단: 목록에서 정답 JSON 존재와 정답 OCR/텍스트 진단을 분리 표시 - 2026-06-24
+
     function pdfTextDetailHtml(item){
       const warnings = Array.isArray(item?.questionDiagWarnings) && item.questionDiagWarnings.length
         ? item.questionDiagWarnings
@@ -868,8 +896,8 @@
         chips.push({ label: questionTextDiagLabel(item), tone: "warn", title: warningText(item.questionDiagWarnings) });
       }
       if (hasNonNormalText(item.answerIssue) || (item.answerDiagTone && item.answerDiagTone !== "ok")) {
-        const label = item.answerIssue || item.answerDiagStatus || "정답 확인";
-        chips.push({ label, tone: label.includes("없음") ? "danger" : "warn", title: warningText(item.answerDiagWarnings) });
+        const label = answerDiagLabel(item);
+        chips.push({ label, tone: label.includes("없음") ? "danger" : "warn", title: answerDiagTitle(item) });
       }
       if (Array.isArray(item.anchorWarnings) && item.anchorWarnings.length) {
         chips.push({ label: "위치맵 보정", tone: "warn", title: warningText(item.anchorWarnings) });
@@ -977,7 +1005,8 @@
           ${stateItem("게시", item.published ? "게시" : (item.issue || "미게시"), item.published ? "ok" : "warn")}
           ${stateItem("처리", work.label, work.tone)}
           ${pdfTextStateItem(item)}
-          ${stateItem("정답", item.answerDiagStatus || "미확인", answerTone, warningText(item.answerDiagWarnings))}
+          ${stateItem("정답JSON", answerJsonLabel(item), answerJsonTone(item), answerDiagTitle(item))}
+          ${stateItem("정답진단", answerDiagLabel(item), answerTone, answerDiagTitle(item))}
         </div>
       `;
     }

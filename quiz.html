@@ -991,6 +991,7 @@
     .anchorEditActionReset button,
     .anchorEditKindControls button,
     .anchorEditModeRow button,
+    .anchorEditOcrActions button,
     .anchorEditChoiceControls button{
       min-height:30px;
       padding-left:10px;
@@ -1301,6 +1302,30 @@
       justify-self:end;
       white-space:nowrap;
     }
+    /* SOFTM-OCR후보 시작: 편집 모드 OCR 후보는 기존 저장 버튼 전 단계의 임시 적용 컨트롤로 배치 - 2026-06-22 */
+    .anchorEditOcrActions{
+      grid-area:ocrActions;
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:6px;
+      justify-self:end;
+      white-space:nowrap;
+    }
+    .anchorEditOcrActions[hidden]{
+      display:none !important;
+    }
+    .anchorEditOcrActions button{
+      min-width:auto;
+      padding-left:10px;
+      padding-right:10px;
+    }
+    .anchorEditOcrActions button[data-draft="true"]{
+      border-color:rgba(37,99,235,.42);
+      color:#1d4ed8;
+      background:#eff6ff;
+    }
+    /* SOFTM-OCR후보 끝 */
     /* SOFTM-영역편집 끝 */
     .anchorEditActions button.active:not(.anchorEditTab):not(#anchorEditModeToggle){
       border-color:#2563eb;
@@ -1342,6 +1367,7 @@
           "choiceAnchorDeleteQuestion"
           "areaCreateQuestion"
           "areaDeleteQuestion"
+          "ocrActions"
           "radius"
           "areaCreate"
           "areaDelete"
@@ -2197,6 +2223,13 @@
             <button id="anchorEditOverlayArea" class="secondary anchorEditTab" type="button" role="tab" aria-selected="false">영역</button>
           </div>
           <label class="toggle anchorEditOverlayLock"><input id="anchorEditQuestionLock" type="checkbox" /> 스크롤 락</label><!-- SOFTM-편집탭: 공통 성격의 스크롤 락을 상위 앵커/영역 탭 오른쪽으로 이동 - 2026-06-16 -->
+          <!-- SOFTM-OCR후보 시작: OCR 후보는 문제/문항/영역 공통 보조 기능이므로 상위 편집 row에 둠 - 2026-06-22 -->
+          <div class="anchorEditOcrActions" id="anchorEditOcrActions">
+            <button id="anchorEditOcrCandidate" class="secondary" type="button">OCR 후보</button>
+            <button id="anchorEditOcrApply" class="secondary" type="button" hidden>OCR 적용</button>
+            <button id="anchorEditOcrCancel" class="secondary danger" type="button" hidden>취소</button>
+          </div>
+          <!-- SOFTM-OCR후보 끝 -->
         </div>
         <div class="anchorEditActions anchorEditKindRow">
           <div class="anchorEditKindControls">
@@ -2363,6 +2396,24 @@
 <script>
   window.__quizBootLog = ["script-start"];
   document.documentElement.dataset.quizBoot = "script-start";
+  /* SOFTM-풀이진입 시작: file:// 직접 열기는 PDF/JSON fetch가 불안정하므로 로컬 서버가 있으면 같은 쿼리로 전환 - 2026-06-24 */
+  (() => {
+    if (location.protocol !== "file:") return;
+    const target = `http://localhost:8787/quiz.html${location.search || ""}${location.hash || ""}`;
+    const timeout = window.setTimeout(() => {
+      document.documentElement.dataset.quizFileRedirect = "server-timeout";
+    }, 900);
+    fetch("http://localhost:8787/quiz.html", { method: "HEAD", cache: "no-store" })
+      .then((res) => {
+        window.clearTimeout(timeout);
+        if (res && res.ok) location.replace(target);
+      })
+      .catch(() => {
+        window.clearTimeout(timeout);
+        document.documentElement.dataset.quizFileRedirect = "server-unavailable";
+      });
+  })();
+  /* SOFTM-풀이진입 끝 */
   window.addEventListener("error", (event) => {
     window.__quizBootLog = window.__quizBootLog || [];
     window.__quizBootLog.push(`error:`);
@@ -2380,8 +2431,12 @@
   // ====== 파일 경로/메타 ======
   const DEFAULT_QUESTION_PDF_URL = "./2025년 제22회 농산물품질관리사 1차 시험문제지.pdf";
   const DEFAULT_ANSWER_PDF_URL = "./최종정답.pdf";
+  const LAST_VALID_QUIZ_URL_STORAGE_KEY = "quiz_last_valid_url_v1"; // SOFTM-풀이링크: q/viewMode만 남은 축약 링크에서 마지막 유효 PDF 풀이 URL을 복원 - 2026-06-24
   const params = new URLSearchParams(window.location.search);
+  hydrateQuizParamsFromManifest(params);
+  restoreMissingQuizPdfParams(params);
   normalizeInitialPdfQueryParams(params);
+  rememberValidQuizPdfParams(params);
   const DATASET = params.get("dataset") === "knou" ? "knou" : "default"; // SOFTM-KNOU: 기존/방통대 데이터셋 구분 추가 - 2026-05-29
   const CATEGORY_NO = params.get("catNo") || ""; // SOFTM-KNOU: 카테고리 복귀 경로 유지를 위한 catNo 추가 - 2026-05-29
   const CATEGORY_NAME = params.get("category") || "농산물품질관리사";
@@ -2393,7 +2448,7 @@
   const ANSWER_SOURCE_ID = params.get("answerSourceId") || ""; // SOFTM-KNOU: 방통대 통합 정답표 sourceId 추가 - 2026-05-29
   const ANSWER_SUBJECT = params.get("answerSubject") || CATEGORY_NAME; // SOFTM-KNOU: 통합 정답표 내 교과목명 추가 - 2026-05-29
   const ANSWER_GRADE = params.get("grade") || ""; // SOFTM-KNOU: 동일 교과목명 중 학년 구분 추가 - 2026-05-29
-  const QUESTION_COUNT = normalizeBoundedInt(params.get("questionCount"), 100, 1, 100); // SOFTM-KNOU: 방통대 35/70문항 회차 대응 - 2026-05-29
+  const QUESTION_COUNT = normalizeBoundedInt(params.get("questionCount"), 100, 1, 999); // SOFTM-문항수: 한국어교육능력검정 2교시처럼 100문항 초과 회차를 허용 - 2026-06-24
   const QUESTION_START_NO = normalizeOptionalInt(params.get("questionStartNo"), 1, 999); // SOFTM-KNOU: PDF 인쇄 문항 시작 번호가 1이 아닌 회차 대응 - 2026-05-29
   const QUESTION_END_NO = normalizeOptionalInt(params.get("questionEndNo"), 1, 999); // SOFTM-KNOU: PDF 인쇄 문항 종료 번호가 앱 문항 수와 다른 회차 대응 - 2026-05-29
   const CHOICE_COUNT = normalizeBoundedInt(params.get("choiceCount"), 4, 1, 5); // SOFTM-위치맵: 문제·문항 위치맵이 선택지 1~5 좌표를 다룰 수 있도록 선택지 수 상한 확장 - 2026-05-30
@@ -2435,12 +2490,12 @@
   const STORAGE_UI_KEY = "quiz_ui_v3";
   const STORAGE_PDF_PATTERN_KEY = "quiz_pdf_patterns_v1";
   const ANSWER_PARSE_VERSION = 2;
-  const PDF_MAP_VERSION = 58; // SOFTM-위치맵: 수동 편집 앵커 저장을 반영해 PDF 위치맵 캐시 갱신 - 2026-06-01
+  const PDF_MAP_VERSION = 61; // SOFTM-한국어교육능력검정: 2024 1/2교시 위치맵 재생성 및 box-row 2x2 복원 반영을 위해 캐시 갱신 - 2026-06-24
   const PDF_ANCHOR_DATA_URL = "/api/admin/anchor-data";
   const PDF_ANCHOR_MANUAL_SAVE_URL = "/api/admin/anchor-manual";
   const PDF_ANCHOR_MANUAL_DELETE_URL = "/api/admin/anchor-manual-delete";
   const PDF_PATTERN_VERSION = 3;
-  const CROP_CACHE_VERSION = 61; // SOFTM-한문제보기: 2단 보간 라벨 상단 여백 축소를 캐시 키에 반영 - 2026-06-21
+  const CROP_CACHE_VERSION = 64; // SOFTM-한문제보기: 2단 단일 segment 여백/짧은 보간 상단 제한 보정을 캐시 키에 반영 - 2026-06-23
   const GRADE_MARKER_VERSION = 21;
   const PRESET_PAGE_ANCHORS = {
     "2022년 제19회 농산물품질관리사 1차": [1,6,10,14,18,22,26,33,39,47,51,57,64,70,76,81,87,94],
@@ -2478,6 +2533,93 @@
     }catch(_){}
   }
   // SOFTM-배포: GitHub Pages는 NFC 파일명으로 배포되므로 초기 NFD 쿼리를 PDF 로딩 전에 NFC로 정규화 - 2026-06-02
+
+  /* SOFTM-풀이링크 시작: questionNo만 있는 짧은 링크도 manifest에서 PDF/정답/문항수 파라미터를 공통 복원 - 2026-06-24 */
+  function hydrateQuizParamsFromManifest(searchParams){
+    if (!searchParams || searchParams.get("question")) return;
+    const questionNo = String(searchParams.get("questionNo") || searchParams.get("qNo") || "").trim();
+    if (!questionNo) return;
+    const dataset = searchParams.get("dataset") === "knou" ? "knou" : "default";
+    const manifestPath = dataset === "knou" ? "./json/knou_question.json" : "./json/question.json";
+    let rows = [];
+    try{
+      const xhr = new XMLHttpRequest();
+      xhr.open("GET", manifestPath, false);
+      xhr.send(null);
+      if (xhr.status >= 200 && xhr.status < 300) rows = JSON.parse(xhr.responseText);
+    }catch(_){}
+    if (!Array.isArray(rows) || !rows.length) return;
+    const row = rows.find((item) => String(item?.questionNo || "") === questionNo);
+    if (!row) return;
+    const setMissing = (key, value) => {
+      if (searchParams.get(key) || value == null || String(value).trim() === "") return false;
+      searchParams.set(key, String(value));
+      return true;
+    };
+    let changed = false;
+    changed = setMissing("dataset", row.dataset || dataset) || changed;
+    changed = setMissing("category", row.catNm || row.gNm || "") || changed;
+    changed = setMissing("catNo", row.catNo || "") || changed;
+    changed = setMissing("exam", row.questionNm || "") || changed;
+    changed = setMissing("questionNo", row.questionNo || questionNo) || changed;
+    changed = setMissing("question", row.questionPdf || "") || changed;
+    changed = setMissing("answer", row.answerPdf || "") || changed;
+    changed = setMissing("correct", row.correctJson || "") || changed;
+    changed = setMissing("questionCount", row.questionCount || "") || changed;
+    changed = setMissing("questionStartNo", row.questionStartNo || "") || changed;
+    changed = setMissing("questionEndNo", row.questionEndNo || "") || changed;
+    changed = setMissing("choiceCount", row.choiceCount || "") || changed;
+    changed = setMissing("answerSourceId", row.answerSourceId || "") || changed;
+    changed = setMissing("answerSubject", row.answerSubject || "") || changed;
+    changed = setMissing("grade", row.grade || "") || changed;
+    if (!changed || !window.history || !history.replaceState) return;
+    try{
+      const nextUrl = new URL(location.href);
+      nextUrl.search = searchParams.toString();
+      history.replaceState(null, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+    }catch(_){}
+  }
+  /* SOFTM-풀이링크 끝 */
+
+  /* SOFTM-풀이링크 시작: PDF 파라미터가 빠진 공유/히스토리 URL은 마지막 유효 풀이 URL에서 복원해 기본 PDF 실패를 막음 - 2026-06-24 */
+  function restoreMissingQuizPdfParams(searchParams){
+    if (!searchParams || searchParams.get("question") || searchParams.get("questionNo")) return;
+    let restored = null;
+    try{
+      restored = localStorage.getItem(LAST_VALID_QUIZ_URL_STORAGE_KEY);
+    }catch(_){}
+    if (!restored) return;
+    let restoredUrl = null;
+    try{
+      restoredUrl = new URL(restored, location.href);
+    }catch(_){
+      return;
+    }
+    if (!restoredUrl.searchParams.get("question")) return;
+    const keepQ = searchParams.get("q") || searchParams.get("question") || searchParams.get("problem");
+    const keepViewMode = searchParams.get("viewMode") || searchParams.get("view");
+    const nextParams = new URLSearchParams(restoredUrl.search);
+    if (keepQ) nextParams.set("q", keepQ);
+    if (keepViewMode) nextParams.set("viewMode", keepViewMode);
+    for (const key of Array.from(searchParams.keys())) searchParams.delete(key);
+    for (const [key, value] of nextParams.entries()) searchParams.append(key, value);
+    try{
+      const nextUrl = new URL(location.href);
+      nextUrl.search = searchParams.toString();
+      history.replaceState(null, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+    }catch(_){}
+  }
+
+  function rememberValidQuizPdfParams(searchParams){
+    if (!searchParams || !searchParams.get("question")) return;
+    try{
+      const nextUrl = new URL(location.href);
+      nextUrl.search = searchParams.toString();
+      nextUrl.searchParams.delete("cacheBust"); // SOFTM-풀이링크: 테스트/캐시 회피용 임시 파라미터는 마지막 유효 링크 복원값에서 제외 - 2026-06-24
+      localStorage.setItem(LAST_VALID_QUIZ_URL_STORAGE_KEY, `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+    }catch(_){}
+  }
+  /* SOFTM-풀이링크 끝 */
 
   function normalizeOptionalInt(value, min, max){
     if (value == null || String(value).trim() === "") return null;
@@ -2626,6 +2768,7 @@
     allModeLastViewerWidth: 0,
     allNavToken: 0,
     allRenderSerial: null,
+    singleRenderSerial: null, // SOFTM-한문제보기: 단일보기 PDF.js 렌더 중복 실행을 직렬화하는 현재 promise - 2026-06-22
     allMarkerToken: 0,
     allMarkerRefreshRaf: 0,
     allMarkerScrollIdleTimer: 0,
@@ -2754,6 +2897,10 @@
   const anchorEditChoiceAreaDelete = document.getElementById("anchorEditChoiceAreaDelete"); // SOFTM-영역편집: 선택 문항영역 숨김 삭제 버튼 참조 - 2026-06-16
   const anchorEditChoiceAreaDeleteQuestion = document.getElementById("anchorEditChoiceAreaDeleteQuestion"); // SOFTM-영역편집: 현재 문제 문항영역 전체 삭제 버튼 참조 - 2026-06-16
   const anchorEditChoiceAreaReset = document.getElementById("anchorEditChoiceAreaReset");
+  const anchorEditOcrActions = document.getElementById("anchorEditOcrActions"); // SOFTM-OCR후보: 현재 문제 OCR 후보 컨트롤 참조 - 2026-06-22
+  const anchorEditOcrCandidate = document.getElementById("anchorEditOcrCandidate"); // SOFTM-OCR후보: 후보 생성 버튼 참조 - 2026-06-22
+  const anchorEditOcrApply = document.getElementById("anchorEditOcrApply"); // SOFTM-OCR후보: 후보 적용 버튼 참조 - 2026-06-22
+  const anchorEditOcrCancel = document.getElementById("anchorEditOcrCancel"); // SOFTM-OCR후보: 후보 취소 버튼 참조 - 2026-06-22
   const anchorEditModeRow = document.getElementById("anchorEditModeRow");
   const anchorEditModeToggle = document.getElementById("anchorEditModeToggle");
   const anchorEditQuestionFind = document.getElementById("anchorEditQuestionFind");
@@ -2845,6 +2992,8 @@
     dragAreaCanvasWidth: 0,
     dragAreaCanvasHeight: 0,
     choiceAreaAvailabilityToken: 0, // SOFTM-영역편집: 자동 추정 문항영역 버튼 상태 비동기 보정 토큰 - 2026-06-16
+    ocrBusy: false, // SOFTM-OCR후보: OCR 후보 생성 중 중복 실행을 막음 - 2026-06-22
+    ocrDraft: null, // SOFTM-OCR후보: 저장 전 현재 문제 후보 미리보기/적용 상태 - 2026-06-22
     dragAreaStartCanvasX: 0,
     dragAreaStartCanvasY: 0,
     dragAreaPeerRects: null,
@@ -3316,6 +3465,9 @@
   if (anchorEditChoiceAreaDelete) anchorEditChoiceAreaDelete.addEventListener("click", () => deleteCurrentChoiceClickAreaEdit()); // SOFTM-영역편집: 선택 문항영역 숨김 삭제 실행 - 2026-06-16
   if (anchorEditChoiceAreaDeleteQuestion) anchorEditChoiceAreaDeleteQuestion.addEventListener("click", () => deleteCurrentQuestionChoiceClickAreasEdit()); // SOFTM-영역편집: 현재 문제 문항영역 전체 숨김 삭제 실행 - 2026-06-16
   if (anchorEditChoiceAreaReset) anchorEditChoiceAreaReset.addEventListener("click", () => resetCurrentChoiceClickAreaEdit());
+  if (anchorEditOcrCandidate) anchorEditOcrCandidate.addEventListener("click", () => runCurrentQuestionOcrCandidateEdit()); // SOFTM-OCR후보: 현재 문제 단위 OCR 후보 생성 실행 - 2026-06-22
+  if (anchorEditOcrApply) anchorEditOcrApply.addEventListener("click", () => applyAnchorEditOcrDraft()); // SOFTM-OCR후보: 후보 적용은 dirty patch만 만들고 저장은 기존 저장 버튼으로 수행 - 2026-06-22
+  if (anchorEditOcrCancel) anchorEditOcrCancel.addEventListener("click", () => clearAnchorEditOcrDraft({ status: true })); // SOFTM-OCR후보: 임시 후보 레이어 취소 - 2026-06-22
   if (btnAnchorEditSave) btnAnchorEditSave.addEventListener("click", () => saveAnchorEditNow({ silent: false }));
   if (btnAnchorEditUndo) btnAnchorEditUndo.addEventListener("click", () => undoAnchorEdit().catch((err) => setAnchorEditStatus(`실행취소 실패: ${err?.message || err}`)));
   if (btnAnchorEditRedo) btnAnchorEditRedo.addEventListener("click", () => redoAnchorEdit().catch((err) => setAnchorEditStatus(`다시실행 실패: ${err?.message || err}`)));
@@ -3737,7 +3889,7 @@
     void options;
     const dpr = Math.max(1, Number(window.devicePixelRatio) || 1);
     const portraitMobile = window.matchMedia("(max-width: 768px) and (orientation: portrait)").matches;
-    const scale = portraitMobile ? Math.min(4, dpr * 1.45) : Math.min(2.6, dpr * 1.25);
+    const scale = portraitMobile ? Math.min(4, dpr * 1.45) : Math.min(1.8, Math.max(1.25, dpr * 0.8)); // SOFTM-PDF렌더: Retina 데스크톱에서 과대 캔버스로 PDF.js 렌더가 고착되지 않게 상한 조정 - 2026-06-22
     /* SOFTM-PDF화질 끝 */
     return scale;
   }
@@ -6364,6 +6516,32 @@
       anchorEditChoiceFind.textContent = anchorEditState.choiceAreaEditMode ? "영역 찾기" : "문항 앵커 찾기"; // SOFTM-영역편집: 영역편집 중 찾기 대상은 문항영역으로 전환 - 2026-06-16
       anchorEditChoiceFind.title = anchorEditState.choiceAreaEditMode ? "선택한 문항영역 위치로 이동합니다." : "선택한 문항 앵커 위치로 이동합니다.";
     }
+    /* SOFTM-OCR후보 시작: 현재 편집 모드/문제에 맞는 OCR 후보 버튼 상태를 동기화 - 2026-06-22 */
+    const ocrTargetQ = getAnchorEditTargetQuestion(state.focusQ || 1);
+    const ocrDraft = anchorEditState.ocrDraft;
+    const ocrDraftMatches = !!(ocrDraft && Number(ocrDraft.q) === Number(ocrTargetQ)
+      && String(ocrDraft.overlay || "") === String(anchorEditState.choiceAreaEditMode ? "area" : "anchor")
+      && String(ocrDraft.kind || "") === String(anchorEditState.kind));
+    if (ocrDraft && !ocrDraftMatches) anchorEditState.ocrDraft = null;
+    const hasOcrDraft = !!anchorEditState.ocrDraft;
+    if (anchorEditOcrActions) {
+      anchorEditOcrActions.hidden = !anchorEditState.enabled;
+    }
+    if (anchorEditOcrCandidate) {
+      anchorEditOcrCandidate.disabled = !anchorEditState.enabled || anchorEditState.ocrBusy || !Number.isFinite(Number(ocrTargetQ));
+      anchorEditOcrCandidate.textContent = anchorEditState.ocrBusy ? "OCR 중" : "OCR 후보";
+      anchorEditOcrCandidate.title = "현재 문제 crop에서 후보를 만들고 바로 저장하지 않습니다.";
+      anchorEditOcrCandidate.dataset.draft = hasOcrDraft ? "true" : "false";
+    }
+    if (anchorEditOcrApply) {
+      anchorEditOcrApply.hidden = !hasOcrDraft;
+      anchorEditOcrApply.disabled = !anchorEditState.enabled || anchorEditState.ocrBusy || !hasOcrDraft;
+    }
+    if (anchorEditOcrCancel) {
+      anchorEditOcrCancel.hidden = !hasOcrDraft;
+      anchorEditOcrCancel.disabled = !anchorEditState.enabled || anchorEditState.ocrBusy || !hasOcrDraft;
+    }
+    /* SOFTM-OCR후보 끝 */
     if (anchorEditChoiceSelect) {
       if (!anchorEditChoiceSelect.options.length || anchorEditChoiceSelect.options.length !== CHOICE_COUNT) {
         anchorEditChoiceSelect.textContent = "";
@@ -8370,8 +8548,13 @@
     const pointByChoice = new Map(safePoints.map((point) => [point.choice, point]));
     const sortedByY = [...safePoints].sort((a, b) => a.y - b.y || a.x - b.x);
     const avgR = safePoints.reduce((sum, point) => sum + point.r, 0) / safePoints.length;
+    const xSpread = Math.max(...safePoints.map((point) => point.x)) - Math.min(...safePoints.map((point) => point.x));
+    const ySpread = Math.max(...safePoints.map((point) => point.y)) - Math.min(...safePoints.map((point) => point.y));
+    const likelyVerticalSiblingLayout = safePoints.length >= 3
+      && xSpread <= Math.max(36, avgR * 3.2)
+      && ySpread > Math.max(26, avgR * 3.0);
     const rows = [];
-    const yClusterGap = Math.max(22, avgR * 2.15);
+    const yClusterGap = likelyVerticalSiblingLayout ? Math.max(8, avgR * 1.35) : Math.max(22, avgR * 2.15); // SOFTM-문항영역: 압축된 세로형 보기의 2/3번을 같은 row로 묶어 영역이 사라지지 않게 분리 기준 축소 - 2026-06-22
     for (const point of sortedByY){
       const row = rows[rows.length - 1];
       const rowY = row ? row.reduce((sum, item) => sum + item.y, 0) / row.length : NaN;
@@ -8467,6 +8650,29 @@
     /* SOFTM-문항영역 끝 */
   }
 
+  function filterGeneratedChoiceAreaRectsByAnchorBand(rects, points){
+    /* SOFTM-문항영역 시작: generated 저장 영역이 문항앵커 행과 어긋나면 런타임 anchor 기반 영역으로 대체 - 2026-06-22 */
+    if (!Array.isArray(rects) || !rects.length || !Array.isArray(points) || !points.length) return rects;
+    const pointByChoice = new Map(points
+      .map((point) => ({
+        choice: Number(point?.choice),
+        y: Number(point?.y),
+        r: Math.max(8, Number(point?.r) || 14),
+      }))
+      .filter((point) => Number.isInteger(point.choice) && Number.isFinite(point.y))
+      .map((point) => [point.choice, point]));
+    if (!pointByChoice.size) return rects;
+    return rects.filter((rect) => {
+      const point = pointByChoice.get(Number(rect?.choice));
+      if (!point || ![rect?.y, rect?.h].every((value) => Number.isFinite(Number(value)))) return true;
+      const y = Number(rect.y);
+      const h = Number(rect.h);
+      const pad = Math.max(10, point.r * 1.4);
+      return point.y >= y - pad && point.y <= y + h + pad;
+    });
+    /* SOFTM-문항영역 끝 */
+  }
+
   function getChoiceClickAreaCanvasRects(q, pageNo, canvas, meta, fallbackPoints = []){
     const hiddenChoices = getHiddenChoiceClickAreaChoices(q, pageNo);
     const manualRects = getManualChoiceClickAreas(q)
@@ -8481,17 +8687,19 @@
         .map((rect) => ({ ...rect, q: Number(q), page: Number(pageNo), manual: false, source: rect.source || "auto-click-area" })) // SOFTM-문항영역: text-fit source를 보존해 가로형 높이 강제 보정이 실제 텍스트 영역을 키우지 않게 함 - 2026-06-18
       : [];
     autoRects = widenHorizontalChoiceAreaRects(autoRects, fallbackPoints, canvas); // SOFTM-문항영역: 런타임 OCR 가로 보기 문항영역 최종 폭 보정 - 2026-06-17
-    const reliableAutoChoices = new Set(autoRects
-      .filter((rect) => String(rect?.source || "").includes("text-fit"))
-      .map((rect) => Number(rect.choice))); // SOFTM-문항영역: 텍스트 픽셀 fit 성공 영역만 generated 기준 영역보다 우선 - 2026-06-17
     let generatedRects = getGeneratedChoiceClickAreas(q)
-      .filter((area) => Number(area.page) === Number(pageNo) && !manualChoices.has(Number(area.choice)) && !reliableAutoChoices.has(Number(area.choice)))
+      .filter((area) => Number(area.page) === Number(pageNo) && !manualChoices.has(Number(area.choice)))
       .map((area) => projectChoiceClickAreaToCanvas(area, canvas, meta))
       .filter(Boolean)
       .map((rect) => ({ ...rect, manual: false, source: rect.source || "generated-click-area-anchor-text" }));
     generatedRects = widenHorizontalChoiceAreaRects(generatedRects, fallbackPoints, canvas); // SOFTM-문항영역: 저장 generated 자동 영역도 가로형 표시 높이 보정 적용 - 2026-06-17
     autoRects = reconcileChoiceAreaRectsBySiblingAnchors(autoRects, fallbackPoints, canvas);
     generatedRects = reconcileChoiceAreaRectsBySiblingAnchors(generatedRects, fallbackPoints, canvas); // SOFTM-문항영역: 저장/자동 영역을 문항 배열 경계로 보정해 sibling 중복 클릭을 방지 - 2026-06-19
+    generatedRects = filterGeneratedChoiceAreaRectsByAnchorBand(generatedRects, fallbackPoints); // SOFTM-문항영역: 문항앵커 행과 다른 generated 영역은 잘못된 저장 자동영역으로 보고 제외 - 2026-06-22
+    const reliableAutoChoices = new Set(autoRects
+      .filter((rect) => String(rect?.source || "").includes("text-fit"))
+      .map((rect) => Number(rect.choice))); // SOFTM-문항영역: sibling 보정 뒤에도 남은 텍스트 픽셀 fit 영역만 generated 기준 영역보다 우선 - 2026-06-22
+    generatedRects = generatedRects.filter((rect) => !reliableAutoChoices.has(Number(rect.choice))); // SOFTM-문항영역: 보정 과정에서 auto rect가 사라진 문항은 저장 generated 영역으로 복구 - 2026-06-22
     /* SOFTM-문항영역 끝 */
     const generatedChoices = new Set(generatedRects.map((rect) => Number(rect.choice)));
     const visibleAutoRects = autoRects.filter((rect) => String(rect?.source || "").includes("text-fit") || !generatedChoices.has(Number(rect.choice)));
@@ -9682,11 +9890,14 @@
     const h = Number(anchor?.hRatio || 0.012);
     const source = String(anchor?.source || "").toLowerCase();
     if (!source.includes("manual")) {
+      const doc = getDocumentChoiceAnchorMedianSize();
+      const minW = source.startsWith("segment-") ? Math.max(0.009, Math.min(0.013, doc.wRatio || 0.01)) : 0.008;
+      const minH = source.startsWith("segment-") ? Math.max(0.010, Math.min(0.014, doc.hRatio || 0.012)) : 0.009;
       return {
-        wRatio: Number.isFinite(w) && w > 0 ? w : 0.012,
-        hRatio: Number.isFinite(h) && h > 0 ? h : 0.012,
+        wRatio: Math.max(minW, Math.min(0.018, Number.isFinite(w) && w > 0 ? w : (doc.wRatio || 0.012))),
+        hRatio: Math.max(minH, Math.min(0.018, Number.isFinite(h) && h > 0 ? h : (doc.hRatio || 0.012))),
       };
-    }
+    } // SOFTM-문항앵커: segment/generated 자동 앵커도 화면에서 사라지지 않도록 표시 최소 크기 보장 - 2026-06-22
     const doc = getDocumentChoiceAnchorMedianSize();
     return {
       wRatio: clampChoiceAnchorRatioToDocument(w, doc.wRatio, doc.wRatio, 0.006, 0.016),
@@ -10301,6 +10512,600 @@
     return true;
   }
 
+  /* SOFTM-OCR후보 시작: 문제앵커→문제영역→문항앵커→문항영역 순서로 현재 문제 OCR 후보를 생성/적용 - 2026-06-22 */
+  function canvasPointToPageRatiosForContext(ctx, x, y){
+    if (!ctx?.canvas || !ctx?.meta || !Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) return null;
+    const meta = ctx.meta;
+    const fullWidth = Math.max(1, Number(meta.fullWidth || meta.fullWidthPx || ctx.canvas.width || 1));
+    const fullHeight = Math.max(1, Number(meta.fullHeight || meta.fullHeightPx || ctx.canvas.height || 1));
+    const segmentDraws = getSingleSegmentDrawsFromMeta(meta);
+    if (segmentDraws.length) {
+      const seg = getSingleSegmentDrawForCanvasPoint(meta, Number(x), Number(y));
+      if (seg) {
+        const sx = seg.width / Math.max(1, seg.destWidth);
+        const sy = seg.height / Math.max(1, seg.destHeight);
+        const xFull = seg.left + ((Number(x) - seg.destLeft) * sx);
+        const yFull = seg.top + ((Number(y) - seg.destTop) * sy);
+        const xRatio = Math.max(0, Math.min(1, xFull / fullWidth));
+        const yRatio = Math.max(0, Math.min(1, yFull / fullHeight));
+        if (Number.isFinite(xRatio) && Number.isFinite(yRatio)) return { xRatio, yRatio };
+      }
+    }
+    const srcLeft = Number(meta.srcLeft ?? meta.cropLeftPx ?? 0);
+    const srcTop = Number(meta.srcTop ?? meta.cropStartPx ?? 0);
+    const srcWidth = Math.max(1, Number(meta.srcWidth ?? meta.cropWidthPx ?? fullWidth));
+    const srcHeight = Math.max(1, Number(meta.srcHeight ?? meta.cropHeightPx ?? fullHeight));
+    const sx = srcWidth / Math.max(1, Number(ctx.canvas.width || meta.destWidth || 1));
+    const sy = srcHeight / Math.max(1, Number(ctx.canvas.height || meta.destHeight || 1));
+    const xRatio = Math.max(0, Math.min(1, (srcLeft + Number(x) * sx) / fullWidth));
+    const yRatio = Math.max(0, Math.min(1, (srcTop + Number(y) * sy) / fullHeight));
+    if (!Number.isFinite(xRatio) || !Number.isFinite(yRatio)) return null;
+    return { xRatio, yRatio };
+  }
+
+  function projectSegmentRatioToCanvasBoxForContext(ctx, segment){
+    if (!ctx?.canvas || !ctx?.meta || !segment) return null;
+    const meta = ctx.meta;
+    const fullWidth = Math.max(1, Number(meta.fullWidth || meta.fullWidthPx || ctx.canvas.width || 1));
+    const fullHeight = Math.max(1, Number(meta.fullHeight || meta.fullHeightPx || ctx.canvas.height || 1));
+    const left = Math.max(0, Math.min(1, Number(segment.left)));
+    const right = Math.max(0, Math.min(1, Number(segment.right)));
+    const top = Math.max(0, Math.min(1, Number(segment.top)));
+    const bottom = Math.max(0, Math.min(1, Number(segment.bottom)));
+    if (![left, right, top, bottom].every(Number.isFinite) || right <= left || bottom <= top) return null;
+    const srcLeft = Number(meta.srcLeft ?? meta.cropLeftPx ?? 0);
+    const srcTop = Number(meta.srcTop ?? meta.cropStartPx ?? 0);
+    const srcWidth = Math.max(1, Number(meta.srcWidth ?? meta.cropWidthPx ?? fullWidth));
+    const srcHeight = Math.max(1, Number(meta.srcHeight ?? meta.cropHeightPx ?? fullHeight));
+    const sx = srcWidth / Math.max(1, Number(ctx.canvas.width || meta.destWidth || 1));
+    const sy = srcHeight / Math.max(1, Number(ctx.canvas.height || meta.destHeight || 1));
+    const x = ((left * fullWidth) - srcLeft) / sx;
+    const y = ((top * fullHeight) - srcTop) / sy;
+    const w = ((right - left) * fullWidth) / sx;
+    const h = ((bottom - top) * fullHeight) / sy;
+    if (![x, y, w, h].every(Number.isFinite) || w <= 0 || h <= 0) return null;
+    return {
+      x: Math.max(0, Math.min(ctx.canvas.width, x)),
+      y: Math.max(0, Math.min(ctx.canvas.height, y)),
+      w: Math.max(1, Math.min(ctx.canvas.width, x + w) - Math.max(0, x)),
+      h: Math.max(1, Math.min(ctx.canvas.height, y + h) - Math.max(0, y)),
+    };
+  }
+
+  async function resolveCurrentQuestionGeometry(q){
+    const safeQ = Math.max(1, Math.trunc(Number(q) || 0));
+    if (!safeQ) return null;
+    const ctx = await getChoiceAreaCanvasContext(safeQ).catch(() => null);
+    if (!ctx?.canvas || !ctx?.meta) return { q: safeQ, missingCanvas: true };
+    const segments = getStoredQuestionSegmentsForPage(ctx.pageNo, safeQ);
+    const hasQuestionArea = segments.length > 0 || ctx.mode === "single";
+    return {
+      ...ctx,
+      q: safeQ,
+      segments,
+      hasQuestionArea,
+    };
+  }
+
+  function buildOcrCropForQuestionGeometry(geometry){
+    if (!geometry?.canvas || !geometry?.hasQuestionArea) return null;
+    const canvas = geometry.canvas;
+    let crop = null;
+    if (geometry.mode === "all") {
+      const boxes = (geometry.segments || [])
+        .map((segment) => projectSegmentRatioToCanvasBoxForContext(geometry, segment))
+        .filter(Boolean);
+      if (!boxes.length) return null;
+      const left = Math.max(0, Math.min(...boxes.map((box) => box.x)) - 12);
+      const top = Math.max(0, Math.min(...boxes.map((box) => box.y)) - 12);
+      const right = Math.min(canvas.width, Math.max(...boxes.map((box) => box.x + box.w)) + 12);
+      const bottom = Math.min(canvas.height, Math.max(...boxes.map((box) => box.y + box.h)) + 12);
+      crop = { x: left, y: top, w: Math.max(1, right - left), h: Math.max(1, bottom - top) };
+    } else {
+      crop = { x: 0, y: 0, w: canvas.width, h: canvas.height };
+    }
+    const ocrCanvas = document.createElement("canvas");
+    ocrCanvas.width = Math.max(1, Math.floor(crop.w));
+    ocrCanvas.height = Math.max(1, Math.floor(crop.h));
+    const ocrCtx = ocrCanvas.getContext("2d");
+    ocrCtx.drawImage(canvas, crop.x, crop.y, crop.w, crop.h, 0, 0, ocrCanvas.width, ocrCanvas.height);
+    return { canvas: ocrCanvas, crop };
+  }
+
+  function extractOcrWordsWithCanvasBox(recognized, crop){
+    const words = (((recognized || {}).data || {}).words) || [];
+    return words.map((word) => {
+      const text = String(word?.text || "").trim();
+      const bbox = word?.bbox || {};
+      const x0 = Number(bbox.x0), x1 = Number(bbox.x1), y0 = Number(bbox.y0), y1 = Number(bbox.y1);
+      if (!text || ![x0, x1, y0, y1].every(Number.isFinite) || x1 <= x0 || y1 <= y0) return null;
+      return {
+        text,
+        x0: x0 + Number(crop.x || 0),
+        x1: x1 + Number(crop.x || 0),
+        y0: y0 + Number(crop.y || 0),
+        y1: y1 + Number(crop.y || 0),
+        cx: (x0 + x1) * 0.5 + Number(crop.x || 0),
+        cy: (y0 + y1) * 0.5 + Number(crop.y || 0),
+      };
+    }).filter(Boolean);
+  }
+
+  function groupOcrWordsIntoRows(words){
+    const rows = [];
+    for (const word of (Array.isArray(words) ? words : []).sort((a, b) => a.cy - b.cy || a.x0 - b.x0)){
+      let row = rows.find((item) => Math.abs(item.cy - word.cy) <= Math.max(8, (word.y1 - word.y0) * 0.65));
+      if (!row) {
+        row = { words: [], cy: word.cy, y0: word.y0, y1: word.y1 };
+        rows.push(row);
+      }
+      row.words.push(word);
+      row.cy = row.words.reduce((sum, item) => sum + item.cy, 0) / row.words.length;
+      row.y0 = Math.min(row.y0, word.y0);
+      row.y1 = Math.max(row.y1, word.y1);
+    }
+    for (const row of rows) row.words.sort((a, b) => a.x0 - b.x0);
+    return rows;
+  }
+
+  function buildOcrChoiceAnchorCandidates(geometry, words){
+    const byChoice = new Map();
+    const rows = groupOcrWordsIntoRows(words);
+    for (const row of rows){
+      for (let i = 0; i < row.words.length; i++){
+        const word = row.words[i];
+        let choice = parseChoiceNumberToken(word.text);
+        let weak = false;
+        if (!choice) {
+          choice = parseWeakChoiceDigitToken(word.text);
+          weak = !!choice;
+        }
+        if (!choice || choice < 1 || choice > CHOICE_COUNT) continue;
+        const lineLeftIndex = row.words.findIndex((item) => item.x1 >= word.x0 - 2);
+        if (weak && lineLeftIndex > 1) continue;
+        const ratio = canvasPointToPageRatiosForContext(geometry, word.cx, word.cy);
+        if (!ratio) continue;
+        const r = Math.max(7, Math.min(24, Math.max(word.x1 - word.x0, word.y1 - word.y0) * 0.55));
+        const candidate = {
+          q: geometry.q,
+          choice,
+          page: geometry.pageNo,
+          x: word.cx,
+          y: word.cy,
+          r,
+          xRatio: ratio.xRatio,
+          yRatio: ratio.yRatio,
+          source: weak ? "ocr-choice-anchor-weak" : "ocr-choice-anchor",
+          row,
+        };
+        const prev = byChoice.get(choice);
+        if (!prev || (weak ? 1 : 0) < (String(prev.source).includes("weak") ? 1 : 0) || candidate.y < prev.y) {
+          byChoice.set(choice, candidate);
+        }
+      }
+    }
+    return [...byChoice.values()].sort((a, b) => Number(a.choice) - Number(b.choice));
+  }
+
+  function buildOcrChoiceAreaCandidates(geometry, anchors){
+    if (!geometry?.canvas || !Array.isArray(anchors)) return [];
+    const areas = [];
+    for (const anchor of anchors){
+      const r = Math.max(7, Math.min(28, Number(anchor.r) || 12));
+      const rowWords = Array.isArray(anchor.row?.words) ? anchor.row.words : [];
+      const sameRowNext = anchors
+        .filter((item) => item.choice !== anchor.choice && Math.abs(Number(item.y) - Number(anchor.y)) <= Math.max(10, r * 1.6) && Number(item.x) > Number(anchor.x))
+        .sort((a, b) => Number(a.x) - Number(b.x))[0] || null;
+      const textWords = rowWords.filter((word) =>
+        Number(word.x1) >= Number(anchor.x) + r * 0.45
+        && (!sameRowNext || Number(word.x0) < Number(sameRowNext.x) - r * 1.4)
+      );
+      const x = Math.max(0, Number(anchor.x) + r * 0.75);
+      const yTopBase = Number(anchor.y) - r * 0.9;
+      const yBottomBase = Number(anchor.y) + r * 0.9;
+      const textRight = textWords.length ? Math.max(...textWords.map((word) => Number(word.x1))) : x + r * 8;
+      const textTop = textWords.length ? Math.min(...textWords.map((word) => Number(word.y0))) : yTopBase;
+      const textBottom = textWords.length ? Math.max(...textWords.map((word) => Number(word.y1))) : yBottomBase;
+      const maxRight = sameRowNext ? Number(sameRowNext.x) - r * 1.4 : geometry.canvas.width - 2;
+      const right = Math.max(x + r * 4, Math.min(maxRight, textRight + r * 0.8));
+      const top = Math.max(0, Math.min(yTopBase, textTop - 2));
+      const bottom = Math.min(geometry.canvas.height, Math.max(yBottomBase, textBottom + 2));
+      if (right <= x + 8 || bottom <= top + 8) continue;
+      areas.push({
+        q: geometry.q,
+        choice: anchor.choice,
+        page: geometry.pageNo,
+        x,
+        y: top,
+        w: right - x,
+        h: bottom - top,
+        textRight: textRight + r * 0.3,
+        source: "ocr-choice-area-draft",
+      });
+    }
+    return areas.sort((a, b) => Number(a.choice) - Number(b.choice));
+  }
+
+  /* SOFTM-OCR후보 시작: OCR이 원형 번호를 못 읽어도 현재 문제 crop의 선택지 텍스트 행/열 배열로 후보 앵커를 추정 - 2026-06-22 */
+  function buildOcrChoiceAnchorCandidatesFromRows(geometry, words){
+    if (!geometry?.canvas || !Array.isArray(words) || !words.length) return [];
+    const rows = groupOcrWordsIntoRows(words)
+      .filter((row) => Array.isArray(row.words) && row.words.length)
+      .map((row) => {
+        const wordsSorted = row.words.slice().sort((a, b) => Number(a.x0) - Number(b.x0));
+        return {
+          ...row,
+          words: wordsSorted,
+          x0: Math.min(...wordsSorted.map((word) => Number(word.x0))),
+          x1: Math.max(...wordsSorted.map((word) => Number(word.x1))),
+          text: wordsSorted.map((word) => word.text).join(" "),
+        };
+      })
+      .filter((row) => Number.isFinite(row.x0) && Number.isFinite(row.x1) && row.x1 > row.x0 + 12);
+    if (!rows.length) return [];
+    const canvasWidth = Math.max(1, Number(geometry.canvas.width || 1));
+    const canvasHeight = Math.max(1, Number(geometry.canvas.height || 1));
+    const minChoiceY = canvasHeight * 0.22;
+    const usefulRows = rows
+      .filter((row) => Number(row.cy) >= minChoiceY && Number(row.cy) <= canvasHeight * 0.96)
+      .filter((row) => !new RegExp(`^\\s*${localQuestionNoToPrinted(geometry.q)}\\s*[\\.)]?`).test(String(row.text || "").trim()))
+      .sort((a, b) => Number(a.cy) - Number(b.cy));
+    const makeAnchor = (choice, x, y, r, source, row) => {
+      const ratio = canvasPointToPageRatiosForContext(geometry, x, y);
+      if (!ratio) return null;
+      return {
+        q: geometry.q,
+        choice,
+        page: geometry.pageNo,
+        x,
+        y,
+        r,
+        xRatio: ratio.xRatio,
+        yRatio: ratio.yRatio,
+        source,
+        row,
+      };
+    };
+    const splitRowClusters = (row) => {
+      const wordsSorted = row.words.slice().sort((a, b) => Number(a.x0) - Number(b.x0));
+      const avgHeight = Math.max(8, wordsSorted.reduce((sum, word) => sum + Math.max(1, Number(word.y1) - Number(word.y0)), 0) / wordsSorted.length);
+      const gapLimit = Math.max(avgHeight * 4.5, canvasWidth * 0.055);
+      const clusters = [];
+      for (const word of wordsSorted) {
+        const prev = clusters[clusters.length - 1];
+        if (!prev || Number(word.x0) - Number(prev.x1) > gapLimit) {
+          clusters.push({ words: [word], x0: Number(word.x0), x1: Number(word.x1), y0: Number(word.y0), y1: Number(word.y1) });
+        } else {
+          prev.words.push(word);
+          prev.x0 = Math.min(prev.x0, Number(word.x0));
+          prev.x1 = Math.max(prev.x1, Number(word.x1));
+          prev.y0 = Math.min(prev.y0, Number(word.y0));
+          prev.y1 = Math.max(prev.y1, Number(word.y1));
+        }
+      }
+      return clusters.filter((cluster) => cluster.x1 > cluster.x0 + 8);
+    };
+    const clusteredRows = usefulRows.map((row) => ({ row, clusters: splitRowClusters(row) }));
+    const singleHorizontal = clusteredRows.find((item) => item.clusters.length >= CHOICE_COUNT);
+    if (singleHorizontal) {
+      return singleHorizontal.clusters.slice(0, CHOICE_COUNT).map((cluster, idx) => {
+        const r = Math.max(8, Math.min(22, (Number(cluster.y1) - Number(cluster.y0)) * 0.55));
+        return makeAnchor(idx + 1, Math.max(0, Number(cluster.x0) - r * 1.25), (Number(cluster.y0) + Number(cluster.y1)) * 0.5, r, "ocr-row-layout-horizontal", singleHorizontal.row);
+      }).filter(Boolean);
+    }
+    const gridRows = clusteredRows.filter((item) => item.clusters.length >= 2).slice(-2);
+    if (gridRows.length === 2 && gridRows.reduce((sum, item) => sum + Math.min(2, item.clusters.length), 0) >= CHOICE_COUNT) {
+      const anchors = [];
+      for (const item of gridRows) {
+        for (const cluster of item.clusters.slice(0, 2)) {
+          if (anchors.length >= CHOICE_COUNT) break;
+          const r = Math.max(8, Math.min(22, (Number(cluster.y1) - Number(cluster.y0)) * 0.55));
+          anchors.push(makeAnchor(anchors.length + 1, Math.max(0, Number(cluster.x0) - r * 1.25), (Number(cluster.y0) + Number(cluster.y1)) * 0.5, r, "ocr-row-layout-grid", item.row));
+        }
+      }
+      return anchors.filter(Boolean);
+    }
+    return usefulRows.slice(-CHOICE_COUNT).map((row, idx) => {
+      const r = Math.max(8, Math.min(22, (Number(row.y1) - Number(row.y0)) * 0.55));
+      return makeAnchor(idx + 1, Math.max(0, Number(row.x0) - r * 1.25), Number(row.cy), r, "ocr-row-layout-vertical", row);
+    }).filter(Boolean);
+  }
+  /* SOFTM-OCR후보 끝 */
+
+  async function buildFallbackOcrDraftAnchorsFromQuestionGeometry(geometry){
+    if (!geometry?.canvas || !geometry?.meta) return [];
+    const points = await buildChoiceAreaPointsForContext(geometry, { allowFallback: true });
+    const projectedPoints = (Array.isArray(points) ? points : []).map((point) => {
+      const ratio = canvasPointToPageRatiosForContext(geometry, Number(point.x), Number(point.y));
+      if (!ratio) return null;
+      return {
+        q: geometry.q,
+        choice: Number(point.choice),
+        page: Number(point.page || geometry.pageNo),
+        x: Number(point.x),
+        y: Number(point.y),
+        r: Math.max(7, Math.min(28, Number(point.r) || 12)),
+        xRatio: ratio.xRatio,
+        yRatio: ratio.yRatio,
+        source: "ocr-draft-pipeline-fallback",
+        row: null,
+      };
+    }).filter((item) =>
+      item && Number.isInteger(item.choice) && item.choice >= 1 && item.choice <= CHOICE_COUNT
+    ).sort((a, b) => Number(a.choice) - Number(b.choice));
+    if (projectedPoints.length) return projectedPoints;
+    /* SOFTM-OCR후보 시작: 기존 후보 점이 없을 때도 현재 문제의 저장/런타임 문항앵커를 문제 geometry 안에서 OCR 후보로 재투영 - 2026-06-22 */
+    const storedAnchors = await getChoiceAnchorsForQuestion(geometry.pageNo, geometry.q, { ignoreStored: false }).catch(() => []);
+    const meta = geometry.meta || {};
+    const fullCanvas = {
+      width: Number(meta.fullWidth || meta.fullWidthPx || geometry.canvas.width || 1),
+      height: Number(meta.fullHeight || meta.fullHeightPx || geometry.canvas.height || 1),
+    };
+    const projectedAnchors = (Array.isArray(storedAnchors) ? storedAnchors : []).map((anchor) => {
+      const choice = Math.trunc(Number(anchor?.choice) || 0);
+      if (choice < 1 || choice > CHOICE_COUNT) return null;
+      const projected = projectChoiceAnchorToCanvas(
+        anchor,
+        fullCanvas,
+        Number(meta.srcLeft ?? meta.cropLeftPx ?? 0),
+        Number(meta.srcTop ?? meta.cropStartPx ?? 0),
+        Number(meta.srcWidth ?? meta.cropWidthPx ?? fullCanvas.width),
+        Number(meta.srcHeight ?? meta.cropHeightPx ?? fullCanvas.height),
+        Number(geometry.canvas.width || meta.destWidth || 1),
+        Number(geometry.canvas.height || meta.destHeight || 1),
+        meta.segmentDraws || null
+      );
+      if (!projected || !Number.isFinite(projected.x) || !Number.isFinite(projected.y)) return null;
+      if (projected.x < -8 || projected.y < -8 || projected.x > geometry.canvas.width + 8 || projected.y > geometry.canvas.height + 8) return null;
+      const ratio = canvasPointToPageRatiosForContext(geometry, projected.x, projected.y);
+      if (!ratio) return null;
+      return {
+        q: geometry.q,
+        choice,
+        page: Number(anchor?.page || geometry.pageNo),
+        x: Number(projected.x),
+        y: Number(projected.y),
+        r: Math.max(7, Math.min(28, Number(projected.r) || 12)),
+        xRatio: ratio.xRatio,
+        yRatio: ratio.yRatio,
+        source: "ocr-draft-anchor-map-fallback",
+        row: null,
+      };
+    }).filter(Boolean).sort((a, b) => Number(a.choice) - Number(b.choice));
+    return projectedAnchors;
+    /* SOFTM-OCR후보 끝 */
+  }
+
+  async function buildFallbackOcrDraftAreasFromQuestionGeometry(geometry, anchors){
+    if (!geometry?.canvas || !geometry?.meta) return [];
+    const points = await buildChoiceAreaPointsForContext(geometry, { allowFallback: true });
+    const rects = getChoiceClickAreaCanvasRects(geometry.q, geometry.pageNo, geometry.canvas, geometry.meta, points);
+    const byChoice = new Map();
+    for (const rect of rects) {
+      const choice = Math.trunc(Number(rect?.choice) || 0);
+      if (choice >= 1 && choice <= CHOICE_COUNT && !byChoice.has(choice)) {
+        byChoice.set(choice, { ...rect, q: geometry.q, page: geometry.pageNo, source: "ocr-draft-area-pipeline-fallback" });
+      }
+    }
+    for (const area of buildOcrChoiceAreaCandidates(geometry, anchors)) {
+      const choice = Math.trunc(Number(area?.choice) || 0);
+      if (choice >= 1 && choice <= CHOICE_COUNT && !byChoice.has(choice)) byChoice.set(choice, area);
+    }
+    return [...byChoice.values()].sort((a, b) => Number(a.choice) - Number(b.choice));
+  }
+
+  function buildOcrQuestionAnchorCandidate(geometry, words){
+    const printed = localQuestionNoToPrinted(geometry.q);
+    const rows = groupOcrWordsIntoRows(words);
+    for (const row of rows){
+      const line = row.words.map((word) => word.text).join(" ");
+      const label = parseQuestionNumberFromOcrLine(line);
+      if (Number(label) !== Number(printed)) continue;
+      const first = row.words[0];
+      const ratio = canvasPointToPageRatiosForContext(geometry, first.cx, row.y0);
+      if (!ratio) continue;
+      return {
+        q: geometry.q,
+        page: geometry.pageNo,
+        x: first.cx,
+        y: row.y0,
+        xRatio: ratio.xRatio,
+        yRatio: ratio.yRatio,
+        source: "ocr-question-anchor",
+      };
+    }
+    return null;
+  }
+
+  function clearAnchorEditOcrDraft(options = {}){
+    anchorEditState.ocrDraft = null;
+    anchorEditState.ocrBusy = false;
+    syncAnchorEditUi();
+    refreshAnchorDebugView();
+    if (options.status) setAnchorEditStatus("OCR 후보를 취소했습니다.");
+  }
+
+  async function runCurrentQuestionOcrCandidateEdit(){
+    if (!anchorEditState.enabled || anchorEditState.ocrBusy) return;
+    const selection = getCurrentChoiceAreaSelection();
+    if (!selection.q) {
+      setAnchorEditStatus("OCR 후보를 만들 문제를 먼저 선택하세요.");
+      return;
+    }
+    const geometry = await resolveCurrentQuestionGeometry(selection.q);
+    if (!geometry || geometry.missingCanvas || !geometry.canvas) {
+      setAnchorEditStatus("OCR 후보를 만들 PDF 화면을 찾지 못했습니다.");
+      return;
+    }
+    if (!geometry.hasQuestionArea) {
+      const msg = "문제 앵커/영역 확인 필요: 현재 문제영역이 확정되지 않았습니다.";
+      setAnchorEditStatus(msg);
+      showToastAndSnackbar(msg);
+      return;
+    }
+    const crop = buildOcrCropForQuestionGeometry(geometry);
+    if (!crop?.canvas) {
+      setAnchorEditStatus("OCR 후보용 문제 crop을 만들지 못했습니다.");
+      return;
+    }
+    anchorEditState.ocrBusy = true;
+    anchorEditState.ocrDraft = null;
+    syncAnchorEditUi();
+    setAnchorEditStatus(`${formatPrintedQuestionLabel(selection.q)}번 OCR 후보를 찾는 중입니다.`);
+    try{
+      const Tesseract = await loadTesseractLib();
+      const recognized = await Tesseract.recognize(crop.canvas, "kor+eng", { logger: () => {} });
+      const words = extractOcrWordsWithCanvasBox(recognized, crop.crop);
+      let anchors = buildOcrChoiceAnchorCandidates(geometry, words);
+      if (!anchors.length && (anchorEditState.kind === "choice" || anchorEditState.choiceAreaEditMode)) {
+        anchors = await buildFallbackOcrDraftAnchorsFromQuestionGeometry(geometry); // SOFTM-OCR후보: 이미지 OCR이 보기번호를 못 읽으면 같은 문제영역 안 기존 후보 파이프라인으로 보강 - 2026-06-22
+      }
+      if (!anchors.length && (anchorEditState.kind === "choice" || anchorEditState.choiceAreaEditMode)) {
+        anchors = buildOcrChoiceAnchorCandidatesFromRows(geometry, words); // SOFTM-OCR후보: 번호 인식 실패 시 문제 crop 안 텍스트 배열로 마지막 후보를 만든다 - 2026-06-22
+      }
+      let areas = buildOcrChoiceAreaCandidates(geometry, anchors);
+      if (!areas.length && anchorEditState.choiceAreaEditMode) {
+        areas = await buildFallbackOcrDraftAreasFromQuestionGeometry(geometry, anchors); // SOFTM-OCR후보: 영역 후보는 확정 문항앵커/기존 영역 파이프라인을 보조로 사용 - 2026-06-22
+      }
+      const question = buildOcrQuestionAnchorCandidate(geometry, words);
+      const overlay = anchorEditState.choiceAreaEditMode ? "area" : "anchor";
+      const kind = anchorEditState.kind;
+      let usableCount = 0;
+      if (overlay === "area") usableCount = areas.length;
+      else usableCount = kind === "question" ? (question ? 1 : 0) : anchors.length;
+      if (!usableCount) {
+        const msg = kind === "question" ? "OCR 문제 앵커 후보를 찾지 못했습니다." : "OCR 문항 후보를 찾지 못했습니다.";
+        setAnchorEditStatus(msg);
+        showToastAndSnackbar(msg);
+        return;
+      }
+      anchorEditState.ocrDraft = {
+        q: selection.q,
+        pageNo: geometry.pageNo,
+        mode: geometry.mode,
+        overlay,
+        kind,
+        choice: selection.choice,
+        canvasWidth: geometry.canvas.width,
+        canvasHeight: geometry.canvas.height,
+        anchors,
+        areas,
+        question,
+        createdAt: Date.now(),
+      };
+      setAnchorEditStatus(`${formatPrintedQuestionLabel(selection.q)}번 OCR 후보 ${usableCount}개를 찾았습니다. 적용 후 저장 버튼으로 확정하세요.`);
+      refreshAnchorDebugView();
+    }catch(err){
+      setAnchorEditStatus(`OCR 후보 생성 실패: ${err?.message || err}`);
+      showToastAndSnackbar("OCR 후보 생성 실패");
+    }finally{
+      anchorEditState.ocrBusy = false;
+      syncAnchorEditUi();
+    }
+  }
+
+  async function applyAnchorEditOcrDraft(){
+    const draft = anchorEditState.ocrDraft;
+    if (!anchorEditState.enabled || !draft) return;
+    const q = Math.max(1, Math.trunc(Number(draft.q) || 0));
+    if (!q) return;
+    let ok = false;
+    if (draft.overlay === "area") {
+      const geometry = await resolveCurrentQuestionGeometry(q);
+      if (!geometry?.canvas || !geometry?.meta) {
+        setAnchorEditStatus("OCR 문항영역 후보를 적용할 PDF 화면을 찾지 못했습니다.");
+        return;
+      }
+      const areaRatios = (Array.isArray(draft.areas) ? draft.areas : [])
+        .map((rect) => {
+          const ratios = choiceAreaCanvasRectToRatios(rect, geometry.canvas, geometry.meta);
+          return ratios ? { q, choice: Number(rect.choice), page: Number(rect.page || geometry.pageNo), ...ratios } : null;
+        })
+        .filter(Boolean);
+      ok = stageManualQuestionChoiceClickAreas(q, Number(draft.pageNo || geometry.pageNo), areaRatios, { choice: draft.choice || anchorEditState.choice });
+    } else if (draft.kind === "question") {
+      const point = draft.question;
+      if (point) {
+        stageManualQuestionAnchor({ q, page: Number(point.page || draft.pageNo), xRatio: Number(point.xRatio), yRatio: Number(point.yRatio) });
+        ok = true; // SOFTM-OCR후보: 문제 앵커 stage 함수는 반환값이 없으므로 예외 없이 완료되면 적용 성공으로 취급 - 2026-06-22
+      }
+    } else {
+      const points = (Array.isArray(draft.anchors) ? draft.anchors : [])
+        .filter((item) => Number(item?.choice) >= 1 && Number(item?.choice) <= CHOICE_COUNT)
+        .map((item) => ({
+          q,
+          choice: Number(item.choice),
+          page: Number(item.page || draft.pageNo),
+          xRatio: Number(item.xRatio),
+          yRatio: Number(item.yRatio),
+          source: "ocr-choice-anchor-applied",
+        }));
+      ok = stageManualQuestionChoiceAnchors(q, Number(draft.pageNo), points, { choice: draft.choice || anchorEditState.choice });
+    }
+    if (!ok) {
+      setAnchorEditStatus("OCR 후보 적용에 실패했습니다.");
+      return;
+    }
+    anchorEditState.ocrDraft = null;
+    syncAnchorEditUi();
+    refreshAnchorDebugView();
+    setAnchorEditStatus(`${formatPrintedQuestionLabel(q)}번 OCR 후보를 적용했습니다. 저장 버튼으로 확정하세요.`);
+    showToastAndSnackbar("OCR 후보가 적용되었습니다. 저장 전 상태입니다.");
+  }
+
+  function drawAnchorEditOcrDraftOnCanvas(ctx, q, pageNo){
+    const draft = anchorEditState.ocrDraft;
+    if (!ctx?.canvas || !draft || Number(draft.q) !== Number(q) || Number(draft.pageNo) !== Number(pageNo)) return false;
+    const scaleX = ctx.canvas.width / Math.max(1, Number(draft.canvasWidth || ctx.canvas.width));
+    const scaleY = ctx.canvas.height / Math.max(1, Number(draft.canvasHeight || ctx.canvas.height));
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.lineWidth = Math.max(1.5, ctx.canvas.width * 0.0015);
+    ctx.strokeStyle = "rgba(124,58,237,0.92)";
+    ctx.fillStyle = "rgba(124,58,237,0.14)";
+    ctx.setLineDash([5, 4]);
+    const drawCircle = (item, label) => {
+      const x = Number(item.x) * scaleX;
+      const y = Number(item.y) * scaleY;
+      const r = Math.max(6, Math.min(28, Number(item.r || 12) * Math.max(scaleX, scaleY)));
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#6d28d9";
+      ctx.font = `900 ${Math.max(12, Math.min(18, ctx.canvas.width * 0.012))}px sans-serif`;
+      ctx.fillText(label, x + r + 4, y - r);
+      ctx.fillStyle = "rgba(124,58,237,0.14)";
+      ctx.setLineDash([5, 4]);
+    };
+    if (draft.overlay === "area") {
+      for (const rect of (Array.isArray(draft.areas) ? draft.areas : [])) {
+        const x = Number(rect.x) * scaleX;
+        const y = Number(rect.y) * scaleY;
+        const w = Number(rect.w) * scaleX;
+        const h = Number(rect.h) * scaleY;
+        if (![x, y, w, h].every(Number.isFinite) || w <= 0 || h <= 0) continue;
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") ctx.roundRect(x, y, w, h, Math.min(10, h * 0.18));
+        else ctx.rect(x, y, w, h);
+        ctx.fill();
+        ctx.stroke();
+      }
+    } else if (draft.kind === "question" && draft.question) {
+      drawCircle(draft.question, "OCR 문제");
+    } else {
+      for (const item of (Array.isArray(draft.anchors) ? draft.anchors : [])) {
+        drawCircle(item, `OCR ${formatPrintedChoiceLabel(q, Number(item.choice))}`);
+      }
+    }
+    ctx.restore();
+    return true;
+  }
+  /* SOFTM-OCR후보 끝 */
+
   /* SOFTM-문항앵커 시작: 현재 문제의 문항앵커 전체 생성/삭제 실행 - 2026-06-16 */
   async function getCurrentChoiceAnchorBulkContext(q){
     const safeQ = Math.max(1, Math.trunc(Number(q) || 0));
@@ -10352,18 +11157,15 @@
     }
     const currentChoice = selection.choice;
     if (!stageManualQuestionChoiceAnchors(selection.q, ctx.pageNo, normalized, { choice: currentChoice })) return;
-    const ok = await saveAnchorEditNow({ silent: true });
-    if (ok) {
-      await refreshAnchorEditView(selection.q);
-      anchorEditState.kind = "choice";
-      anchorEditState.choice = currentChoice;
-      anchorEditState.editOverlay = "anchor";
-      anchorEditState.choiceAreaEditMode = false;
-      delete anchorEditState.deletedChoiceAnchorSnapshots[String(selection.q)]; // SOFTM-문항앵커: 전체생성 성공 후 삭제 전 스냅샷 정리 - 2026-06-16
-      syncAnchorEditUi();
-      applyAnchorEditResetAvailability();
-      showToastAndSnackbar("문항앵커가 생성되었습니다.");
-    }
+    anchorEditState.kind = "choice";
+    anchorEditState.choice = currentChoice;
+    anchorEditState.editOverlay = "anchor";
+    anchorEditState.choiceAreaEditMode = false;
+    delete anchorEditState.deletedChoiceAnchorSnapshots[String(selection.q)]; // SOFTM-문항앵커: 전체생성 성공 후 삭제 전 좌표 스냅샷 정리 - 2026-06-16
+    syncAnchorEditUi();
+    applyAnchorEditResetAvailability();
+    refreshAnchorDebugView();
+    showToastAndSnackbar("문항앵커 후보가 적용되었습니다. 저장 전 상태입니다."); // SOFTM-OCR후보: 전체생성도 즉시 저장하지 않고 dirty patch만 만든다 - 2026-06-22
   }
 
   async function deleteCurrentQuestionChoiceAnchorsEdit(){
@@ -13044,11 +13846,21 @@
       canvas.width = Math.ceil(cssViewport.width * outputScale);
       canvas.height = Math.ceil(cssViewport.height * outputScale);
       const ctx = canvas.getContext("2d");
-      await pageObj.render({
+      __quizBootMark(`render-single-task-create-${canvas.width}x${canvas.height}`); // SOFTM-렌더진단: PDF.js renderTask 생성 직전 캔버스 크기 확인 - 2026-06-22
+      const renderTask = pageObj.render({
         canvasContext: ctx,
         viewport: cssViewport,
         transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null
-      }).promise;
+      });
+      renderTask.onContinue = (cont) => cont?.(); // SOFTM-PDF렌더: 내장 브라우저에서 PDF.js continuation 대기 상태가 고착되지 않게 즉시 진행 - 2026-06-22
+      __quizBootMark("render-single-task-wait"); // SOFTM-렌더진단: PDF.js renderTask promise 대기 단계 확인 - 2026-06-22
+      await waitForPdfPromise(
+        renderTask.promise,
+        90000,
+        "단일보기 PDF 페이지 렌더 시간 초과",
+        () => renderTask.cancel?.()
+      ); // SOFTM-한문제보기: 전체보기와 같은 긴 렌더 timeout을 사용해 이미지 많은 PDF를 실패로 오판하지 않음 - 2026-06-22
+      __quizBootMark("render-single-task-done"); // SOFTM-렌더진단: PDF.js renderTask 완료 확인 - 2026-06-22
       return canvas;
     })();
 
@@ -13133,9 +13945,12 @@
       const preserveSideRatio = Math.max(0, Math.min(0.08, Number(options.preserveSideRatio) || 0));
       const edgePadRatio = Math.max(0, Math.min(0.06, Number(options.edgePadRatio) || 0.012));
       const edgePadMin = Math.max(0, Math.min(24, Number(options.edgePadMin) || 8));
+      const rightEdgePadRatio = Math.max(edgePadRatio, Math.min(0.08, Number(options.rightEdgePadRatio) || edgePadRatio));
+      const rightEdgePadMin = Math.max(edgePadMin, Math.min(42, Number(options.rightEdgePadMin) || edgePadMin));
       const pad = Math.max(edgePadMin, Math.floor(w * edgePadRatio));
+      const rightPad = Math.max(rightEdgePadMin, Math.floor(w * rightEdgePadRatio));
       left = Math.max(0, left - pad);
-      right = Math.min(w - 1, right + pad);
+      right = Math.min(w - 1, right + rightPad); // SOFTM-한문제보기: 1단 문항의 오른쪽 글자 끝이 잘리지 않도록 우측 여백을 별도 확보 - 2026-06-22
       if (preserveSideRatio > 0){
         const preservePx = Math.floor(w * preserveSideRatio);
         left = Math.max(0, left - preservePx);
@@ -13162,17 +13977,24 @@
     const fullWidth = Math.max(1, Number(fullCanvas.width || 1));
     const widthRatio = width / fullWidth;
     if (widthRatio <= 0.22 || widthRatio >= 0.72) return { ...source, left, top, width, height };
-    const trimPx = Math.max(0, Math.min(
-      Math.ceil(fullWidth * 0.028),
-      Math.floor(width * 0.080)
-    ));
-    if (trimPx < 2 || width - trimPx < 1) return { ...source, left, top, width, height };
     const centerRatio = (left + width * 0.5) / fullWidth;
     if (centerRatio < 0.5) {
-      width = Math.max(1, width - trimPx);
+      const trimPx = Math.max(0, Math.min(
+        Math.ceil(fullWidth * 0.010),
+        Math.floor(width * 0.026)
+      ));
+      if (trimPx >= 2 && width - trimPx >= 1) {
+        width = Math.max(1, width - trimPx); // SOFTM-한문제보기: 1단 오른쪽 글자 여백을 보존하도록 중앙선 제거 폭을 축소 - 2026-06-22
+      }
     } else {
-      // SOFTM-한문제보기: 오른쪽 단은 왼쪽을 밀면 문항번호/앵커 라벨이 잘리므로 오른쪽 여백만 줄임 - 2026-06-21
-      width = Math.max(1, Math.min(fullWidth - left, width - trimPx));
+      const trimPx = Math.max(0, Math.min(
+        Math.ceil(fullWidth * 0.024),
+        Math.floor(width * 0.064)
+      ));
+      if (trimPx >= 2 && width - trimPx >= 1) {
+        left = Math.min(fullWidth - 1, left + trimPx);
+        width = Math.max(1, Math.min(fullWidth - left, width - trimPx)); // SOFTM-한문제보기: 2단 왼쪽 중앙 구분선을 잘라내고 실제 문항 내용부터 표시 - 2026-06-22
+      }
     }
     return { ...source, left, top, width, height };
   }
@@ -13185,16 +14007,34 @@
     return { top, bottom };
   }
 
-  async function renderPdfPage(page, q){
+  function renderPdfPage(page, q){
+    if (state.viewMode !== "single") return renderPdfPageUnlocked(page, q);
+    const requestedPage = Math.max(1, Math.floor(Number(page) || 1));
+    const requestedQ = Number.isFinite(Number(q)) ? Math.floor(Number(q)) : q;
+    const previous = state.singleRenderSerial || Promise.resolve();
+    const serial = previous.catch(() => {}).then(() => renderPdfPageUnlocked(requestedPage, requestedQ));
+    const tracked = serial.finally(() => {
+      if (state.singleRenderSerial === tracked) state.singleRenderSerial = null;
+    });
+    state.singleRenderSerial = tracked;
+    return tracked;
+  }
+  // SOFTM-한문제보기: 초기화 중 중복 navigate가 같은 PDF.js 페이지 렌더를 동시에 잡아 멈추지 않도록 직렬화 - 2026-06-22
+
+  async function renderPdfPageUnlocked(page, q){
+    __quizBootMark(`render-${state.viewMode}-start`); // SOFTM-렌더진단: 단일/전체 PDF 렌더 정지 지점을 boot log로 추적 - 2026-06-22
     if (state.viewMode !== "single") {
       return renderAllPdfPages(q);
     }
     const pdf = await ensurePdfDocument();
+    __quizBootMark("render-single-have-pdf"); // SOFTM-렌더진단: PDF document 확보 이후 단계 확인 - 2026-06-22
     const safePage = Math.min(Math.max(1, Math.floor(page)), pdf.numPages);
     state.currentPdfPage = safePage;
     if (Number.isFinite(Number(q))) await ensureAnchorDetailsForQuestions([q]);
+    __quizBootMark("render-single-have-anchors"); // SOFTM-렌더진단: 위치맵 세부 로딩 이후 단계 확인 - 2026-06-22
 
     const pageObj = await pdf.getPage(safePage);
+    __quizBootMark("render-single-got-page"); // SOFTM-렌더진단: PDF 페이지 객체 확보 이후 단계 확인 - 2026-06-22
     const baseViewport = pageObj.getViewport({ scale: 1 });
     const viewWidth = Math.max(320, (pdfCanvas.parentElement?.clientWidth || 900) - 20);
     const cssScale = Math.max(0.5, (viewWidth / baseViewport.width) * state.pdfZoom);
@@ -13204,6 +14044,7 @@
     const token = ++state.renderToken;
     const cacheKey = makeSingleRenderCacheKey(safePage, viewWidth, state.pdfZoom, outputScale);
     const fullCanvas = await getOrRenderSinglePageCanvas(pageObj, cacheKey, cssViewport, outputScale);
+    __quizBootMark("render-single-full-canvas"); // SOFTM-렌더진단: 원본 페이지 캔버스 렌더 이후 단계 확인 - 2026-06-22
     if (token !== state.renderToken) return;
 
     let srcTop = 0;
@@ -13644,6 +14485,8 @@
         edgePadMin: portraitSingleMode
           ? (lowConfidenceRange ? 4 : 0)
           : (lowConfidenceRange ? 2 : 0),
+        rightEdgePadRatio: portraitSingleMode ? 0.024 : 0.020, // SOFTM-한문제보기: 1단 문제영역 오른쪽 글자 끝 잘림 방지 - 2026-06-22
+        rightEdgePadMin: portraitSingleMode ? 18 : 14,
         inkThreshold: 232,
         // 상단 문항번호(예: "3.")가 잘리는 것을 막기 위해 상단 무시 비율을 축소
         ignoreTopRatio: 0.03,
@@ -13689,6 +14532,35 @@
         const segmentTopPadRatio = singleColumnStoredSegment
           ? (mobileViewport ? 0.014 : 0.014)
           : (mobileViewport ? 0.012 : 0.014);
+        const storedChoiceRangeRatio = (() => {
+          const topCandidates = [];
+          const bottomCandidates = [];
+          const addRange = (topValue, bottomValue) => {
+            const top = Number(topValue);
+            const bottom = Number(bottomValue);
+            if (Number.isFinite(top)) topCandidates.push(Math.max(0, Math.min(1, top)));
+            if (Number.isFinite(bottom)) bottomCandidates.push(Math.max(0, Math.min(1, bottom)));
+          };
+          const storedAreas = getChoiceClickAreaEntries(q).filter((area) => Number(area?.page || safePage) === Number(safePage));
+          for (const area of storedAreas) {
+            const y = Number(area?.yRatio);
+            const h = Math.max(0, Number(area?.hRatio || 0));
+            addRange(y, y + h);
+          }
+          const storedAnchors = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)])
+            .filter((anchor) => Number(anchor?.page || safePage) === Number(safePage));
+          for (const anchor of storedAnchors) {
+            const y = Number(anchor?.yRatio);
+            const h = Math.max(0.004, Number(anchor?.hRatio || 0));
+            const centerMode = String(anchor?.anchorMode || "").toLowerCase() === "center";
+            addRange(centerMode ? y - h * 0.5 : y, centerMode ? y + h * 0.5 : y + h);
+          }
+          if (!topCandidates.length && !bottomCandidates.length) return null;
+          return {
+            top: topCandidates.length ? Math.min(...topCandidates) : null,
+            bottom: bottomCandidates.length ? Math.max(...bottomCandidates) : null,
+          };
+        })();
         let segmentTopRatio = Number(seg.top);
         if (!hasEndOverride && Number.isFinite(labelStartBoundary)) {
           const labelTopRatio = Math.max(0, Number(labelStartBoundary) - segmentTopPadRatio);
@@ -13704,19 +14576,51 @@
           } else if (Number(labelStartBoundary) <= Number(seg.top) && Number(seg.top) - Number(labelStartBoundary) < 0.045) { // SOFTM-한문제보기: 추정 라벨이 segment보다 아래로 밀린 경우 정상 상단을 자르지 않음 - 2026-06-21
             segmentTopRatio = Math.max(0, Math.min(Number(seg.bottom) - 0.03, labelTopRatio));
           }
-          if (labelSource.includes("inferred-column-flow")) {
-            const inferredLabelY = Number(labelInfo?.yRatio);
-            const inferredGap = inferredLabelY - Number(seg.top);
-            if (Number.isFinite(inferredLabelY) && inferredGap > 0.035 && inferredGap < 0.095) {
-              const inferredPad = mobileViewport ? 0.020 : 0.014;
-              segmentTopRatio = Math.max(
-                Number(seg.top),
-                Math.min(Number(seg.bottom) - 0.035, inferredLabelY - inferredPad)
-              );
-            }
-          } // SOFTM-한문제보기: inferred-column-flow 시작선은 실제 라벨 직전으로 제한해 이전 문제 선택지 행이 crop에 섞이지 않게 보정 - 2026-06-21
+		          if (labelSource.includes("inferred-column-flow")) {
+		            const inferredLabelY = Number(labelInfo?.yRatio);
+		            const inferredGap = inferredLabelY - Number(seg.top);
+		            if (Number.isFinite(inferredLabelY) && inferredGap > 0.035 && inferredGap < 0.095) {
+		              const inferredPad = mobileViewport ? 0.020 : 0.014;
+	              segmentTopRatio = Math.max(
+	                Number(seg.top),
+		                Math.min(Number(seg.bottom) - 0.035, inferredLabelY - inferredPad)
+		              );
+		            }
+                if (Number.isFinite(inferredLabelY) && inferredGap > 0.002 && inferredGap < 0.020) {
+                  const nearLabelPad = mobileViewport ? 0.006 : 0.005;
+                  segmentTopRatio = Math.max(
+                    segmentTopRatio,
+                    Math.min(Number(seg.bottom) - 0.035, inferredLabelY - nearLabelPad)
+                  );
+                } // SOFTM-한문제보기: 보간 라벨이 segment 직후에 있으면 이전 문제 꼬리를 줄이도록 라벨 직전으로 crop 상단 제한 - 2026-06-22
+            const shortInferredSegment = Number(seg.bottom) - Number(seg.top) < 0.095;
+            if (shortInferredSegment && !(Number.isFinite(inferredGap) && inferredGap > 0.002 && inferredGap < 0.020)) {
+              segmentTopRatio = Math.min(segmentTopRatio, Math.max(0, Number(seg.top) - 0.006));
+            } // SOFTM-한문제보기: 라벨이 segment 직후인 짧은 보간 문제는 이전 문제 꼬리가 섞이지 않도록 상단 복구를 제한 - 2026-06-23
+		          } // SOFTM-한문제보기: inferred-column-flow 시작선은 실제 라벨 직전으로 제한해 이전 문제 선택지 행이 crop에 섞이지 않게 보정 - 2026-06-21
         }
-        srcLeft = Math.max(0, Math.floor(fullCanvas.width * seg.left));
+        if (!hasEndOverride && storedChoiceRangeRatio && Number.isFinite(storedChoiceRangeRatio.top)) {
+          const storedChoiceTop = Number(storedChoiceRangeRatio.top);
+          const segmentTop = Number(seg.top);
+          const topGap = segmentTop - storedChoiceTop;
+          if (topGap > 0.012 && topGap < 0.16) {
+            const labelCandidate = Number.isFinite(labelStartBoundary)
+              && Number(labelStartBoundary) < segmentTop
+              && Number(labelStartBoundary) < storedChoiceTop + 0.01
+              ? Number(labelStartBoundary) - (mobileViewport ? 0.004 : 0.006)
+              : null;
+            const choiceTopPad = Number(q) >= QUESTION_COUNT
+              ? (mobileViewport ? 0.060 : 0.052)
+              : (mobileViewport ? 0.035 : 0.032);
+            const choiceCandidate = storedChoiceTop - choiceTopPad;
+            segmentTopRatio = Math.max(0, Math.min(segmentTopRatio, Number.isFinite(labelCandidate) ? Math.max(labelCandidate, choiceCandidate) : choiceCandidate));
+          }
+        } // SOFTM-한문제보기: 저장 문제 segment/top이 문항앵커보다 아래로 밀린 경우 crop 상단을 문항 배열 기준으로 복구 - 2026-06-22
+        const segmentTopAfterStoredChoice = storedChoiceRangeRatio
+          && Number.isFinite(Number(storedChoiceRangeRatio.top))
+          && Number(seg.top) - Number(storedChoiceRangeRatio.top) > 0.012; // SOFTM-한문제보기: 문제 segment가 문항앵커 아래로 밀린 비정상 수동앵커 여부 - 2026-06-22
+        const segmentLeftPadRatio = singleColumnStoredSegment ? (mobileViewport ? 0.018 : 0.014) : 0; // SOFTM-한문제보기: 2단 단일 segment의 문제/문항 번호가 왼쪽에서 잘리지 않도록 crop 여백 보존 - 2026-06-23
+        srcLeft = Math.max(0, Math.floor(fullCanvas.width * Math.max(0, Number(seg.left) - segmentLeftPadRatio)));
         srcTop = Math.max(0, Math.floor(fullCanvas.height * segmentTopRatio));
         const segRight = Math.min(fullCanvas.width, Math.ceil(fullCanvas.width * seg.right));
         const segmentHardBottomRatio = !hasEndOverride
@@ -13740,26 +14644,20 @@
             : Math.min(0.995, choiceEndRatio);
           segmentBottomRatio = Math.max(segmentBottomRatio, choiceEndCap);
         }
-        const storedChoiceBottomRatio = (() => {
-          const candidates = [];
-          const addRatio = (value) => {
-            const n = Number(value);
-            if (Number.isFinite(n)) candidates.push(Math.max(0, Math.min(1, n)));
-          };
-          const storedAreas = getChoiceClickAreaEntries(q).filter((area) => Number(area?.page || safePage) === Number(safePage));
-          for (const area of storedAreas) addRatio(Number(area?.yRatio) + Number(area?.hRatio || 0));
-          const storedAnchors = getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)])
-            .filter((anchor) => Number(anchor?.page || safePage) === Number(safePage));
-          for (const anchor of storedAnchors) addRatio(Number(anchor?.yRatio) + Math.max(0.004, Number(anchor?.hRatio || 0)));
-          if (!candidates.length) return null;
-          return Math.max(...candidates);
-        })();
+        const storedChoiceBottomRatio = storedChoiceRangeRatio && Number.isFinite(storedChoiceRangeRatio.bottom)
+          ? Number(storedChoiceRangeRatio.bottom)
+          : null;
         if (!hasEndOverride && Number.isFinite(finalContentEndCap)) {
           segmentBottomRatio = Math.min(segmentBottomRatio, Number(finalContentEndCap));
         }
         if (!hasEndOverride && Number.isFinite(storedChoiceBottomRatio) && storedChoiceBottomRatio <= Number(seg.bottom) + 0.006) {
-          const storedChoicePad = mobileViewport ? 0.018 : 0.014;
-          segmentBottomRatio = Math.max(segmentBottomRatio, Math.min(Number(seg.bottom), storedChoiceBottomRatio + storedChoicePad));
+          const storedChoicePad = segmentTopAfterStoredChoice
+            ? (mobileViewport ? 0.006 : 0.005)
+            : (mobileViewport ? 0.018 : 0.014); // SOFTM-한문제보기: 문항앵커 아래로 밀린 segment 복구 시 다음 문제 시작선 유입을 막기 위해 하단 여백 축소 - 2026-06-22
+          const storedChoiceBottomCap = Math.min(Number(seg.bottom), storedChoiceBottomRatio + storedChoicePad);
+          segmentBottomRatio = segmentTopAfterStoredChoice
+            ? Math.min(segmentBottomRatio, storedChoiceBottomCap)
+            : Math.max(segmentBottomRatio, storedChoiceBottomCap);
         } // SOFTM-한문제보기: 다음 문제 topMap이 이르게 잡혀도 현재 저장 문항영역/앵커 하단은 crop에 포함 - 2026-06-21
         if (Number.isFinite(segmentHardBottomRatio)) {
           segmentBottomRatio = Math.min(segmentBottomRatio, segmentHardBottomRatio);
@@ -14161,6 +15059,7 @@
             viewport: cssViewport,
             transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null
           });
+          renderTask.onContinue = (cont) => cont?.(); // SOFTM-PDF렌더: 전체보기 PDF.js continuation 대기 고착 방지 - 2026-06-22
           try{
             await waitForPdfPromise(
               renderTask.promise,
@@ -14860,6 +15759,11 @@
       && labelY - ratio > 0.048) {
       displayRatio = Math.max(displayRatio, labelY - 0.035);
     } // SOFTM-앵커편집: 자동 문제 crop top이 실제 문제번호 라벨보다 과하게 위면 표시선만 문제 제목 위로 내림 - 2026-06-19
+    const segment = Number.isFinite(Number(q)) ? getStoredQuestionSegment(Number(q), pageNo) : null;
+    const segmentTop = Number(segment?.top);
+    if (Number.isFinite(segmentTop) && segmentTop - ratio > 0.040) {
+      displayRatio = Math.max(displayRatio, segmentTop - 0.016);
+    } // SOFTM-앵커편집: 자동 crop top이 문제 segment보다 과하게 위면 디버그 선만 segment 시작 근처로 보정 - 2026-06-23
     return Math.max(0, Math.min(1, displayRatio)); // SOFTM-앵커편집: 자동 문제 앵커선은 문제 텍스트 기준선이 아니라 crop 상단 여백선으로 표시 - 2026-06-17
   }
 
@@ -14887,7 +15791,20 @@
     const sy = viewSrcHeight / Math.max(1, viewDestHeight);
     const y = viewDestTop + ((yFull - viewSrcTop) / sy);
     if (!Number.isFinite(y)) return;
-    const offscreenY = y < 0 || y > pdfCanvas.height;
+	    const offscreenY = y < 0 || y > pdfCanvas.height;
+	    const debugSource = String(debugAnchor?.source || "").toLowerCase();
+	    const debugQuestionLabelInfo = state.pdfNav?.questionLabelMap?.[String(q)] || null;
+	    const debugQuestionLabelSource = String(debugQuestionLabelInfo?.source || "").toLowerCase();
+	    if (!debugSource.includes("manual") && (debugQuestionLabelInfo?.inferred === true || debugQuestionLabelSource.includes("inferred"))) {
+	      await drawChoiceAnchorDebugMarkersSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws);
+	      drawAnchorEditOcrDraftOnCanvas(pdfCtx, q, pageNo);
+	      return;
+	    } // SOFTM-한문제보기: 자동 보간 문제앵커선은 제목을 가로지르지 않도록 한문제 보기에서 문항앵커만 표시 - 2026-06-22
+	    if ((offscreenY || y < 26) && !debugSource.includes("manual")) {
+	      await drawChoiceAnchorDebugMarkersSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws);
+      drawAnchorEditOcrDraftOnCanvas(pdfCtx, q, pageNo);
+      return;
+    } // SOFTM-한문제보기: crop 밖/상단 자동 문제 앵커선을 화면 가장자리로 끌어와 문제 제목을 가리지 않게 숨김 - 2026-06-22
     const clampedY = Math.max(8, Math.min(pdfCanvas.height - 8, y));
     let lineLeft = 0;
     let lineRight = pdfCanvas.width;
@@ -14924,6 +15841,7 @@
     pdfCtx.fillText(`${questionLabel} ${debugLabel}${offscreenY ? " edge" : ""}`, Math.max(10, Math.min(pdfCanvas.width - 120, lineLeft + 10)), Math.max(22, clampedY - 8));
     pdfCtx.restore();
     await drawChoiceAnchorDebugMarkersSingle(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws);
+    drawAnchorEditOcrDraftOnCanvas(pdfCtx, q, pageNo); // SOFTM-OCR후보: 한문제보기 앵커 후보를 저장 전 임시 레이어로 표시 - 2026-06-22
   }
 
   function drawDebugChoiceCircle(ctx, x, y, label, options = {}){
@@ -15202,13 +16120,16 @@
     }
     if (x2 <= x1 + Math.max(12, r * 3.5)) x2 = x1 + Math.max(28, r * 9);
     if (canvasWidth > 0) x2 = Math.min(canvasWidth, x2);
-    const anchorY = tone === "correct" ? y + r + (5 * canvasCssScale) : y;
+    /* SOFTM-선택표시 시작: 미채점 선택 표시도 스트라이크 위치가 아니라 언더라인 위치로 계산 - 2026-06-24 */
+    const underlineTone = tone === "correct" || tone === "selected";
+    const anchorY = underlineTone ? y + r + (5 * canvasCssScale) : y;
     let lineY = anchorY;
     if (rect && [rect.y, rect.h].every(Number.isFinite) && rect.h > 0) {
-      const topLimit = Number(rect.y) + Number(rect.h) * (tone === "correct" ? 0.50 : 0.28);
-      const bottomLimit = Number(rect.y) + Number(rect.h) * (tone === "correct" ? 0.96 : 0.72);
+      const topLimit = Number(rect.y) + Number(rect.h) * (underlineTone ? 0.50 : 0.28);
+      const bottomLimit = Number(rect.y) + Number(rect.h) * (underlineTone ? 0.96 : 0.72);
       lineY = Math.max(topLimit, Math.min(bottomLimit, anchorY));
     }
+    /* SOFTM-선택표시 끝 */
     return {
       x1,
       x2,
@@ -15438,7 +16359,7 @@
     };
     const points = await buildSingleModeChoiceAreaPointsAsync(q, pageNo, fullCanvas, srcLeft, srcTop, srcWidth, srcHeight, segmentDraws);
     const rects = getChoiceClickAreaCanvasRects(q, pageNo, pdfCanvas, meta, points);
-    if (!rects.length) return false;
+    if (!rects.length) return drawAnchorEditOcrDraftOnCanvas(pdfCtx, q, pageNo); // SOFTM-OCR후보: 기존 영역이 없어도 OCR 후보는 표시 - 2026-06-22
     pdfCtx.save();
     pdfCtx.fillStyle = "rgba(239,68,68,0.14)";
     pdfCtx.strokeStyle = "rgba(239,68,68,0.42)";
@@ -15468,6 +16389,7 @@
       }
       pdfCtx.fillStyle = "rgba(239,68,68,0.14)";
     }
+    drawAnchorEditOcrDraftOnCanvas(pdfCtx, q, pageNo); // SOFTM-OCR후보: 한문제보기 영역 후보를 저장 전 임시 레이어로 표시 - 2026-06-22
     pdfCtx.restore();
     return true;
   }
@@ -15854,6 +16776,7 @@
     // SOFTM-앵커편집: 전체보기 문제 앵커 라벨도 단일보기처럼 사각형 배경 없이 작게 표시 - 2026-06-19
     ctx.fillText(text, textX, textY);
     ctx.restore();
+    drawAnchorEditOcrDraftOnCanvas(ctx, q, pageNo); // SOFTM-OCR후보: 전체보기 문제/문항앵커 후보를 저장 전 임시 레이어로 표시 - 2026-06-22
     return true;
   }
 
@@ -15945,6 +16868,7 @@
       });
       drawn = true;
     }
+    drawAnchorEditOcrDraftOnCanvas(ctx, q, pageNo); // SOFTM-OCR후보: 전체보기 문항앵커 후보를 저장 전 임시 레이어로 표시 - 2026-06-22
     return drawn;
   }
 
@@ -15956,7 +16880,7 @@
     if (!canvas || !meta) return false;
     const points = await buildAllModeChoiceAreaPointsAsync(q, pageNo, { canvas, meta, fullWidth: meta.fullWidth, fullHeight: meta.fullHeight });
     const rects = getChoiceClickAreaCanvasRects(q, pageNo, canvas, meta, points);
-    if (!rects.length) return false;
+    if (!rects.length) return drawAnchorEditOcrDraftOnCanvas(canvas.getContext("2d"), q, pageNo); // SOFTM-OCR후보: 기존 영역이 없어도 OCR 후보는 표시 - 2026-06-22
     const ctx = canvas.getContext("2d");
     ctx.save();
     ctx.fillStyle = "rgba(239,68,68,0.14)";
@@ -15987,6 +16911,7 @@
       }
       ctx.fillStyle = "rgba(239,68,68,0.14)";
     }
+    drawAnchorEditOcrDraftOnCanvas(ctx, q, pageNo); // SOFTM-OCR후보: 전체보기 문항영역 후보를 저장 전 임시 레이어로 표시 - 2026-06-22
     ctx.restore();
     return true;
   }
@@ -16557,6 +17482,24 @@
     });
   }
 
+  function resolveSingleNavigatePage(q, located){
+    const locatedPage = (located && Number.isFinite(located.page))
+      ? Math.max(1, Math.floor(located.page))
+      : null;
+    const mappedPage = getPdfPageByQuestion(q);
+    const nav = state.pdfNav || {};
+    const hasMappedPage = Array.isArray(nav.questionPageMap) && Number.isFinite(Number(nav.questionPageMap[q]));
+    const reliableAnchorPage = nav.mode === "auto"
+      && nav.patternSource === "anchor"
+      && Number(nav.confidence || 0) >= 0.55
+      && hasMappedPage
+      && Number.isFinite(mappedPage);
+    if (reliableAnchorPage && (!Number.isFinite(locatedPage) || Math.floor(locatedPage) !== Math.floor(mappedPage))) {
+      return mappedPage; // SOFTM-한문제보기: q56처럼 텍스트 탐색이 이전 페이지를 반환해도 저장 위치맵 page를 우선 - 2026-06-22
+    }
+    return Number.isFinite(locatedPage) ? locatedPage : mappedPage;
+  }
+
   function navigatePdfToQuestion(q){
     if (state.suppressPdfNavigateDuringInit) {
       __quizBootMark(`navigate-${state.viewMode}-suppressed-init`);
@@ -16568,10 +17511,7 @@
     if (state.viewMode === "single") {
       const loadingToken = beginDelayedPdfLoading("PDF 로딩 중...");
       return locateQuestionInPdf(q).then((located) => {
-        const page = (located && Number.isFinite(located.page))
-          ? Math.max(1, Math.floor(located.page))
-          : getPdfPageByQuestion(q);
-        return setPdfFramePage(page, q, loadingToken);
+        return setPdfFramePage(resolveSingleNavigatePage(q, located), q, loadingToken);
       }).catch(() => {
         const targetPage = getPdfPageByQuestion(q);
         return setPdfFramePage(targetPage, q, loadingToken);
@@ -17173,6 +18113,191 @@
   }
   // SOFTM-문항앵커: 위치맵 생성기가 확정한 segment 가로/grid 앵커 source를 화면 표시/클릭에서 신뢰 가능한 자동 앵커로 분류 - 2026-06-18
 
+  /* SOFTM-한국어교육능력검정 시작: 한국어교육능력검정 저장맵은 가로/세로/grid가 섞여 있어 완성된 저장 선택지 앵커를 런타임 형제 보정으로 다시 바꾸지 않음 - 2026-06-24 */
+  function isKoreanEducationAbilityQuestionPdf(){
+    const haystack = `${CATEGORY_NAME} ${EXAM_NAME} ${QUESTION_PDF_URL}`.toLowerCase();
+    return haystack.includes("한국어교육능력검정") || haystack.includes("%ed%95%9c%ea%b5%ad%ec%96%b4%ea%b5%90%ec%9c%a1%eb%8a%a5%eb%a0%a5%ea%b2%80%ec%a0%95");
+  }
+
+  function isCompleteStoredKoreanEducationChoiceAnchorSet(anchors, page){
+    if (!isKoreanEducationAbilityQuestionPdf()) return false;
+    if (!Array.isArray(anchors) || anchors.length !== 4) return false;
+    const choices = new Set();
+    for (const item of anchors) {
+      const choice = Number(item?.choice);
+      const x = Number(item?.xRatio);
+      const y = Number(item?.yRatio);
+      if (!Number.isInteger(choice) || choice < 1 || choice > 4 || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+      if (Number.isFinite(Number(page)) && Number(item?.page || page) !== Number(page)) return false;
+      const source = String(item?.source || "").toLowerCase();
+      if (source.startsWith("text-choice-anchor")) return false;
+      if (!source.includes("anchor-image") && !source.includes("segment-choice-anchor") && !source.includes("manual")) return false;
+      choices.add(choice);
+    }
+    return choices.size === 4;
+  }
+  /* SOFTM-한국어교육능력검정 끝 */
+
+  function normalizeRuntimeChoiceAnchorsBySiblingLayout(anchors, q = null, pageNo = null, options = {}){
+    const list = Array.isArray(anchors) ? anchors.map((item) => ({ ...item })) : [];
+    const choiceCount = Math.max(3, Math.min(5, Number(state.pdfNav?.choiceCount) || CHOICE_COUNT));
+    if (choiceCount !== 4 || list.length < 4) return list;
+    const page = Number.isFinite(Number(pageNo)) ? Number(pageNo) : Number(list[0]?.page);
+    const scoped = list
+      .filter((item) => Number(item?.page || page) === page)
+      .filter((item) => Number.isInteger(Number(item?.choice)) && Number(item.choice) >= 1 && Number(item.choice) <= 4)
+      .sort((a, b) => Number(a.choice) - Number(b.choice));
+    if (scoped.length !== 4) return list;
+    if (isCompleteStoredKoreanEducationChoiceAnchorSet(scoped, page)) return list; // SOFTM-한국어교육능력검정: 대상 회차의 완성된 저장 앵커는 가로/세로 오판 방지를 위해 그대로 사용 - 2026-06-24
+    if (scoped.some((item) => String(item?.source || "").toLowerCase().includes("manual"))) return list;
+    const xs = scoped.map((item) => Number(item.xRatio));
+    const ys = scoped.map((item) => Number(item.yRatio));
+    if (xs.some((value) => !Number.isFinite(value)) || ys.some((value) => !Number.isFinite(value))) return list;
+    const xSpread = Math.max(...xs) - Math.min(...xs);
+    const gaps = [ys[1] - ys[0], ys[2] - ys[1], ys[3] - ys[2]];
+    const ySpread = Math.max(...ys) - Math.min(...ys);
+    const layoutText = scoped.map((item) => String(item?.layout || item?.source || "").toLowerCase()).join(" ");
+    const looksVertical = ySpread > 0.040
+      && gaps.every((gap) => Number.isFinite(gap) && gap > 0)
+      && (layoutText.includes("vertical") || xSpread <= 0.060);
+    if (looksVertical) {
+      const segment = Number.isFinite(Number(q)) ? getStoredQuestionSegment(Number(q), page) : null;
+      const segLeft = Number(segment?.left);
+      const segRight = Number(segment?.right);
+      const segTop = Number(segment?.top);
+      const segBottom = Number(segment?.bottom);
+      const segWidth = Number.isFinite(segLeft) && Number.isFinite(segRight) && segRight > segLeft ? segRight - segLeft : null;
+      const segHeight = Number.isFinite(segTop) && Number.isFinite(segBottom) && segBottom > segTop ? segBottom - segTop : null;
+      const relativeYs = Number.isFinite(segHeight) ? ys.map((value) => (value - segTop) / segHeight) : [];
+      const tailRowLooksLikeAnswerChoices = Number.isFinite(segWidth)
+        && Number.isFinite(segHeight)
+        && segWidth < 0.70
+        && segHeight > 0.240
+        && xSpread < 0.020
+        && relativeYs.length === 4
+        && Math.max(...relativeYs) < 0.430
+        && scoped.every((item) => String(item?.source || "").toLowerCase().includes("rendered-vertical"));
+      if (tailRowLooksLikeAnswerChoices) {
+        const localXs = [0.060, 0.365, 0.060, 0.365];
+        const localYs = [0.900, 0.900, 0.950, 0.950];
+        const remapped = new Map(localXs.map((localX, idx) => [idx + 1, {
+          ...scoped[idx],
+          choice: idx + 1,
+          xRatio: Math.max(0, Math.min(1, segLeft + segWidth * localX)),
+          yRatio: Math.max(0, Math.min(1, segTop + segHeight * localYs[idx])),
+          layout: "grid",
+          source: `${scoped[idx].source || "choice-anchor"}-runtime-tail-grid`,
+        }]));
+        return list.map((item) => (
+          Number(item?.page || page) === page && remapped.has(Number(item?.choice))
+            ? remapped.get(Number(item.choice))
+            : item
+        ));
+      } // SOFTM-문항앵커: 긴 2단 코드형 문제에서 상단 코드 내부 번호가 보기로 잡히면 하단 2x2 답안 배치로 표시/영역 기준 보정 - 2026-06-23
+      const minX = Math.min(...xs);
+      const allSegmentBullet = scoped.every((item) => String(item?.source || "").toLowerCase().includes("segment-bullet"));
+      const expectedLeftX = Number.isFinite(segWidth)
+        ? Math.max(segLeft + segWidth * 0.055, Math.min(segRight - segWidth * 0.18, segLeft + segWidth * 0.110))
+        : minX;
+      const targetX = allSegmentBullet && Number.isFinite(expectedLeftX) && minX - expectedLeftX > 0.010 && minX - expectedLeftX < 0.045
+        ? expectedLeftX
+        : minX;
+      if ((xSpread > 0.010 && xSpread <= 0.060) || targetX < minX - 0.010) {
+        const scopedChoices = new Set(scoped.map((item) => Number(item.choice)));
+        return list.map((item) => (
+          scopedChoices.has(Number(item?.choice)) && Number(item?.page || page) === page
+            ? {
+                ...item,
+                xRatio: Math.max(0, Math.min(1, targetX)),
+                source: `${item.source || "choice-anchor"}-runtime-x-align`,
+              }
+            : item
+        ));
+      }
+    } // SOFTM-문항앵커: 세로형 형제 문항에서 일부 원이 글자 쪽으로 붙으면 같은 문제의 왼쪽 원 열로 정렬 - 2026-06-23
+    if (xSpread > 0.045 || gaps.some((gap) => !Number.isFinite(gap) || gap <= 0)) return list;
+    const tailGaps = gaps.slice(1).sort((a, b) => a - b);
+    const tailMedian = (tailGaps[0] + tailGaps[1]) * 0.5;
+    const segment = Number.isFinite(Number(q)) ? getStoredQuestionSegment(Number(q), page) : null;
+    const top = Number(segment?.top);
+    const bottom = Number(segment?.bottom);
+    const optionScopeTop = Number(options?.startRatio);
+    const optionScopeBottom = Number(options?.endRatio);
+    const debugTopAnchor = !Number.isFinite(top) && !Number.isFinite(optionScopeTop) && Number.isFinite(Number(q))
+      ? getQuestionDebugAnchorRatio(page, Number(q))
+      : null;
+    const scopeTop = Number.isFinite(top)
+      ? top
+      : (Number.isFinite(optionScopeTop) ? Math.max(0, Math.min(1, optionScopeTop)) : Number(debugTopAnchor?.ratio));
+    const scopeBottom = Number.isFinite(bottom)
+      ? bottom
+      : (Number.isFinite(optionScopeBottom) ? Math.max(0, Math.min(1, optionScopeBottom)) : NaN);
+    const height = Number.isFinite(scopeTop) && Number.isFinite(scopeBottom) ? scopeBottom - scopeTop : 0; // SOFTM-문항앵커: 저장 segment가 없어도 문제 시작 비율로 1번 보기 오보정을 제한 - 2026-06-24
+    /* SOFTM-문항앵커 시작: 1번 보기가 두 줄이면 1~2번 간격이 커도 신뢰 저장앵커를 아래로 밀지 않는다 - 2026-06-24 */
+    const firstAnchor = scoped[0];
+    const firstSource = String(firstAnchor?.source || "").toLowerCase();
+    const firstMode = String(firstAnchor?.anchorMode || "").toLowerCase();
+    const firstConfidence = Number(firstAnchor?.confidence);
+    const firstReliableStoredAnchor = firstSource.includes("manual")
+      || firstSource.includes("image")
+      || firstSource.includes("anchor-map")
+      || (firstMode === "center" && (!Number.isFinite(firstConfidence) || firstConfidence >= 0.70));
+    const firstInsideQuestionSegment = Number.isFinite(top)
+      && Number.isFinite(bottom)
+      && ys[0] >= top - 0.002
+      && ys[0] <= bottom + 0.002;
+    if (firstReliableStoredAnchor && firstInsideQuestionSegment) return list;
+    /* SOFTM-문항앵커 끝 */
+    const leadingQuestionTextLimit = Number.isFinite(scopeTop)
+      ? scopeTop + (height > 0 ? Math.max(0.014, Math.min(0.024, height * 0.16)) : 0.024)
+      : NaN;
+    const firstAnchorNearSegmentStart = Number.isFinite(leadingQuestionTextLimit)
+      ? ys[0] <= leadingQuestionTextLimit
+      : true;
+    const firstGapLooksLikeQuestionText = firstAnchorNearSegmentStart
+      && gaps[0] > Math.max(0.024, tailMedian * 1.65)
+      && gaps[1] <= Math.max(0.022, tailMedian * 1.38)
+      && gaps[2] <= Math.max(0.024, tailMedian * 1.55); // SOFTM-문항앵커: 첫 보기 줄바꿈 간격은 유지하고 문제문장 오인처럼 segment 시작부에 붙은 경우만 보정 - 2026-06-24
+    if (Number.isFinite(top) && top > ys[0] + 0.006) {
+      if (firstGapLooksLikeQuestionText) {
+        const shifted = new Map();
+        for (let idx = 1; idx < scoped.length; idx += 1) {
+          shifted.set(idx, {
+            ...scoped[idx],
+            choice: idx,
+            source: `${scoped[idx].source || "choice-anchor"}-runtime-leading-drop`,
+          });
+        }
+        shifted.set(4, {
+          ...scoped[3],
+          choice: 4,
+          yRatio: Math.max(0, Math.min(1, ys[3] + tailMedian)),
+          source: `${scoped[3].source || "choice-anchor"}-runtime-leading-drop-fill`,
+        });
+        return list.map((item) => shifted.get(Number(item.choice)) || item);
+      }
+      return list;
+    } // SOFTM-문항앵커: 저장 문제 segment가 문항보다 아래이고 1번 후보가 본문 숫자인 경우만 형제 간격으로 shift - 2026-06-22
+    const firstTooHigh = gaps[0] > Math.max(0.024, tailMedian * 1.65)
+      && gaps[1] <= Math.max(0.022, tailMedian * 1.38)
+      && gaps[2] <= Math.max(0.024, tailMedian * 1.55)
+      && (!Number.isFinite(scopeTop)
+        || ys[0] < scopeTop + (height > 0 ? Math.max(0.026, height * 0.30) : 0.024));
+    if (!firstTooHigh) return list;
+    const repairedY = Math.max(Number.isFinite(scopeTop) ? scopeTop + 0.012 : 0, ys[1] - tailMedian);
+    const targetChoice = Number(scoped[0].choice);
+    return list.map((item) => (
+      Number(item?.choice) === targetChoice && Number(item?.page || page) === page
+        ? {
+            ...item,
+            yRatio: Math.max(0, Math.min(1, repairedY)),
+            source: `${item.source || "choice-anchor"}-runtime-sibling-realign`,
+          }
+        : item
+    ));
+  }
+  // SOFTM-문항앵커: 세로형 1번 앵커만 문제 문장 쪽으로 튄 경우 2~4번 형제 간격으로 표시/영역 계산 전 재정렬 - 2026-06-22
+
   /* SOFTM-문항앵커 시작: 전체보기 런타임 표시/클릭은 낮은 신뢰도의 저장 문항 앵커를 보조 추정값으로 대체 가능하게 함 - 2026-06-16 */
   function isLowTrustChoiceAnchorForRuntime(anchor){
     if (!anchor || typeof anchor !== "object") return true;
@@ -17434,7 +18559,7 @@
           if (byChoice.size) return [...byChoice.values()].sort((a, b) => Number(a.choice) - Number(b.choice));
         }
       }
-      return stored;
+      return normalizeRuntimeChoiceAnchorsBySiblingLayout(stored, q, pageNo); // SOFTM-문항앵커: 저장 자동 앵커 반환도 형제 layout 보정 후 사용 - 2026-06-22
     }
     if (Number.isFinite(Number(pageNo))) {
       const cached = state.questionChoiceAnchorCache?.[`${Number(pageNo)}:${Number(q)}`];
@@ -17466,12 +18591,13 @@
       ? stored.filter((item) => Number(item?.page || pageNo) === Number(pageNo))
       : stored;
     if (isSuspiciousVerticalChoiceAnchorSetForRuntime(scoped, q, pageNo)) return [];
-    return scoped.filter((item) => {
+    const visible = scoped.filter((item) => {
       const source = String(item?.source || "").toLowerCase();
       if (source.startsWith("segment-") && !isGeneratedSegmentChoiceAnchorSource(source)) return false; // SOFTM-문항앵커: 저장 위치맵의 확정 segment 가로/grid 앵커는 디버그 표시에서 제외하지 않음 - 2026-06-18
       if (source === "pdf" || source.startsWith("pdf-") || source.startsWith("ocr-")) return false;
       return true;
     });
+    return normalizeRuntimeChoiceAnchorsBySiblingLayout(visible, q, pageNo); // SOFTM-문항앵커: 디버그 표시도 영역 계산과 같은 형제 보정 앵커를 사용 - 2026-06-22
   }
   // SOFTM-문항앵커: 디버그 표시/찾기는 생성된 위치맵 문항앵커를 우선 사용하고 segment/OCR 추정값은 보조로만 사용 - 2026-06-18
 
@@ -17535,7 +18661,7 @@
     const storedChoices = getStoredChoiceAnchorsForQuestionBeforeOcr(q, pageNo);
     const storedChoiceFallbacks = (!ignoreStored ? getReliableStoredChoiceAnchors(state.pdfNav?.choiceAnchorMap && state.pdfNav.choiceAnchorMap[String(q)]) : [])
       .filter((item) => Number(item?.page || pageNo) === Number(pageNo))
-      .filter(isEditableStoredChoiceAnchorValue)
+      .filter((item) => isEditableStoredChoiceAnchorValue(item) || isGeneratedSegmentChoiceAnchorSource(String(item?.source || ""))) // SOFTM-문항앵커: 확정 generated segment 앵커는 편집 저장 앵커는 아니지만 표시/영역 기준으로 사용 - 2026-06-22
       .filter((item) => !isSuspiciousVerticalChoiceAnchorSetForRuntime([item], q, pageNo))
       .sort((a, b) => Number(a.choice) - Number(b.choice));
     // SOFTM-문항앵커: OCR/text layer 실패 시 segment 추정보다 저장된 image/manual 앵커를 먼저 보완값으로 사용 - 2026-06-17
@@ -17568,7 +18694,7 @@
           if (!hasOptions) state.questionChoiceAnchorCache[cacheKey] = fromMap;
           return fromMap;
         }
-        storedChoiceOverrides = fromMap;
+        storedChoiceOverrides = normalizeRuntimeChoiceAnchorsBySiblingLayout(fromMap, q, pageNo, { startRatio: optStart, endRatio: optEnd }); // SOFTM-문항앵커: 수동/저장 오버라이드도 sibling 보정 좌표로 병합 - 2026-06-24
       }
     }
     // SOFTM-문항앵커: 부분 수동 앵커는 OCR/text layer 결과와 병합하고 자동 생성 앵커는 OCR 탐색보다 우선하지 않음 - 2026-06-17
@@ -17851,8 +18977,16 @@
         const choice = Number(item?.choice);
         if (Number.isInteger(choice) && choice >= 1 && choice <= CHOICE_COUNT) byChoice.set(choice, item);
       }
-      result = [...byChoice.values()].sort((a, b) => Number(a.choice) - Number(b.choice));
+      result = normalizeRuntimeChoiceAnchorsBySiblingLayout([...byChoice.values()].sort((a, b) => Number(a.choice) - Number(b.choice)), q, pageNo, { startRatio, endRatio });
     } // SOFTM-문항앵커: 사용자가 찍은 일부 문항앵커는 유지하고 나머지는 OCR/text layer로 보완 - 2026-06-17
+    if (!ignoreStored && storedChoiceFallbacks.length >= CHOICE_COUNT && Array.isArray(result) && result.length >= CHOICE_COUNT) {
+      const resultIsOnlySegmentFallback = result.every((item) => String(item?.source || "").toLowerCase() === "segment-choice-anchor");
+      const storedHasGeneratedSegment = storedChoiceFallbacks.some((item) => isGeneratedSegmentChoiceAnchorSource(String(item?.source || "")));
+      if (resultIsOnlySegmentFallback && storedHasGeneratedSegment) {
+        result = normalizeRuntimeChoiceAnchorsBySiblingLayout(storedChoiceFallbacks, q, pageNo, { startRatio, endRatio });
+      }
+    } // SOFTM-문항앵커: 런타임 기본 segment fallback보다 저장 generated segment 앵커를 우선해 한문제/전체보기 기준을 통일 - 2026-06-22
+    result = normalizeRuntimeChoiceAnchorsBySiblingLayout(result, q, pageNo, { startRatio, endRatio }); // SOFTM-문항앵커: 최종 문항앵커 목록은 표시/영역 계산 전에 한 번 더 형제 보정 - 2026-06-24
     if (!hasOptions) {
       if (Array.isArray(result) && result.length) state.questionChoiceAnchorCache[cacheKey] = result;
       else delete state.questionChoiceAnchorCache[cacheKey];
